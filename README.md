@@ -2,6 +2,18 @@
 
 Dieses Projekt implementiert einen WLAN-fähigen Füllstandssensor für Salzbehälter auf Basis eines ESP32-C3 mit HC-SR04-Ultraschallsensor. Die Messwerte werden über eine Svelte-Web-UI dargestellt, per WebSocket in Echtzeit übertragen und über MQTT (inkl. Home Assistant Auto-Discovery) bereitgestellt.
 
+## About
+
+Salzstand ist ein ESP32-C3-Projekt zur kontinuierlichen Füllstandsmessung von Salzbehältern mit Ultraschall. Es kombiniert Firmware, Web-Dashboard (Svelte), MQTT-Telemetrie und Home-Assistant-Discovery in einem System.
+
+**Highlights:**
+- Live-Dashboard mit Tag/Nacht-Theme und Modulnavigation
+- MQTT mit Sensor-, System- und Konfigurations-Topics
+- Home Assistant Auto-Discovery (Sensoren + Konfig-Entitäten)
+- Persistente Konfiguration in NVS (WiFi, MQTT, Behälterhöhe, Offset)
+
+**Tech-Stack:** ESP32-C3, Arduino, PlatformIO, Svelte, PubSubClient, ESPAsyncWebServer, ArduinoJson
+
 ---
 
 ## Hardware

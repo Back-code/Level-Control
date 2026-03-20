@@ -322,8 +322,12 @@ void WebServerDashboard::setupRoutes() {
         if (index == 0) body = "";
         body += std::string((char*)data, len);
         if (index + len == total) {
-            DynamicJsonDocument doc(384);
-            deserializeJson(doc, body);
+            DynamicJsonDocument doc(1024);
+            DeserializationError jsonError = deserializeJson(doc, body);
+            if (jsonError) {
+                request->send(400, "application/json", "{\"error\":\"invalid_wifi_payload\"}");
+                return;
+            }
             Config config;
             ConfigStore::getInstance().load(config); // Load current
             config.wifi.ssid = doc["ssid"] | "";
@@ -377,8 +381,12 @@ void WebServerDashboard::setupRoutes() {
         if (index == 0) body = "";
         body += std::string((char*)data, len);
         if (index + len == total) {
-            DynamicJsonDocument doc(256);
-            deserializeJson(doc, body);
+            DynamicJsonDocument doc(768);
+            DeserializationError jsonError = deserializeJson(doc, body);
+            if (jsonError) {
+                request->send(400, "application/json", "{\"error\":\"invalid_mqtt_payload\"}");
+                return;
+            }
             Config config;
             ConfigStore::getInstance().load(config); // Load current
             config.mqtt.server = doc["server"] | "";

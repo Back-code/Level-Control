@@ -43,7 +43,7 @@
     wifiScanLoading = true;
     wifiScanError = '';
     try {
-      const response = await fetch('/api/wifi/scan');
+      const response = await fetch('/api/scan-wifi', { cache: 'no-store' });
       if (!response.ok) {
         wifiScanError = 'WiFi-Scan fehlgeschlagen.';
         return;

@@ -371,14 +371,21 @@
 <section class="update-grid">
   <article class="status-card hero" bind:this={statusCard}>
     <div>
-      <span class="eyebrow">Aktueller Stand</span>
+      <span class="eyebrow">Stand</span>
       <h2>Update-Zentrale</h2>
-      <p>
-        Aktuelle Version: <strong>v{currentVersion}</strong>
+      <div class="version-row">
+        <div class="version-item installed">
+          <span class="version-label">Installierte Version</span>
+          <a href="#" class="version-link" title="v{currentVersion}">v{currentVersion}</a>
+        </div>
         {#if manifest}
-          <span class="latest-copy">Neueste Release: <strong>v{manifest.version}</strong></span>
+          <span class="divider">|</span>
+          <div class="version-item available">
+            <span class="version-label">Verfügbare Version</span>
+            <a href={manifest.releaseUrl} target="_blank" rel="noopener noreferrer" class="version-link">v{manifest.version}</a>
+          </div>
         {/if}
-      </p>
+      </div>
     </div>
 
     {#if manifest}
@@ -411,18 +418,18 @@
     </div>
   </article>
 
-  <article class="action-card">
+  <article class="action-card repo-card">
     <span class="eyebrow">1. OTA</span>
+    {#if repoStatus.hasUpdate}
+      <div class="status-badge success">✓ {repoStatus.label}</div>
+    {:else}
+      <div class="status-badge info">⊘ {repoStatus.label}</div>
+    {/if}
     <h3>Repo-Update (automatisch erkannt)</h3>
     <p>Erkennt automatisch, welche Updates verfügbar sind und installiert diese aus dem neuesten GitHub-Release.</p>
     <button on:click={() => startRepoUpdate()} disabled={!repoStatus.hasUpdate || anyBusy}>
       Repo-Update starten
     </button>
-    {#if repoStatus.hasUpdate}
-      <small class="status-info">✓ {repoStatus.label}</small>
-    {:else}
-      <small class="status-info">⊘ {repoStatus.label}</small>
-    {/if}
     {#if isRepoProgress('app') || isRepoProgress('full') || isRepoProgress('webui')}
       <div class="inline-progress">
         <div class="inline-progress-head">
@@ -441,7 +448,7 @@
   <article class="action-card upload-card">
     <span class="eyebrow">2. Lokal</span>
     <h3>Updates hochladen</h3>
-    <p>Wählen Sie eine gültige Binärdatei (.bin). Bootloader- und Partitionsdateien sind nicht erlaubt.</p>
+    <p>Wählen Sie eine gültige Binärdatei (.bin).<br />Bootloader- und Partitionsdateien sind nicht erlaubt.</p>
     
     <!-- Hidden file inputs -->
     <input 
@@ -462,7 +469,7 @@
     <!-- Action buttons -->
     <div class="button-group">
       <button on:click={() => triggerFileSelect('app')} disabled={anyBusy}>
-        Salzstand-App.bin wählen
+        App.bin wählen
       </button>
       <button on:click={() => triggerFileSelect('webui')} disabled={anyBusy}>
         Web-UI.bin wählen
@@ -545,11 +552,6 @@
     color: var(--text-main);
   }
 
-  .latest-copy {
-    display: inline-block;
-    margin-left: 12px;
-  }
-
   .manifest-box {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -577,14 +579,69 @@
     color: var(--text-muted);
   }
 
-  .status-info {
-    display: inline-block;
+  .version-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
     margin-top: 8px;
-    padding: 6px 10px;
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.05);
-    font-size: 0.8rem;
+  }
+
+  .version-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .version-label {
+    font-size: 0.75rem;
     color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .version-link {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #62b8dd;
+    text-decoration: none;
+    cursor: pointer;
+    transition: color 0.2s ease;
+  }
+
+  .version-link:hover {
+    color: #7ec9eb;
+    text-decoration: underline;
+  }
+
+  .divider {
+    color: var(--surface-border);
+    font-size: 0.9rem;
+  }
+
+  .status-badge {
+    position: absolute;
+    top: 18px;
+    right: 18px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .status-badge.success {
+    color: #57b67b;
+    border: 1px solid rgba(87, 182, 123, 0.3);
+  }
+
+  .status-badge.info {
+    color: var(--text-muted);
+    border: 1px solid var(--surface-border);
+  }
+
+  .repo-card {
+    position: relative;
   }
 
   .status-box.busy {

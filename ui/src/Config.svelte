@@ -17,6 +17,7 @@
   let wifiScanLoading = false;
   let wifiScanError = '';
   let mqttConfig = { server: '', port: 1883, user: '', password: '', discovery: true };
+  let mqttHasPassword = false;
   let mqttDeviceId = '';
 
   function enableStaticIp() {
@@ -91,6 +92,7 @@
           password: c.password || '',
           discovery: c.discovery ?? true
         };
+        mqttHasPassword = c.hasPassword ?? false;
         mqttDeviceId = c.device_id || '';
       });
   }
@@ -264,7 +266,7 @@
       </label>
     {/if}
 
-    <label class="field-row"><span>Passwort:</span><input type="password" bind:value={wifiConfig.password} placeholder={wifiHasPassword ? '***' : ''} /></label>
+    <label class="field-row"><span>Passwort:</span><input type="password" bind:value={wifiConfig.password} placeholder={wifiHasPassword ? '*****' : ''} /></label>
 
     <div class="choice-grid" role="radiogroup" aria-label="IP-Konfiguration">
       <label class="choice-card">
@@ -294,7 +296,7 @@
     <label class="field-row"><span>Server:</span><input bind:value={mqttConfig.server} /></label>
     <label class="field-row"><span>Port:</span><input type="number" bind:value={mqttConfig.port} /></label>
     <label class="field-row"><span>Benutzer:</span><input bind:value={mqttConfig.user} /></label>
-    <label class="field-row"><span>Passwort:</span><input type="password" bind:value={mqttConfig.password} /></label>
+    <label class="field-row"><span>Passwort:</span><input type="password" bind:value={mqttConfig.password} placeholder={mqttHasPassword ? '*****' : ''} /></label>
     <label class="checkbox-row"><input type="checkbox" bind:checked={mqttConfig.discovery} /> Home Assistant Discovery aktivieren</label>
     <button class="primary" on:click={saveMqttConfig}>Speichern</button>
 

@@ -1,5 +1,6 @@
 #include "WebServerDashboard.h"
 #include <ArduinoJson.h>
+#include "GeneratedVersion.h"
 #include <HTTPClient.h>
 #include <LittleFS.h>
 #include <Update.h>
@@ -22,6 +23,7 @@ constexpr char kLatestReleaseUrl[] = "https://github.com/Back-code/Salzstand/rel
 constexpr char kUpdateUserAgent[] = "Salzstand-OTA/1.0";
 constexpr uint32_t kRestartDelayMs = 1500;
 constexpr size_t kUploadBufferSize = 4096;
+constexpr unsigned long kManifestCacheTtlMs = 300000;
 
 struct RemoteUpdateContext {
     WebServerDashboard *dashboard;
@@ -59,6 +61,31 @@ std::string bytesToHex(const unsigned char *data, size_t length) {
         result.push_back(hexChars[value & 0x0F]);
     }
     return result;
+}
+
+int compareVersions(const std::string& left, const std::string& right) {
+    int leftMajor = 0;
+    int leftMinor = 0;
+    int leftPatch = 0;
+    int rightMajor = 0;
+    int rightMinor = 0;
+    int rightPatch = 0;
+
+    if (!parseVersion(left, leftMajor, leftMinor, leftPatch) ||
+        !parseVersion(right, rightMajor, rightMinor, rightPatch)) {
+        return left.compare(right);
+    }
+
+    if (leftMajor != rightMajor) {
+        return leftMajor < rightMajor ? -1 : 1;
+    }
+    if (leftMinor != rightMinor) {
+        return leftMinor < rightMinor ? -1 : 1;
+    }
+    if (leftPatch != rightPatch) {
+        return leftPatch < rightPatch ? -1 : 1;
+    }
+    return 0;
 }
 }
 
@@ -130,6 +157,61 @@ void WebServerDashboard::broadcastUptime() {
     std::string json;
     serializeJson(doc, json);
     ws_.textAll(json.c_str());
+}
+
+std::string WebServerDashboard::getInstalledVersion() const {
+    return SALZSTAND_VERSION;
+}
+
+std::string WebServerDashboard::getAvailableVersion(bool forceRefresh) {
+    std::string error;
+    if (refreshManifestCache(forceRefresh, error)) {
+        return cachedManifest_.version;
+    }
+    return "";
+}
+
+std::string WebServerDashboard::getLatestReleaseUrl(bool forceRefresh) {
+    std::string error;
+    if (refreshManifestCache(forceRefresh, error) && !cachedManifest_.releaseUrl.empty()) {
+        return cachedManifest_.releaseUrl;
+    }
+    return kLatestReleaseUrl;
+}
+
+bool WebServerDashboard::isUpdateInProgress() const {
+    return updateState_.inProgress;
+}
+
+int WebServerDashboard::getUpdateProgressPercent() const {
+    if (updateState_.total == 0) {
+        return 0;
+    }
+    return static_cast<int>(std::min<size_t>(100, (updateState_.received * 100) / updateState_.total));
+}
+
+bool WebServerDashboard::requestRepoUpdate(const std::string& target, std::string& error) {
+    if (updateState_.inProgress || uploadActive_) {
+        error = "Update läuft bereits";
+        return false;
+    }
+
+    if (WiFi.status() != WL_CONNECTED) {
+        error = "Kein WLAN für Repo-Update verfügbar";
+        return false;
+    }
+
+    if (!refreshManifestCache(true, error)) {
+        return false;
+    }
+
+    const std::string resolvedTarget = resolveUpdateTarget(cachedManifest_, target, error);
+    if (resolvedTarget.empty()) {
+        return false;
+    }
+
+    startRemoteUpdateTask(resolvedTarget);
+    return true;
 }
 
 void WebServerDashboard::setupRoutes() {
@@ -328,17 +410,20 @@ void WebServerDashboard::setupUpdateRoutes() {
         if (target == "firmware") {
             target = "app";
         }
-        if (target != "app" && target != "webui" && target != "full") {
+        if (target.empty()) {
+            target = "auto";
+        }
+        if (target != "app" && target != "webui" && target != "full" && target != "auto") {
             request->send(400, "application/json", "{\"error\":\"Ungültiges Update-Ziel\"}");
             return;
         }
 
-        if (WiFi.status() != WL_CONNECTED) {
-            request->send(503, "application/json", "{\"error\":\"Kein WLAN für Repo-Update verfügbar\"}");
+        std::string error;
+        if (!requestRepoUpdate(target, error)) {
+            request->send(WiFi.status() == WL_CONNECTED ? 409 : 503, "application/json", (std::string("{\"error\":\"") + error + "\"}").c_str());
             return;
         }
 
-        startRemoteUpdateTask(target);
         request->send(202, "application/json", "{\"status\":\"started\"}");
     });
 
@@ -422,7 +507,9 @@ void WebServerDashboard::sendUpdateStatus(AsyncWebServerRequest *request) const 
     doc["target"] = updateState_.target;
     doc["phase"] = updateState_.phase;
     doc["message"] = updateState_.message;
+    doc["installedVersion"] = SALZSTAND_VERSION;
     doc["availableVersion"] = updateState_.availableVersion;
+    doc["manifestError"] = manifestError_;
     doc["received"] = updateState_.received;
     doc["total"] = updateState_.total;
     doc["appMaxSize"] = getAppPartitionSize();
@@ -441,6 +528,8 @@ void WebServerDashboard::sendUpdateManifest(AsyncWebServerRequest *request) {
     std::string error;
 
     if (!fetchLatestManifest(manifest, rawManifest, error)) {
+        manifestError_ = error;
+        lastManifestCheckMs_ = millis();
         DynamicJsonDocument doc(256);
         doc["error"] = error;
         doc["manifestUrl"] = kLatestManifestUrl;
@@ -449,6 +538,10 @@ void WebServerDashboard::sendUpdateManifest(AsyncWebServerRequest *request) {
         request->send(502, "application/json", json.c_str());
         return;
     }
+
+    cachedManifest_ = manifest;
+    manifestError_.clear();
+    lastManifestCheckMs_ = millis();
 
     request->send(200, "application/json", rawManifest.c_str());
 }
@@ -500,14 +593,89 @@ bool WebServerDashboard::fetchLatestManifest(ReleaseManifest& manifest, std::str
     manifest.webui.url = doc["assets"]["webui"]["url"] | "";
     manifest.webui.sha256 = toLowerCopy(doc["assets"]["webui"]["sha256"] | "");
     manifest.webui.size = doc["assets"]["webui"]["size"] | 0;
-    manifest.valid = !manifest.version.empty() && !manifest.app.url.empty() && !manifest.webui.url.empty();
+    manifest.valid = !manifest.version.empty() && (!manifest.app.url.empty() || !manifest.webui.url.empty());
 
     if (!manifest.valid) {
-        error = "Manifest enthält nicht alle erforderlichen Assets";
+        error = "Manifest enthält keine Update-Assets";
         return false;
     }
 
     return true;
+}
+
+bool WebServerDashboard::refreshManifestCache(bool forceRefresh, std::string& error) {
+    const unsigned long now = millis();
+    const bool cacheFresh = !forceRefresh && lastManifestCheckMs_ != 0 && (now - lastManifestCheckMs_) < kManifestCacheTtlMs;
+    if (cacheFresh) {
+        error = manifestError_;
+        return cachedManifest_.valid;
+    }
+
+    ReleaseManifest manifest;
+    std::string rawManifest;
+    if (!fetchLatestManifest(manifest, rawManifest, error)) {
+        cachedManifest_ = {};
+        manifestError_ = error;
+        lastManifestCheckMs_ = now;
+        return false;
+    }
+
+    cachedManifest_ = manifest;
+    manifestError_.clear();
+    lastManifestCheckMs_ = now;
+    return true;
+}
+
+std::string WebServerDashboard::resolveUpdateTarget(const ReleaseManifest& manifest, const std::string& requestedTarget, std::string& error) const {
+    const bool hasApp = !manifest.app.url.empty();
+    const bool hasWebUi = !manifest.webui.url.empty();
+    const bool newerVersion = compareVersions(manifest.version, getInstalledVersion()) > 0;
+
+    if (requestedTarget == "auto" || requestedTarget.empty()) {
+        if (!newerVersion) {
+            error = "Keine neuere Version verfügbar";
+            return "";
+        }
+        if (hasApp && hasWebUi) {
+            return "full";
+        }
+        if (hasApp) {
+            return "app";
+        }
+        if (hasWebUi) {
+            return "webui";
+        }
+
+        error = "Manifest enthält keine verfügbaren Update-Assets";
+        return "";
+    }
+
+    if (requestedTarget == "app") {
+        if (hasApp) {
+            return "app";
+        }
+        error = "Im Manifest ist kein App-Update vorhanden";
+        return "";
+    }
+
+    if (requestedTarget == "webui") {
+        if (hasWebUi) {
+            return "webui";
+        }
+        error = "Im Manifest ist kein Web-UI-Update vorhanden";
+        return "";
+    }
+
+    if (requestedTarget == "full") {
+        if (hasApp && hasWebUi) {
+            return "full";
+        }
+        error = "Für ein Komplett-Update fehlen Assets im Manifest";
+        return "";
+    }
+
+    error = "Ungültiges Update-Ziel";
+    return "";
 }
 
 void WebServerDashboard::startRemoteUpdateTask(const std::string& target) {
@@ -535,10 +703,15 @@ void WebServerDashboard::runRemoteUpdateTask(const std::string& target) {
 
     setUpdatePhase("manifest", "Manifest wird geladen");
     if (!fetchLatestManifest(manifest, rawManifest, error)) {
+        manifestError_ = error;
+        lastManifestCheckMs_ = millis();
         markUpdateFailed(error);
         return;
     }
 
+    cachedManifest_ = manifest;
+    manifestError_.clear();
+    lastManifestCheckMs_ = millis();
     updateState_.availableVersion = manifest.version;
 
     if ((target == "webui" || target == "full") && !manifest.webui.url.empty()) {

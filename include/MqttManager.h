@@ -30,6 +30,9 @@ public:
     // Publish WiFi, Uptime & ESP32-Systemwerte
     void publishSystemState();
 
+    // Publish OTA/Version state for Home Assistant Update entity
+    void publishUpdateState();
+
     // Publish aktuellen Konfig-Zustand (behaelterhoehe, offset)
     void publishConfig();
 

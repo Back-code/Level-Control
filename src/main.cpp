@@ -97,6 +97,7 @@ void loop() {
             sensorStatus
         );
         MqttManager::getInstance().publishSystemState();
+        MqttManager::getInstance().publishUpdateState();
     }
 
     // WebSocket Broadcast alle 5 s

@@ -17,6 +17,12 @@ public:
     void broadcastSensorData();
     void broadcastWifiData();
     void broadcastUptime();
+    std::string getInstalledVersion() const;
+    std::string getAvailableVersion(bool forceRefresh = false);
+    std::string getLatestReleaseUrl(bool forceRefresh = false);
+    bool requestRepoUpdate(const std::string& target, std::string& error);
+    bool isUpdateInProgress() const;
+    int getUpdateProgressPercent() const;
 
 private:
     struct ManifestAsset {
@@ -51,6 +57,9 @@ private:
     AsyncWebServer server_;
     AsyncWebSocket ws_;
     UpdateState updateState_;
+    ReleaseManifest cachedManifest_;
+    std::string manifestError_;
+    unsigned long lastManifestCheckMs_ = 0;
     bool uploadActive_ = false;
     bool uploadFailed_ = false;
     bool restartScheduled_ = false;
@@ -69,6 +78,8 @@ private:
     void sendUpdateStatus(AsyncWebServerRequest *request) const;
     void sendUpdateManifest(AsyncWebServerRequest *request);
     bool fetchLatestManifest(ReleaseManifest& manifest, std::string& rawManifest, std::string& error);
+    bool refreshManifestCache(bool forceRefresh, std::string& error);
+    std::string resolveUpdateTarget(const ReleaseManifest& manifest, const std::string& requestedTarget, std::string& error) const;
     void startRemoteUpdateTask(const std::string& target);
     void runRemoteUpdateTask(const std::string& target);
     bool applyRemoteAsset(const ManifestAsset& asset, int command, const std::string& phase, std::string& error);

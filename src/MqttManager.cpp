@@ -2,8 +2,11 @@
 #include "DebugLogger.h"
 #include "ConfigStore.h"
 #include "SensorManager.h"
+#include "WebServerDashboard.h"
 #include <WiFi.h>
 #include <ArduinoJson.h>
+#include <algorithm>
+#include <cctype>
 
 // PubSubClient defines MQTT_CONNECTED / MQTT_DISCONNECTED as int macros —
 // undefine to avoid conflict with our EventType enum class values.
@@ -22,6 +25,15 @@ static const char* TOPIC_CFG_HOEHE_SET   = "salzstand/config/behaelterhoehe/set"
 static const char* TOPIC_CFG_OFFSET_STATE = "salzstand/config/offset/state";
 static const char* TOPIC_CFG_OFFSET_SET  = "salzstand/config/offset/set";
 static const char* TOPIC_SYSTEM_STATE    = "salzstand/system/state";
+static const char* TOPIC_UPDATE_STATE    = "salzstand/update/state";
+static const char* TOPIC_UPDATE_INSTALL  = "salzstand/update/install";
+
+static std::string toLowerCopy(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return value;
+}
 
 // ------------------------------------------------------------------ Singleton
 MqttManager& MqttManager::getInstance() {
@@ -77,6 +89,24 @@ void MqttManager::handleMessage(const char* topic, const std::string& payload) {
             DebugLogger::getInstance().log(LogLevel::WARN,
                 "MQTT: ungültiger Wert für offset: " + payload);
         }
+    } else if (std::string(topic) == TOPIC_UPDATE_INSTALL) {
+        std::string requestedTarget = toLowerCopy(payload);
+        if (requestedTarget.empty() || requestedTarget == "press" || requestedTarget == "install") {
+            requestedTarget = "auto";
+        }
+        if (requestedTarget == "firmware") {
+            requestedTarget = "app";
+        }
+
+        std::string error;
+        if (!WebServerDashboard::getInstance().requestRepoUpdate(requestedTarget, error)) {
+            DebugLogger::getInstance().log(LogLevel::WARN,
+                "MQTT: OTA-Start fehlgeschlagen: " + error);
+        } else {
+            publishUpdateState();
+            DebugLogger::getInstance().log(LogLevel::INFO,
+                "MQTT: OTA-Start ausgelöst via Home Assistant");
+        }
     }
 
     if (changed) {
@@ -89,6 +119,7 @@ void MqttManager::handleMessage(const char* topic, const std::string& payload) {
 void MqttManager::subscribeToTopics() {
     mqttClient_.subscribe(TOPIC_CFG_HOEHE_SET);
     mqttClient_.subscribe(TOPIC_CFG_OFFSET_SET);
+    mqttClient_.subscribe(TOPIC_UPDATE_INSTALL);
     DebugLogger::getInstance().log(LogLevel::INFO, "MQTT: config topics subscribed");
 }
 
@@ -175,6 +206,8 @@ void MqttManager::connect() {
                 publishDiscovery();
             }
             publishConfig();
+            publishSystemState();
+            publishUpdateState();
         }
 
         DebugLogger::getInstance().log(LogLevel::INFO, "MQTT connected");
@@ -276,6 +309,31 @@ void MqttManager::publishSystemState() {
     publish(TOPIC_SYSTEM_STATE, buf);
 }
 
+void MqttManager::publishUpdateState() {
+    if (!isConnected()) return;
+
+    WebServerDashboard& dashboard = WebServerDashboard::getInstance();
+    const std::string installedVersion = dashboard.getInstalledVersion();
+    std::string latestVersion = dashboard.getAvailableVersion(false);
+    if (latestVersion.empty()) {
+        latestVersion = installedVersion;
+    }
+
+    DynamicJsonDocument doc(512);
+    doc["installed_version"] = installedVersion;
+    doc["latest_version"] = latestVersion;
+    doc["title"] = "Salzstand OTA";
+    doc["release_url"] = dashboard.getLatestReleaseUrl(false);
+    if (dashboard.isUpdateInProgress()) {
+        doc["in_progress"] = true;
+        doc["update_percentage"] = dashboard.getUpdateProgressPercent();
+    }
+
+    std::string payload;
+    serializeJson(doc, payload);
+    publish(TOPIC_UPDATE_STATE, payload.c_str());
+}
+
 // ------------------------------------------------------------------ setWill (legacy)
 void MqttManager::setWill(const char* topic, const char* payload) {
     willTopic_   = topic   ? topic   : "";
@@ -316,6 +374,22 @@ void MqttManager::publishDiscovery() {
         doc["availability_topic"] = TOPIC_STATUS;
         addDevice(doc);
         send("sensor", "fill_level", doc);
+    }
+
+    // --- Update-Entität für Home Assistant OTA ---
+    {
+        DynamicJsonDocument doc(768);
+        doc["unique_id"] = deviceId_ + "_ota_update";
+        doc["name"] = "Salzstand OTA";
+        doc["title"] = "Salzstand Firmware";
+        doc["state_topic"] = TOPIC_UPDATE_STATE;
+        doc["command_topic"] = TOPIC_UPDATE_INSTALL;
+        doc["payload_install"] = "install";
+        doc["device_class"] = "firmware";
+        doc["availability_topic"] = TOPIC_STATUS;
+        doc["icon"] = "mdi:update";
+        addDevice(doc);
+        send("update", "ota", doc);
     }
 
     // --- 2. Salzstand in cm ---

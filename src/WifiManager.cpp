@@ -141,8 +141,26 @@ void WifiManager::stopAP() {
 }
 
 std::vector<WifiNetwork> WifiManager::scanNetworks() {
-    int n = WiFi.scanNetworks();
+    wifi_mode_t mode = WiFi.getMode();
+    if (mode == WIFI_MODE_AP) {
+        WiFi.mode(WIFI_AP_STA);
+    } else if (mode == WIFI_MODE_NULL) {
+        WiFi.mode(WIFI_STA);
+    }
+
+    WiFi.scanDelete();
+    int n = WiFi.scanNetworks(false, true);
+    if (n < 0) {
+        delay(250);
+        WiFi.scanDelete();
+        n = WiFi.scanNetworks(false, true);
+    }
+
     std::vector<WifiNetwork> networks;
+    if (n <= 0) {
+        return networks;
+    }
+
     for (int i = 0; i < n; ++i) {
         networks.push_back({WiFi.SSID(i).c_str(), WiFi.RSSI(i)});
     }

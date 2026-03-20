@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { showNotice } from './dialogStore.js';
+  import PasswordInput from './PasswordInput.svelte';
 
   export let data;
   export let loadConfig;
@@ -19,6 +20,12 @@
   let mqttConfig = { server: '', port: 1883, user: '', password: '', discovery: true };
   let mqttHasPassword = false;
   let mqttDeviceId = '';
+
+  const PASSWORD_MASK = '*****';
+
+  function isMaskedPassword(value) {
+    return value === '***' || value === PASSWORD_MASK;
+  }
 
   function enableStaticIp() {
     wifiMode = 'static';
@@ -70,7 +77,7 @@
       .then(c => {
         wifiConfig = {
           ssid: c.ssid || '',
-          password: c.password || '',
+          password: isMaskedPassword(c.password || '') ? '' : (c.password || ''),
           staticIp: {
             ip: c.staticIp?.ip || '',
             gateway: c.staticIp?.gateway || '',
@@ -78,7 +85,7 @@
             dns: c.staticIp?.dns || ''
           }
         };
-        wifiHasPassword = c.hasPassword ?? false;
+        wifiHasPassword = (c.hasPassword ?? false) || isMaskedPassword(c.password || '');
         wifiMode = c.useStaticIp ? 'static' : 'dhcp';
       });
 
@@ -89,10 +96,10 @@
           server: c.server || '',
           port: c.port || 1883,
           user: c.user || '',
-          password: c.password || '',
+          password: isMaskedPassword(c.password || '') ? '' : (c.password || ''),
           discovery: c.discovery ?? true
         };
-        mqttHasPassword = c.hasPassword ?? false;
+        mqttHasPassword = (c.hasPassword ?? false) || isMaskedPassword(c.password || '');
         mqttDeviceId = c.device_id || '';
       });
   }
@@ -266,7 +273,10 @@
       </label>
     {/if}
 
-    <label class="field-row"><span>Passwort:</span><input type="password" bind:value={wifiConfig.password} placeholder={wifiHasPassword ? '*****' : ''} /></label>
+    <div class="field-row">
+      <span>Passwort:</span>
+      <PasswordInput bind:value={wifiConfig.password} hasStoredPassword={wifiHasPassword} mask={PASSWORD_MASK} />
+    </div>
 
     <div class="choice-grid" role="radiogroup" aria-label="IP-Konfiguration">
       <label class="choice-card">
@@ -296,7 +306,10 @@
     <label class="field-row"><span>Server:</span><input bind:value={mqttConfig.server} /></label>
     <label class="field-row"><span>Port:</span><input type="number" bind:value={mqttConfig.port} /></label>
     <label class="field-row"><span>Benutzer:</span><input bind:value={mqttConfig.user} /></label>
-    <label class="field-row"><span>Passwort:</span><input type="password" bind:value={mqttConfig.password} placeholder={mqttHasPassword ? '*****' : ''} /></label>
+    <div class="field-row">
+      <span>Passwort:</span>
+      <PasswordInput bind:value={mqttConfig.password} hasStoredPassword={mqttHasPassword} mask={PASSWORD_MASK} />
+    </div>
     <label class="checkbox-row"><input type="checkbox" bind:checked={mqttConfig.discovery} /> Home Assistant Discovery aktivieren</label>
     <button class="primary" on:click={saveMqttConfig}>Speichern</button>
 

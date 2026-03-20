@@ -22,6 +22,7 @@ namespace {
 constexpr char kLatestManifestUrl[] = "https://github.com/Back-code/Salzstand/releases/latest/download/manifest.json";
 constexpr char kLatestReleaseUrl[] = "https://github.com/Back-code/Salzstand/releases/latest";
 constexpr char kUpdateUserAgent[] = "Salzstand-OTA/1.0";
+constexpr char kPasswordMask[] = "*****";
 constexpr uint32_t kRestartDelayMs = 1500;
 constexpr size_t kUploadBufferSize = 4096;
 constexpr unsigned long kManifestCacheTtlMs = 300000;
@@ -36,6 +37,10 @@ std::string toLowerCopy(std::string value) {
         return static_cast<char>(std::tolower(ch));
     });
     return value;
+}
+
+bool isMaskedPassword(const std::string& value) {
+    return value == "***" || value == kPasswordMask;
 }
 
 bool parseVersion(const std::string& version, int& major, int& minor, int& patch) {
@@ -253,7 +258,7 @@ void WebServerDashboard::setupRoutes() {
         if (ConfigStore::getInstance().load(config)) {
             DynamicJsonDocument doc(384);
             doc["ssid"] = config.wifi.ssid;
-            doc["password"] = config.wifi.password.empty() ? "" : "*****";
+            doc["password"] = config.wifi.password.empty() ? "" : kPasswordMask;
             doc["hasPassword"] = !config.wifi.password.empty();
             doc["useStaticIp"] = !config.staticIp.ip.empty() || !config.staticIp.subnet.empty() || !config.staticIp.dns.empty();
             doc["staticIp"]["ip"] = config.staticIp.ip;
@@ -314,7 +319,7 @@ void WebServerDashboard::setupRoutes() {
             ConfigStore::getInstance().load(config); // Load current
             config.wifi.ssid = doc["ssid"] | "";
             std::string newWifiPassword = doc["password"] | "";
-            if (!newWifiPassword.empty() && newWifiPassword != "***" && newWifiPassword != "*****") {
+            if (!newWifiPassword.empty() && !isMaskedPassword(newWifiPassword)) {
                 config.wifi.password = newWifiPassword;
             }
 
@@ -345,7 +350,7 @@ void WebServerDashboard::setupRoutes() {
             doc["server"] = config.mqtt.server;
             doc["port"] = config.mqtt.port;
             doc["user"] = config.mqtt.user;
-            doc["password"] = config.mqtt.password.empty() ? "" : "*****";
+            doc["password"] = config.mqtt.password.empty() ? "" : kPasswordMask;
             doc["hasPassword"] = !config.mqtt.password.empty();
             doc["discovery"] = config.mqtt.discovery;
             doc["device_id"] = MqttManager::getInstance().getDeviceId();
@@ -371,7 +376,7 @@ void WebServerDashboard::setupRoutes() {
             config.mqtt.port = doc["port"] | 1883;
             config.mqtt.user = doc["user"] | "";
             std::string newMqttPassword = doc["password"] | "";
-            if (!newMqttPassword.empty() && newMqttPassword != "***" && newMqttPassword != "*****") {
+            if (!newMqttPassword.empty() && !isMaskedPassword(newMqttPassword)) {
                 config.mqtt.password = newMqttPassword;
             }
             config.mqtt.discovery = doc["discovery"] | true;
@@ -400,7 +405,7 @@ void WebServerDashboard::setupRoutes() {
             DynamicJsonDocument doc(512);
             doc["version"] = config.version;
             doc["wifi"]["ssid"] = config.wifi.ssid;
-            doc["wifi"]["password"] = "*****"; // Don't expose password
+            doc["wifi"]["password"] = kPasswordMask; // Don't expose password
             doc["staticIp"]["ip"] = config.staticIp.ip;
             doc["staticIp"]["gateway"] = config.staticIp.gateway;
             doc["staticIp"]["subnet"] = config.staticIp.subnet;
@@ -408,7 +413,7 @@ void WebServerDashboard::setupRoutes() {
             doc["mqtt"]["server"] = config.mqtt.server;
             doc["mqtt"]["port"] = config.mqtt.port;
             doc["mqtt"]["user"] = config.mqtt.user;
-            doc["mqtt"]["password"] = "*****"; // Don't expose password
+            doc["mqtt"]["password"] = kPasswordMask; // Don't expose password
             doc["mqtt"]["discovery"] = config.mqtt.discovery;
             doc["behaelterhoehe"] = config.behaelterhoehe;
             doc["offset"] = config.offset;
@@ -1087,4 +1092,8 @@ void WebServerDashboard::onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient 
     } else if (type == WS_EVT_DISCONNECT) {
         DebugLogger::getInstance().log(LogLevel::INFO, "WebSocket client disconnected");
     }
+}
+
+bool isMaskedPassword(const std::string& value) {
+    return value == "***" || value == kPasswordMask;
 }

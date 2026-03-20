@@ -18,6 +18,7 @@
   let wifiNetworks = [];
   let wifiScanLoading = false;
   let wifiScanError = '';
+  let wifiValidation = { attempted: false, touched: {} };
   let mqttConfig = { server: '', port: 1883, user: '', password: '', discovery: true };
   let mqttHasPassword = false;
   let mqttDeviceId = '';
@@ -38,6 +39,49 @@
 
   function enableDhcp() {
     wifiMode = 'dhcp';
+    wifiValidation = { attempted: false, touched: {} };
+  }
+
+  function isWifiFieldRequired(field) {
+    return wifiMode === 'static' && ['ip', 'subnet', 'dns'].includes(field);
+  }
+
+  function isWifiFieldEmpty(field) {
+    return !String(wifiConfig.staticIp[field] || '').trim();
+  }
+
+  function hasWifiFieldError(field) {
+    if (!isWifiFieldRequired(field)) {
+      return false;
+    }
+    return (wifiValidation.attempted || wifiValidation.touched[field]) && isWifiFieldEmpty(field);
+  }
+
+  function getWifiFieldError(field) {
+    if (!hasWifiFieldError(field)) {
+      return '';
+    }
+
+    if (field === 'ip') {
+      return 'Bitte statische IP eingeben.';
+    }
+    if (field === 'subnet') {
+      return 'Bitte Subnetz eingeben.';
+    }
+    if (field === 'dns') {
+      return 'Bitte DNS eingeben.';
+    }
+    return 'Pflichtfeld fehlt.';
+  }
+
+  function touchWifiField(field) {
+    wifiValidation = {
+      ...wifiValidation,
+      touched: {
+        ...wifiValidation.touched,
+        [field]: true
+      }
+    };
   }
 
   async function scanWifiNetworks() {
@@ -88,6 +132,7 @@
         };
         wifiHasPassword = (c.hasPassword ?? false) || isMaskedPassword(c.password || '');
         wifiMode = c.useStaticIp ? 'static' : 'dhcp';
+        wifiValidation = { attempted: false, touched: {} };
       });
 
     fetch('/api/mqtt', { cache: 'no-store' })
@@ -129,6 +174,7 @@
 
   async function saveWifiConfig() {
     if (wifiMode === 'static') {
+      wifiValidation = { ...wifiValidation, attempted: true };
       if (!wifiConfig.staticIp.ip || !wifiConfig.staticIp.subnet || !wifiConfig.staticIp.dns) {
         showNotice('error', 'Für statische IP sind Statische IP, Subnetz und DNS erforderlich.');
         return;
@@ -158,6 +204,7 @@
       }
 
       showNotice('success', 'WiFi-Konfiguration gespeichert. Neustart erforderlich.');
+      wifiValidation = { attempted: false, touched: {} };
     } catch (_) {
       showNotice('error', 'WiFi-Konfiguration konnte nicht gespeichert werden.');
     }
@@ -291,10 +338,55 @@
     </div>
 
     {#if wifiMode === 'static'}
-      <label class="field-row"><span><FieldLabel text="Statische IP:" required={true} /></span><input bind:value={wifiConfig.staticIp.ip} aria-required="true" /></label>
-      <label class="field-row"><span><FieldLabel text="Gateway:" /></span><input bind:value={wifiConfig.staticIp.gateway} /></label>
-      <label class="field-row"><span><FieldLabel text="Subnetz:" required={true} /></span><input bind:value={wifiConfig.staticIp.subnet} aria-required="true" /></label>
-      <label class="field-row"><span><FieldLabel text="DNS:" required={true} /></span><input bind:value={wifiConfig.staticIp.dns} aria-required="true" /></label>
+      <label class="field-row field-row--top-align">
+        <span><FieldLabel text="Statische IP:" required={true} /></span>
+        <div class="field-control">
+          <input
+            bind:value={wifiConfig.staticIp.ip}
+            aria-required="true"
+            aria-invalid={hasWifiFieldError('ip')}
+            class:input-invalid={hasWifiFieldError('ip')}
+            on:blur={() => touchWifiField('ip')}
+          />
+          {#if hasWifiFieldError('ip')}
+            <p class="field-error">{getWifiFieldError('ip')}</p>
+          {/if}
+        </div>
+      </label>
+      <label class="field-row">
+        <span><FieldLabel text="Gateway:" /></span>
+        <input bind:value={wifiConfig.staticIp.gateway} />
+      </label>
+      <label class="field-row field-row--top-align">
+        <span><FieldLabel text="Subnetz:" required={true} /></span>
+        <div class="field-control">
+          <input
+            bind:value={wifiConfig.staticIp.subnet}
+            aria-required="true"
+            aria-invalid={hasWifiFieldError('subnet')}
+            class:input-invalid={hasWifiFieldError('subnet')}
+            on:blur={() => touchWifiField('subnet')}
+          />
+          {#if hasWifiFieldError('subnet')}
+            <p class="field-error">{getWifiFieldError('subnet')}</p>
+          {/if}
+        </div>
+      </label>
+      <label class="field-row field-row--top-align">
+        <span><FieldLabel text="DNS:" required={true} /></span>
+        <div class="field-control">
+          <input
+            bind:value={wifiConfig.staticIp.dns}
+            aria-required="true"
+            aria-invalid={hasWifiFieldError('dns')}
+            class:input-invalid={hasWifiFieldError('dns')}
+            on:blur={() => touchWifiField('dns')}
+          />
+          {#if hasWifiFieldError('dns')}
+            <p class="field-error">{getWifiFieldError('dns')}</p>
+          {/if}
+        </div>
+      </label>
     {/if}
 
     <button class="primary" on:click={saveWifiConfig}>Speichern</button>
@@ -396,10 +488,16 @@
     gap: 12px;
     margin: 10px 0;
   }
+  .field-row--top-align {
+    align-items: start;
+  }
   .field-row span {
     white-space: nowrap;
     text-align: left;
     padding-left: 0;
+  }
+  .field-control {
+    width: min(360px, 100%);
   }
   input {
     margin-left: 0;
@@ -409,6 +507,19 @@
     padding: 8px 10px;
     background: rgba(255, 255, 255, 0.14);
     color: var(--text-main);
+  }
+  .field-control input {
+    width: 100%;
+  }
+  .input-invalid {
+    border-color: #ff6b6b;
+    box-shadow: 0 0 0 1px rgba(255, 107, 107, 0.25);
+    background: rgba(255, 107, 107, 0.08);
+  }
+  .field-error {
+    margin: 6px 0 0;
+    font-size: 0.82rem;
+    color: #ff9a8f;
   }
   select {
     width: min(360px, 100%);

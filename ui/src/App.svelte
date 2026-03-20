@@ -6,6 +6,7 @@
 
   let activeTab = 'dashboard';
   let theme = 'night';
+  const DATA_CACHE_KEY = 'salzstand-last-data';
   let data = {
     rohdistanz: 0,
     salzstandCm: 0,
@@ -21,6 +22,25 @@
 
   let ws;
 
+  function restoreCachedData() {
+    try {
+      const raw = localStorage.getItem(DATA_CACHE_KEY);
+      if (!raw) return;
+      const cached = JSON.parse(raw);
+      data = { ...data, ...cached };
+    } catch (_) {
+      // Ignore invalid cache and continue with live updates.
+    }
+  }
+
+  function persistData() {
+    try {
+      localStorage.setItem(DATA_CACHE_KEY, JSON.stringify(data));
+    } catch (_) {
+      // Ignore storage write errors (e.g. private mode quota issues).
+    }
+  }
+
   function applyTheme(nextTheme) {
     theme = nextTheme;
     document.documentElement.setAttribute('data-theme', theme);
@@ -35,6 +55,7 @@
   onMount(() => {
     const storedTheme = localStorage.getItem('salzstand-theme');
     applyTheme(storedTheme === 'day' ? 'day' : 'night');
+    restoreCachedData();
 
     // Connect to WebSocket
     ws = new WebSocket('ws://' + window.location.host + '/ws');
@@ -53,6 +74,7 @@
       } else if (msg.type === 'uptime') {
         data.uptime = msg.uptime;
       }
+      persistData();
     };
 
     // Load initial config
@@ -67,6 +89,7 @@
     fetch('/api/config').then(r => r.json()).then(config => {
       data.behaelterhoehe = config.behaelterhoehe;
       data.offset = config.offset;
+      persistData();
     });
   }
 

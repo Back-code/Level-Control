@@ -255,27 +255,31 @@ void WebServerDashboard::setupRoutes() {
 
     server_.on("/api/wifi", HTTP_GET, [](AsyncWebServerRequest *request) {
         Config config;
-        if (ConfigStore::getInstance().load(config)) {
-            DynamicJsonDocument doc(384);
-            bool wifiHasPassword = !config.wifi.password.empty();
-            if (!wifiHasPassword && WiFi.status() == WL_CONNECTED) {
-                // Fallback: falls Passwort nicht in NVS steht, aber die aktive STA-Verbindung eins hat.
-                wifiHasPassword = !WiFi.psk().isEmpty();
-            }
-            doc["ssid"] = config.wifi.ssid;
-            doc["password"] = wifiHasPassword ? kPasswordMask : "";
-            doc["hasPassword"] = wifiHasPassword;
-            doc["useStaticIp"] = !config.staticIp.ip.empty() || !config.staticIp.subnet.empty() || !config.staticIp.dns.empty();
-            doc["staticIp"]["ip"] = config.staticIp.ip;
-            doc["staticIp"]["gateway"] = config.staticIp.gateway;
-            doc["staticIp"]["subnet"] = config.staticIp.subnet;
-            doc["staticIp"]["dns"] = config.staticIp.dns;
-            std::string json;
-            serializeJson(doc, json);
-            request->send(200, "application/json", json.c_str());
-        } else {
-            request->send(500, "application/json", "{\"error\":\"WiFi config load failed\"}");
+        const bool loaded = ConfigStore::getInstance().load(config);
+
+        const std::string configuredSsid = loaded ? config.wifi.ssid : "";
+        const std::string runtimeSsid = WiFi.SSID().c_str();
+        const std::string runtimePsk = WiFi.psk().c_str();
+
+        bool wifiHasPassword = loaded && !config.wifi.password.empty();
+        if (!wifiHasPassword && !runtimePsk.empty()) {
+            // Fallback: WLAN-Stack kennt ein PSK, auch wenn es nicht (mehr) in NVS liegt.
+            wifiHasPassword = true;
         }
+
+        DynamicJsonDocument doc(384);
+        doc["ssid"] = !configuredSsid.empty() ? configuredSsid : runtimeSsid;
+        doc["password"] = wifiHasPassword ? kPasswordMask : "";
+        doc["hasPassword"] = wifiHasPassword;
+        doc["useStaticIp"] = loaded && (!config.staticIp.ip.empty() || !config.staticIp.subnet.empty() || !config.staticIp.dns.empty());
+        doc["staticIp"]["ip"] = loaded ? config.staticIp.ip : "";
+        doc["staticIp"]["gateway"] = loaded ? config.staticIp.gateway : "";
+        doc["staticIp"]["subnet"] = loaded ? config.staticIp.subnet : "";
+        doc["staticIp"]["dns"] = loaded ? config.staticIp.dns : "";
+
+        std::string json;
+        serializeJson(doc, json);
+        request->send(200, "application/json", json.c_str());
     });
 
     server_.on("/api/wifi/scan", HTTP_GET, [](AsyncWebServerRequest *request) {

@@ -72,7 +72,7 @@
   function loadAllConfig() {
     loadConfig();
 
-    fetch('/api/wifi')
+    fetch('/api/wifi', { cache: 'no-store' })
       .then(r => r.json())
       .then(c => {
         wifiConfig = {
@@ -89,7 +89,7 @@
         wifiMode = c.useStaticIp ? 'static' : 'dhcp';
       });
 
-    fetch('/api/mqtt')
+    fetch('/api/mqtt', { cache: 'no-store' })
       .then(r => r.json())
       .then(c => {
         mqttConfig = {

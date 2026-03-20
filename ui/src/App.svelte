@@ -142,6 +142,10 @@
         return;
       }
       showNotice('success', 'Neustart wurde ausgelöst. Das Gerät ist gleich kurz nicht erreichbar.');
+      // Nach dem ESP-Neustart UI automatisch neu laden, damit die Verbindung wieder sauber aufgebaut wird.
+      setTimeout(() => {
+        window.location.reload();
+      }, 6000);
     } catch (_) {
       showNotice('error', 'Neustart konnte nicht ausgelöst werden.');
     }

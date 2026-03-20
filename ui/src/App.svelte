@@ -99,7 +99,7 @@
 
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', subtitle: 'Live-Messwerte und Netzwerkstatus in einer kompakten Uebersicht.' },
-    { id: 'sensor', label: 'Sensor', subtitle: 'Sensorparameter fuer Messgeometrie und Offset konfigurieren.' },
+    { id: 'sensor', label: 'Behaelter', subtitle: 'Behaelterparameter fuer Messgeometrie und Offset konfigurieren.' },
     { id: 'wifi', label: 'WiFi', subtitle: 'WLAN-Zugang und optionale statische Netzwerkdaten verwalten.' },
     { id: 'mqtt_ha', label: 'MQTT & HA', subtitle: 'Broker, Discovery und Home-Assistant-Anbindung zentral steuern.' },
     { id: 'debug', label: 'Debug', subtitle: 'Live-Logs sowie NVS-Snapshot fuer Diagnose und Fehleranalyse.' }

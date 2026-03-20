@@ -51,7 +51,7 @@
         behaelterhoehe: data.behaelterhoehe,
         offset: data.offset
       })
-    }).then(() => alert('Sensor-Konfiguration gespeichert'));
+    }).then(() => alert('Behaelter-Konfiguration gespeichert'));
   }
 
   function saveWifiConfig() {
@@ -86,10 +86,59 @@
 
 {#if module === 'sensor'}
   <div class="config-section">
-    <h2>Sensor</h2>
+    <h2>Behälter</h2>
     <p>Messgeometrie und Korrekturwerte für die Füllstandsberechnung.</p>
-    <label>Behälterhöhe (cm): <input type="number" bind:value={data.behaelterhoehe} /></label>
-    <label>Offset (cm): <input type="number" bind:value={data.offset} /></label>
+
+    <label class="field-row">
+      <span>Offset (cm):</span>
+      <input type="number" bind:value={data.offset} />
+    </label>
+
+    <label class="field-row">
+      <span>Behälterhöhe (cm):</span>
+      <input type="number" bind:value={data.behaelterhoehe} />
+    </label>
+
+    <div class="sensor-sketch" aria-label="Erklärung Behälterhöhe und Offset">
+      <svg viewBox="0 0 400 220" role="img">
+        <!-- Behälter Container mit Sensor-Module -->
+        <rect x="120" y="30" width="160" height="110" rx="8" fill="rgba(255,255,255,0.08)" stroke="currentColor" stroke-width="2" />
+        
+        <!-- Kleine eckige Kiste mit 2 Sensoren oben im Behälter (zentriert) -->
+        <rect x="165" y="35" width="70" height="18" rx="3" fill="rgba(100,150,255,0.2)" stroke="currentColor" stroke-width="1.5" />
+        <circle cx="180" cy="44" r="3" fill="var(--accent)" />
+        <circle cx="220" cy="44" r="3" fill="var(--accent)" />
+        
+        <!-- Ultraschallwellen vom linken und rechten Sensor -->
+        <ellipse cx="180" cy="54" rx="8" ry="5" fill="none" stroke="rgba(100,150,255,0.4)" stroke-width="1" />
+        <ellipse cx="180" cy="61" rx="13" ry="8" fill="none" stroke="rgba(100,150,255,0.3)" stroke-width="1" />
+        <ellipse cx="180" cy="68" rx="18" ry="11" fill="none" stroke="rgba(100,150,255,0.2)" stroke-width="1" />
+        
+        <ellipse cx="220" cy="54" rx="8" ry="5" fill="none" stroke="rgba(100,150,255,0.4)" stroke-width="1" />
+        <ellipse cx="220" cy="61" rx="13" ry="8" fill="none" stroke="rgba(100,150,255,0.3)" stroke-width="1" />
+        <ellipse cx="220" cy="68" rx="18" ry="11" fill="none" stroke="rgba(100,150,255,0.2)" stroke-width="1" />
+        
+        <!-- Behälterboden Linie (zentriert) -->
+        <line x1="130" y1="118" x2="270" y2="118" stroke="currentColor" stroke-width="2" stroke-dasharray="5 3" />
+
+        <!-- Offset Pfeil (Links, näher an Behälterhöhe) -->
+        <line x1="112" y1="65" x2="112" y2="82" stroke="var(--accent)" stroke-width="2" />
+        <polygon points="108,67 116,67 112,59" fill="var(--accent)" />
+        <polygon points="108,80 116,80 112,88" fill="var(--accent)" />
+        <text x="105" y="77" text-anchor="end" fill="var(--accent)" font-size="13" font-weight="600">Offset</text>
+
+        <!-- Behälterhöhe Pfeil (Links unten) -->
+        <line x1="112" y1="92" x2="112" y2="125" stroke="var(--accent)" stroke-width="2" />
+        <polygon points="108,94 116,94 112,86" fill="var(--accent)" />
+        <polygon points="108,123 116,123 112,131" fill="var(--accent)" />
+        <text x="105" y="113" text-anchor="end" fill="var(--accent)" font-size="13" font-weight="600">Behälterhöhe</text>
+
+        <text x="200" y="22" text-anchor="middle" fill="var(--text-muted)" font-size="11">Sensor</text>
+        <text x="200" y="137" text-anchor="middle" fill="var(--text-muted)" font-size="11">Behälterboden</text>
+      </svg>
+      <p class="sketch-note">Offset verschiebt die Referenz der Sensorposition. Positive Werte vergrößern, negative Werte verkleinern den berechneten Füllstand.</p>
+    </div>
+
     <button class="primary" on:click={saveSensorConfig}>Speichern</button>
   </div>
 {:else if module === 'wifi'}
@@ -156,9 +205,21 @@
     color: var(--text-main);
     font-weight: 600;
   }
+  .field-row {
+    display: grid;
+    grid-template-columns: minmax(150px, 200px) 1fr;
+    align-items: center;
+    gap: 12px;
+    margin: 10px 0;
+  }
+  .field-row span {
+    white-space: nowrap;
+    text-align: left;
+    padding-left: 0;
+  }
   input {
-    margin-left: 10px;
-    width: min(360px, 90%);
+    margin-left: 0;
+    width: min(360px, 100%);
     border: 1px solid var(--surface-border);
     border-radius: 10px;
     padding: 8px 10px;
@@ -189,5 +250,34 @@
     color: var(--button-active-text);
     font-weight: 600;
     cursor: pointer;
+  }
+  .sensor-sketch {
+    margin-top: 14px;
+    margin-bottom: 8px;
+    padding: 10px;
+    border: 1px solid var(--surface-border);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-main);
+  }
+  .sensor-sketch svg {
+    width: 100%;
+    max-width: 500px;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+  }
+  .sketch-note {
+    margin: 2px 0 2px;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    text-align: center;
+  }
+
+  @media (max-width: 640px) {
+    .field-row {
+      grid-template-columns: 1fr;
+      gap: 6px;
+    }
   }
 </style>

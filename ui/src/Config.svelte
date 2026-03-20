@@ -51,7 +51,7 @@
         behaelterhoehe: data.behaelterhoehe,
         offset: data.offset
       })
-    }).then(() => alert('Behaelter-Konfiguration gespeichert'));
+    }).then(() => alert('Behälter-Konfiguration gespeichert'));
   }
 
   function saveWifiConfig() {
@@ -100,7 +100,7 @@
     </label>
 
     <div class="sensor-sketch" aria-label="Erklärung Behälterhöhe und Offset">
-      <svg viewBox="0 0 400 220" role="img">
+      <svg viewBox="0 0 400 148" role="img">
         <!-- Behälter Container mit Sensor-Module -->
         <rect x="120" y="30" width="160" height="110" rx="8" fill="rgba(255,255,255,0.08)" stroke="currentColor" stroke-width="2" />
         
@@ -145,22 +145,22 @@
   <div class="config-section">
     <h2>WiFi</h2>
     <p>Netzwerkzugang und optionale statische IP-Konfiguration.</p>
-    <label>SSID: <input bind:value={wifiConfig.ssid} /></label>
-    <label>Passwort: <input type="password" bind:value={wifiConfig.password} /></label>
-    <label>Statische IP: <input bind:value={wifiConfig.staticIp.ip} /></label>
-    <label>Gateway: <input bind:value={wifiConfig.staticIp.gateway} /></label>
-    <label>Subnetz: <input bind:value={wifiConfig.staticIp.subnet} /></label>
-    <label>DNS: <input bind:value={wifiConfig.staticIp.dns} /></label>
+    <label class="field-row"><span>SSID:</span><input bind:value={wifiConfig.ssid} /></label>
+    <label class="field-row"><span>Passwort:</span><input type="password" bind:value={wifiConfig.password} /></label>
+    <label class="field-row"><span>Statische IP:</span><input bind:value={wifiConfig.staticIp.ip} /></label>
+    <label class="field-row"><span>Gateway:</span><input bind:value={wifiConfig.staticIp.gateway} /></label>
+    <label class="field-row"><span>Subnetz:</span><input bind:value={wifiConfig.staticIp.subnet} /></label>
+    <label class="field-row"><span>DNS:</span><input bind:value={wifiConfig.staticIp.dns} /></label>
     <button class="primary" on:click={saveWifiConfig}>Speichern</button>
   </div>
 {:else if module === 'mqtt_ha'}
   <div class="config-section">
     <h2>MQTT & HA</h2>
     <p>Broker-Zugangsdaten und Home Assistant Discovery.</p>
-    <label>Server: <input bind:value={mqttConfig.server} /></label>
-    <label>Port: <input type="number" bind:value={mqttConfig.port} /></label>
-    <label>Benutzer: <input bind:value={mqttConfig.user} /></label>
-    <label>Passwort: <input type="password" bind:value={mqttConfig.password} /></label>
+    <label class="field-row"><span>Server:</span><input bind:value={mqttConfig.server} /></label>
+    <label class="field-row"><span>Port:</span><input type="number" bind:value={mqttConfig.port} /></label>
+    <label class="field-row"><span>Benutzer:</span><input bind:value={mqttConfig.user} /></label>
+    <label class="field-row"><span>Passwort:</span><input type="password" bind:value={mqttConfig.password} /></label>
     <label class="checkbox-row"><input type="checkbox" bind:checked={mqttConfig.discovery} /> Home Assistant Discovery aktivieren</label>
     <button class="primary" on:click={saveMqttConfig}>Speichern</button>
 

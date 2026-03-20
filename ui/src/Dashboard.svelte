@@ -5,7 +5,7 @@
 <section class="dashboard-hero">
   <p class="eyebrow">Monitoring</p>
   <h2>Live Dashboard</h2>
-  <p class="hero-sub">Echtzeitansicht fuer Fuellstand, Netzwerk und Laufzeit des Sensors.</p>
+  <p class="hero-sub">Echtzeitansicht für Füllstand, Netzwerk und Laufzeit des Sensors.</p>
 </section>
 
 <div class="grid">

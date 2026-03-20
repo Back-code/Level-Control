@@ -4,6 +4,10 @@
 
   export let currentVersion = '0.00.000';
 
+  let statusCard = null;
+  let appFileInput = null;
+  let webUiFileInput = null;
+
   let manifest = null;
   let manifestError = '';
   let status = {
@@ -225,13 +229,17 @@
     return '';
   }
 
-  async function uploadLocal(target) {
+  async function uploadLocal(target, fileToUpload = null) {
     if (isBusy()) {
       return;
     }
 
-    const file = target === 'app' ? appFile : webUiFile;
-    const error = validateLocalFile(target, file);
+    // Wenn fileToUpload nicht übergeben wird, aus appFile/webUiFile lesen
+    if (!fileToUpload) {
+      fileToUpload = target === 'app' ? appFile : webUiFile;
+    }
+
+    const error = validateLocalFile(target, fileToUpload);
     if (error) {
       showNotice('error', error);
       return;
@@ -250,9 +258,14 @@
     }
 
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append('file', fileToUpload);
 
-    localUpload = { active: true, target, received: 0, total: file.size };
+    localUpload = { active: true, target, received: 0, total: fileToUpload.size };
+
+    // Zur Status-Card scrollen
+    if (statusCard) {
+      statusCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
 
     let payload;
     try {
@@ -264,6 +277,38 @@
 
     showNotice('success', payload.message || `${label} wurde erfolgreich hochgeladen. Gerät startet neu.`);
     await loadStatus();
+  }
+
+  function triggerFileSelect(target) {
+    if (target === 'app') {
+      appFileInput?.click();
+    } else {
+      webUiFileInput?.click();
+    }
+  }
+
+  function handleFileSelected(target) {
+    return (event) => {
+      const file = event.currentTarget.files?.[0] || null;
+      if (!file) {
+        return;
+      }
+
+      // Speichern für spätere Verwendung
+      if (target === 'app') {
+        appFile = file;
+      } else {
+        webUiFile = file;
+      }
+
+      // Zur Status-Card scrollen
+      if (statusCard) {
+        statusCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+
+      // Direkt mit der ausgewählten Datei uploadLocal aufrufen
+      uploadLocal(target, file);
+    };
   }
 
   $: progressPercent = progressValue(status.received, status.total);
@@ -283,7 +328,7 @@
 </script>
 
 <section class="update-grid">
-  <article class="status-card hero">
+  <article class="status-card hero" bind:this={statusCard}>
     <div>
       <span class="eyebrow">Aktueller Stand</span>
       <h2>Update-Zentrale</h2>
@@ -371,40 +416,62 @@
 
   <article class="action-card upload-card">
     <span class="eyebrow">3. Lokal</span>
-    <h3>App per BIN</h3>
-    <p>Nur gültige ESP32-App-Dateien werden akzeptiert. Bootloader- und Partitionsdateien sind gesperrt.</p>
-    <input type="file" accept=".bin" disabled={anyBusy} on:change={(event) => appFile = event.currentTarget.files?.[0] || null} />
-    <button on:click={() => uploadLocal('app')} disabled={anyBusy}>App hochladen</button>
+    <h3>Updates hochladen</h3>
+    <p>Wählen Sie eine gültige Binärdatei (.bin). Bootloader- und Partitionsdateien sind nicht erlaubt.</p>
+    
+    <!-- Hidden file inputs -->
+    <input 
+      type="file" 
+      accept=".bin" 
+      bind:this={appFileInput}
+      style="display:none"
+      on:change={handleFileSelected('app')}
+    />
+    <input 
+      type="file" 
+      accept=".bin" 
+      bind:this={webUiFileInput}
+      style="display:none"
+      on:change={handleFileSelected('webui')}
+    />
+    
+    <!-- Action buttons -->
+    <div class="button-group">
+      <button on:click={() => triggerFileSelect('app')} disabled={anyBusy}>
+        Salzstand-App.bin wählen
+      </button>
+      <button on:click={() => triggerFileSelect('webui')} disabled={anyBusy}>
+        Web-UI.bin wählen
+      </button>
+    </div>
+    
+    <!-- Upload progress indicators -->
     {#if isUploadProgress('app')}
       <div class="inline-progress">
         <div class="inline-progress-head">
-          <span>Upload läuft</span>
+          <span>App-Upload läuft</span>
           <strong>{uploadAppProgress}%</strong>
         </div>
         <div class="mini-track"><div class="mini-fill" style={`width:${uploadAppProgress}%`}></div></div>
         <small>{formatProgressText(localUpload.received, localUpload.total)}</small>
       </div>
     {/if}
-    <small>Maximale Größe: {humanSize(status.appMaxSize || status.firmwareMaxSize)}</small>
-  </article>
-
-  <article class="action-card upload-card">
-    <span class="eyebrow">4. Lokal</span>
-    <h3>Web-UI per BIN</h3>
-    <p>Die LittleFS-Datei wird separat geprüft und darf keine App-Signatur enthalten.</p>
-    <input type="file" accept=".bin" disabled={anyBusy} on:change={(event) => webUiFile = event.currentTarget.files?.[0] || null} />
-    <button on:click={() => uploadLocal('webui')} disabled={anyBusy}>Web-UI hochladen</button>
+    
     {#if isUploadProgress('webui')}
       <div class="inline-progress">
         <div class="inline-progress-head">
-          <span>Upload läuft</span>
+          <span>Web-UI-Upload läuft</span>
           <strong>{uploadWebUiProgress}%</strong>
         </div>
         <div class="mini-track"><div class="mini-fill" style={`width:${uploadWebUiProgress}%`}></div></div>
         <small>{formatProgressText(localUpload.received, localUpload.total)}</small>
       </div>
     {/if}
-    <small>Maximale Größe: {humanSize(status.webuiMaxSize)}</small>
+    
+    <div class="sizes-info">
+      <span>Max App: {humanSize(status.appMaxSize || status.firmwareMaxSize)}</span>
+      <span>Max Web-UI: {humanSize(status.webuiMaxSize)}</span>
+    </div>
   </article>
 </section>
 
@@ -582,6 +649,30 @@
     cursor: not-allowed;
   }
 
+  .button-group {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  .button-group button {
+    width: 100%;
+  }
+
+  .sizes-info {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.04);
+    font-size: 0.8rem;
+  }
+
+  .sizes-info span {
+    color: var(--text-muted);
+  }
+
   input[type='file'] {
     width: 100%;
     color: var(--text-main);
@@ -594,6 +685,14 @@
   @media (max-width: 840px) {
     .update-grid,
     .manifest-box {
+      grid-template-columns: 1fr;
+    }
+
+    .button-group {
+      grid-template-columns: 1fr;
+    }
+
+    .sizes-info {
       grid-template-columns: 1fr;
     }
   }

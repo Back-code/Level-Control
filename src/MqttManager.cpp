@@ -25,8 +25,10 @@ static const char* TOPIC_CFG_HOEHE_SET   = "salzstand/config/behaelterhoehe/set"
 static const char* TOPIC_CFG_OFFSET_STATE = "salzstand/config/offset/state";
 static const char* TOPIC_CFG_OFFSET_SET  = "salzstand/config/offset/set";
 static const char* TOPIC_SYSTEM_STATE    = "salzstand/system/state";
-static const char* TOPIC_UPDATE_STATE    = "salzstand/update/state";
-static const char* TOPIC_UPDATE_INSTALL  = "salzstand/update/install";
+static const char* TOPIC_UPDATE_STATE      = "salzstand/update/state";
+static const char* TOPIC_UPDATE_INSTALL    = "salzstand/update/install";
+static const char* TOPIC_CFG_SAMPLE_STATE  = "salzstand/config/sampleinterval/state";
+static const char* TOPIC_CFG_SAMPLE_SET    = "salzstand/config/sampleinterval/set";
 
 static std::string toLowerCopy(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
@@ -89,6 +91,21 @@ void MqttManager::handleMessage(const char* topic, const std::string& payload) {
             DebugLogger::getInstance().log(LogLevel::WARN,
                 "MQTT: ungültiger Wert für offset: " + payload);
         }
+    } else if (std::string(topic) == TOPIC_CFG_SAMPLE_SET) {
+        try {
+            unsigned long val = std::stoul(payload);
+            if (val < 5UL) val = 5UL;
+            if (val <= 2592000UL) { // max 30 Tage
+                config.sampleIntervalSeconds = val;
+                SensorManager::getInstance().setSampleIntervalSeconds(val);
+                changed = true;
+                DebugLogger::getInstance().log(LogLevel::INFO,
+                    "MQTT: sampleIntervalSeconds=" + std::to_string(val) + "s");
+            }
+        } catch (...) {
+            DebugLogger::getInstance().log(LogLevel::WARN,
+                "MQTT: ungültiger Wert für sampleIntervalSeconds: " + payload);
+        }
     } else if (std::string(topic) == TOPIC_UPDATE_INSTALL) {
         std::string requestedTarget = toLowerCopy(payload);
         if (requestedTarget.empty() || requestedTarget == "press" || requestedTarget == "install") {
@@ -119,6 +136,7 @@ void MqttManager::handleMessage(const char* topic, const std::string& payload) {
 void MqttManager::subscribeToTopics() {
     mqttClient_.subscribe(TOPIC_CFG_HOEHE_SET);
     mqttClient_.subscribe(TOPIC_CFG_OFFSET_SET);
+    mqttClient_.subscribe(TOPIC_CFG_SAMPLE_SET);
     mqttClient_.subscribe(TOPIC_UPDATE_INSTALL);
     DebugLogger::getInstance().log(LogLevel::INFO, "MQTT: config topics subscribed");
 }
@@ -275,6 +293,8 @@ void MqttManager::publishConfig() {
     publish(TOPIC_CFG_HOEHE_STATE, buf);
     snprintf(buf, sizeof(buf), "%.1f", config.offset);
     publish(TOPIC_CFG_OFFSET_STATE, buf);
+    snprintf(buf, sizeof(buf), "%lu", (unsigned long)config.sampleIntervalSeconds);
+    publish(TOPIC_CFG_SAMPLE_STATE, buf);
 }
 
 // ------------------------------------------------------------------ setWill (legacy)
@@ -472,7 +492,25 @@ void MqttManager::publishDiscovery() {
         send("number", "offset", doc);
     }
 
-    // --- 7. WiFi-Signal ---
+    // --- 7. Abtastrate Ultraschall (einstellbar via MQTT) ---
+    {
+        DynamicJsonDocument doc(512);
+        doc["unique_id"]          = deviceId_ + "_sample_interval";
+        doc["name"]               = "Abtastrate Ultraschall";
+        doc["state_topic"]        = TOPIC_CFG_SAMPLE_STATE;
+        doc["command_topic"]      = TOPIC_CFG_SAMPLE_SET;
+        doc["unit_of_measurement"]= "s";
+        doc["min"]                = 5;
+        doc["max"]                = 2592000;
+        doc["step"]               = 1;
+        doc["icon"]               = "mdi:timer-sand";
+        doc["availability_topic"] = TOPIC_STATUS;
+        doc["entity_category"]    = "config";
+        addDevice(doc);
+        send("number", "sample_interval", doc);
+    }
+
+    // --- 8. WiFi-Signal ---
     {
         DynamicJsonDocument doc(512);
         doc["unique_id"]          = deviceId_ + "_rssi";

@@ -28,7 +28,8 @@
     bssid: '',
     behaelterhoehe: 95,
     offset: 0,
-    sampleIntervalSeconds: 5
+    sampleIntervalSeconds: 5,
+    mqttState: 'unknown'
   };
 
   let ws;
@@ -84,6 +85,8 @@
         data.bssid = msg.bssid;
       } else if (msg.type === 'uptime') {
         data.uptime = msg.uptime;
+      } else if (msg.type === 'mqtt') {
+        data.mqttState = msg.state;
       }
       persistData();
     };
@@ -91,6 +94,12 @@
     // Load initial config
     loadConfig();
     checkForUpdate();
+
+    // Load initial MQTT connection state
+    fetch('/api/mqtt/status', { cache: 'no-store' })
+      .then(r => r.json())
+      .then(s => { data.mqttState = s.state || 'unknown'; })
+      .catch(() => {});
 
     return () => {
       if (ws) ws.close();

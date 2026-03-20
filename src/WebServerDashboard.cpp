@@ -166,6 +166,24 @@ void WebServerDashboard::broadcastUptime() {
     ws_.textAll(json.c_str());
 }
 
+void WebServerDashboard::broadcastMqttState() {
+    DynamicJsonDocument doc(128);
+    doc["type"] = "mqtt";
+    const MqttConnectionState state = MqttManager::getInstance().getState();
+    const char* stateStr;
+    switch (state) {
+        case MqttConnectionState::CONNECTED:    stateStr = "connected"; break;
+        case MqttConnectionState::CONNECTING:   stateStr = "connecting"; break;
+        case MqttConnectionState::BACKOFF:      stateStr = "backoff"; break;
+        case MqttConnectionState::DISCONNECTED: stateStr = "disconnected"; break;
+        default:                               stateStr = "uninitialized"; break;
+    }
+    doc["state"] = stateStr;
+    std::string json;
+    serializeJson(doc, json);
+    ws_.textAll(json.c_str());
+}
+
 std::string WebServerDashboard::getInstalledVersion() const {
     return SALZSTAND_VERSION;
 }
@@ -420,6 +438,37 @@ void WebServerDashboard::setupRoutes() {
 
             request->send(200, "application/json", "{\"status\":\"ok\"}");
         }
+    });
+
+    server_.on("/api/mqtt/status", HTTP_GET, [](AsyncWebServerRequest *request) {
+        DynamicJsonDocument doc(256);
+        const MqttConnectionState state = MqttManager::getInstance().getState();
+        const char* stateStr;
+        switch (state) {
+            case MqttConnectionState::CONNECTED:    stateStr = "connected"; break;
+            case MqttConnectionState::CONNECTING:   stateStr = "connecting"; break;
+            case MqttConnectionState::BACKOFF:      stateStr = "backoff"; break;
+            case MqttConnectionState::DISCONNECTED: stateStr = "disconnected"; break;
+            default:                               stateStr = "uninitialized"; break;
+        }
+        Config config;
+        ConfigStore::getInstance().load(config);
+        doc["state"] = stateStr;
+        doc["server"] = config.mqtt.server;
+        doc["port"] = config.mqtt.port;
+        doc["deviceId"] = MqttManager::getInstance().getDeviceId();
+        std::string json;
+        serializeJson(doc, json);
+        request->send(200, "application/json", json.c_str());
+    });
+
+    server_.on("/api/mqtt/reconnect", HTTP_POST, [](AsyncWebServerRequest *request) {
+        Config config;
+        if (ConfigStore::getInstance().load(config) && !config.mqtt.server.empty()) {
+            MqttManager::getInstance().init(config.mqtt.server.c_str(), config.mqtt.port);
+            MqttManager::getInstance().connect();
+        }
+        request->send(200, "application/json", "{\"status\":\"ok\"}");
     });
 
     server_.on("/api/restart", HTTP_POST, [](AsyncWebServerRequest *request) {

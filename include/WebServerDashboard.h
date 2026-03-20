@@ -17,6 +17,7 @@ public:
     void broadcastSensorData();
     void broadcastWifiData();
     void broadcastUptime();
+    void broadcastMqttState();
     std::string getInstalledVersion() const;
     std::string getAvailableVersion(bool forceRefresh = false);
     std::string getLatestReleaseUrl(bool forceRefresh = false);

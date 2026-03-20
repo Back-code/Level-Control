@@ -112,6 +112,7 @@ void loop() {
         WebServerDashboard::getInstance().broadcastSensorData();
         WebServerDashboard::getInstance().broadcastWifiData();
         WebServerDashboard::getInstance().broadcastUptime();
+        WebServerDashboard::getInstance().broadcastMqttState();
     }
 
     // Serielle Diagnose alle 10 s

@@ -304,6 +304,23 @@
     }
   }
 
+  function getMqttStateLabel(state) {
+    switch (state) {
+      case 'connected':     return 'Verbunden';
+      case 'connecting':    return 'Verbindet…';
+      case 'backoff':       return 'Wartet auf Neuversuch…';
+      case 'disconnected':  return 'Getrennt';
+      case 'uninitialized': return 'Nicht konfiguriert';
+      default:              return 'Unbekannt';
+    }
+  }
+
+  async function reconnectMqtt() {
+    try {
+      await fetch('/api/mqtt/reconnect', { method: 'POST' });
+    } catch (_) { }
+  }
+
   onMount(() => {
     loadAllConfig();
   });
@@ -496,6 +513,13 @@
   <div class="config-section">
     <h2>MQTT & HA</h2>
     <p>Broker-Zugangsdaten und Home Assistant Discovery.</p>
+    <div class="mqtt-status-row">
+      <span class="mqtt-dot mqtt-dot--{data.mqttState || 'unknown'}" aria-hidden="true"></span>
+      <span class="mqtt-state-text">{getMqttStateLabel(data.mqttState)}</span>
+      {#if (data.mqttState || 'unknown') !== 'connected'}
+        <button class="secondary-sm" type="button" on:click={reconnectMqtt}>Jetzt verbinden</button>
+      {/if}
+    </div>
     <label class="field-row"><span><FieldLabel text="Server:" /></span><input bind:value={mqttConfig.server} /></label>
     <label class="field-row"><span>Port:</span><input type="number" bind:value={mqttConfig.port} /></label>
     <label class="field-row"><span>Benutzer:</span><input bind:value={mqttConfig.user} /></label>
@@ -529,6 +553,7 @@
           <li class="topic-group">Konfiguration</li>
           <li><code>homeassistant/number/{mqttDeviceId || '{deviceId}'}/behaelterhoehe/config</code></li>
           <li><code>homeassistant/number/{mqttDeviceId || '{deviceId}'}/offset/config</code></li>
+          <li><code>homeassistant/number/{mqttDeviceId || '{deviceId}'}/sample_interval/config</code></li>
           <li class="topic-group">Systeminfo</li>
           <li><code>homeassistant/sensor/{mqttDeviceId || '{deviceId}'}/rssi/config</code></li>
           <li><code>homeassistant/sensor/{mqttDeviceId || '{deviceId}'}/ip_address/config</code></li>
@@ -546,6 +571,7 @@
           <li><code>salzstand/sensor/state</code> - Messwerte (JSON)</li>
           <li><code>salzstand/config/behaelterhoehe/state</code> / <code>.../set</code></li>
           <li><code>salzstand/config/offset/state</code> / <code>.../set</code></li>
+          <li><code>salzstand/config/sampleinterval/state</code> / <code>.../set</code></li>
           <li><code>salzstand/system/state</code> - CPU, RAM, WiFi (JSON)</li>
           <li><code>salzstand/update/state</code> - OTA-Status (JSON)</li>
           <li><code>salzstand/update/install</code> - OTA starten (Befehl)</li>
@@ -866,5 +892,44 @@
     .topic-card-meta {
       margin-left: 0;
     }
+  }
+  .mqtt-status-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.05);
+    margin-bottom: 14px;
+  }
+  .mqtt-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .mqtt-dot--connected { background: #4caf50; box-shadow: 0 0 6px rgba(76,175,80,0.5); }
+  .mqtt-dot--connecting,
+  .mqtt-dot--backoff { background: #ff9800; box-shadow: 0 0 6px rgba(255,152,0,0.5); }
+  .mqtt-dot--disconnected { background: #f44336; }
+  .mqtt-dot--uninitialized,
+  .mqtt-dot--unknown { background: rgba(200,200,200,0.25); }
+  .mqtt-state-text {
+    flex: 1;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+  }
+  .secondary-sm {
+    padding: 5px 12px;
+    font-size: 0.8rem;
+    border: 1px solid var(--surface-border);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.07);
+    color: var(--text-main);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .secondary-sm:hover {
+    background: rgba(255,255,255,0.12);
   }
 </style>

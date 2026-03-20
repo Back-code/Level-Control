@@ -3,7 +3,9 @@
   import Dashboard from './Dashboard.svelte';
   import Config from './Config.svelte';
   import DebugOverlay from './DebugOverlay.svelte';
+  import GlobalDialogs from './GlobalDialogs.svelte';
   import Update from './Update.svelte';
+  import { confirmAction, showNotice } from './dialogStore.js';
   import versionData from '../../version.json';
 
   const versionStr = `${versionData.major}.${String(versionData.minor).padStart(2, '0')}.${String(versionData.commit).padStart(3, '0')}`;
@@ -120,8 +122,29 @@
     }
   }
 
-  function restartEsp() {
-    fetch('/api/restart', { method: 'POST' });
+  async function restartEsp() {
+    const confirmed = await confirmAction({
+      title: 'ESP neu starten?',
+      message: 'Das Gerät wird sofort neu gestartet. Die Weboberfläche ist für kurze Zeit nicht erreichbar.',
+      confirmLabel: 'Jetzt neu starten',
+      cancelLabel: 'Abbrechen',
+      tone: 'danger'
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/restart', { method: 'POST' });
+      if (!response.ok) {
+        showNotice('error', 'Neustart konnte nicht ausgelöst werden.');
+        return;
+      }
+      showNotice('success', 'Neustart wurde ausgelöst. Das Gerät ist gleich kurz nicht erreichbar.');
+    } catch (_) {
+      showNotice('error', 'Neustart konnte nicht ausgelöst werden.');
+    }
   }
 
   const tabs = [
@@ -137,6 +160,8 @@
 </script>
 
 <main>
+  <GlobalDialogs />
+
   <header class="topbar">
     <div class="topbar-row">
       <div class="brand">

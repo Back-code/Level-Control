@@ -1,5 +1,6 @@
 <script>
   import { onMount } from 'svelte';
+  import { showNotice } from './dialogStore.js';
 
   export let data;
   export let loadConfig;
@@ -43,40 +44,73 @@
       });
   }
 
-  function saveSensorConfig() {
-    fetch('/api/config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        behaelterhoehe: data.behaelterhoehe,
-        offset: data.offset
-      })
-    }).then(() => alert('Behälter-Konfiguration gespeichert'));
+  async function saveSensorConfig() {
+    try {
+      const response = await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          behaelterhoehe: data.behaelterhoehe,
+          offset: data.offset
+        })
+      });
+
+      if (!response.ok) {
+        showNotice('error', 'Behälter-Konfiguration konnte nicht gespeichert werden.');
+        return;
+      }
+
+      showNotice('success', 'Behälter-Konfiguration gespeichert.');
+    } catch (_) {
+      showNotice('error', 'Behälter-Konfiguration konnte nicht gespeichert werden.');
+    }
   }
 
-  function saveWifiConfig() {
-    fetch('/api/wifi', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ssid: wifiConfig.ssid,
-        password: wifiConfig.password,
-        staticIp: {
-          ip: wifiConfig.staticIp.ip,
-          gateway: wifiConfig.staticIp.gateway,
-          subnet: wifiConfig.staticIp.subnet,
-          dns: wifiConfig.staticIp.dns
-        }
-      })
-    }).then(() => alert('WiFi-Konfiguration gespeichert. Neustart erforderlich.'));
+  async function saveWifiConfig() {
+    try {
+      const response = await fetch('/api/wifi', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ssid: wifiConfig.ssid,
+          password: wifiConfig.password,
+          staticIp: {
+            ip: wifiConfig.staticIp.ip,
+            gateway: wifiConfig.staticIp.gateway,
+            subnet: wifiConfig.staticIp.subnet,
+            dns: wifiConfig.staticIp.dns
+          }
+        })
+      });
+
+      if (!response.ok) {
+        showNotice('error', 'WiFi-Konfiguration konnte nicht gespeichert werden.');
+        return;
+      }
+
+      showNotice('success', 'WiFi-Konfiguration gespeichert. Neustart erforderlich.');
+    } catch (_) {
+      showNotice('error', 'WiFi-Konfiguration konnte nicht gespeichert werden.');
+    }
   }
 
-  function saveMqttConfig() {
-    fetch('/api/mqtt', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(mqttConfig)
-    }).then(() => alert('MQTT-Konfiguration gespeichert. Neustart erforderlich.'));
+  async function saveMqttConfig() {
+    try {
+      const response = await fetch('/api/mqtt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(mqttConfig)
+      });
+
+      if (!response.ok) {
+        showNotice('error', 'MQTT-Konfiguration konnte nicht gespeichert werden.');
+        return;
+      }
+
+      showNotice('success', 'MQTT-Konfiguration gespeichert. Neustart erforderlich.');
+    } catch (_) {
+      showNotice('error', 'MQTT-Konfiguration konnte nicht gespeichert werden.');
+    }
   }
 
   onMount(() => {

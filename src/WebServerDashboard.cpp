@@ -742,7 +742,7 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
         uploadFilename_ = filename;
         resetUpdateState("upload", target.c_str());
         updateState_.inProgress = true;
-        setUpdatePhase("validating", "Upload wird geprüft", 0, 0);
+        setUpdatePhase("validating", "Upload wird geprüft", 0, request->contentLength());
         EventBus::getInstance().publish({ EventType::OTA_STARTED, std::string(target.c_str()) });
 
         if (target == "webui") {
@@ -800,7 +800,7 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
             markUpdateFailed(Update.errorString());
         } else {
             const size_t received = index + len;
-            setUpdatePhase("uploading", "Upload läuft", received, 0);
+            setUpdatePhase("uploading", "Upload läuft", received, request->contentLength());
         }
     }
 

@@ -1,5 +1,6 @@
 <script>
   import { onMount } from 'svelte';
+  import { confirmAction, showNotice } from './dialogStore.js';
 
   export let currentVersion = '0.00.000';
 
@@ -23,6 +24,12 @@
 
   let appFile = null;
   let webUiFile = null;
+  let localUpload = {
+    active: false,
+    target: '',
+    received: 0,
+    total: 0
+  };
 
   function compareVersions(left, right) {
     const leftParts = left.split('.').map(part => Number(part) || 0);
@@ -39,6 +46,82 @@
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  }
+
+  function progressValue(received, total) {
+    if (!total || total <= 0) return 0;
+    return Math.min(100, Math.round((received / total) * 100));
+  }
+
+  function isRepoProgress(target) {
+    return status.inProgress && status.source === 'repo' && status.target === target;
+  }
+
+  function isUploadProgress(target) {
+    return localUpload.active && localUpload.target === target;
+  }
+
+  function formatProgressText(received, total) {
+    if (!total) {
+      return `${humanSize(received)} übertragen`;
+    }
+    return `${humanSize(received)} / ${humanSize(total)}`;
+  }
+
+  function isBusy() {
+    return status.inProgress || localUpload.active;
+  }
+
+  function uploadFileWithProgress(target, formData) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `/api/update/upload/${target}`);
+      xhr.responseType = 'text';
+
+      xhr.upload.onprogress = (event) => {
+        if (!event.lengthComputable) {
+          return;
+        }
+
+        localUpload = {
+          active: true,
+          target,
+          received: event.loaded,
+          total: event.total
+        };
+      };
+
+      xhr.onerror = () => {
+        localUpload = { active: false, target: '', received: 0, total: 0 };
+        reject(new Error('Netzwerkfehler beim Upload'));
+      };
+
+      xhr.onload = () => {
+        const payload = (() => {
+          try {
+            return JSON.parse(xhr.responseText || '{}');
+          } catch (_) {
+            return {};
+          }
+        })();
+
+        localUpload = {
+          active: false,
+          target: '',
+          received: payload.status === 'ok' ? localUpload.total : 0,
+          total: payload.status === 'ok' ? localUpload.total : 0
+        };
+
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(payload);
+          return;
+        }
+
+        reject(new Error(payload.error || 'Upload fehlgeschlagen'));
+      };
+
+      xhr.send(formData);
+    });
   }
 
   async function loadManifest() {
@@ -70,8 +153,19 @@
   }
 
   async function startRepoUpdate(target) {
+    if (isBusy()) {
+      return;
+    }
+
     const label = target === 'full' ? 'App und Web-UI' : 'nur die App';
-    if (!confirm(`Soll ${label} aus dem neuesten Release geladen werden?`)) {
+    const confirmed = await confirmAction({
+      title: 'Repo-Update starten?',
+      message: `Soll ${label} aus dem neuesten Release geladen werden?`,
+      confirmLabel: 'Update starten',
+      cancelLabel: 'Abbrechen'
+    });
+
+    if (!confirmed) {
       return;
     }
 
@@ -82,10 +176,11 @@
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      alert(payload.error || 'Repo-Update konnte nicht gestartet werden');
+      showNotice('error', payload.error || 'Repo-Update konnte nicht gestartet werden');
       return;
     }
 
+    showNotice('success', payload.message || 'Repo-Update wurde gestartet.');
     await loadStatus();
   }
 
@@ -131,37 +226,53 @@
   }
 
   async function uploadLocal(target) {
+    if (isBusy()) {
+      return;
+    }
+
     const file = target === 'app' ? appFile : webUiFile;
     const error = validateLocalFile(target, file);
     if (error) {
-      alert(error);
+      showNotice('error', error);
       return;
     }
 
     const label = target === 'app' ? 'App' : 'Web-UI';
-    if (!confirm(`Soll die lokale ${label}-Datei jetzt installiert werden?`)) {
+    const confirmed = await confirmAction({
+      title: 'Lokales Update installieren?',
+      message: `Soll die lokale ${label}-Datei jetzt installiert werden?`,
+      confirmLabel: `${label} installieren`,
+      cancelLabel: 'Abbrechen'
+    });
+
+    if (!confirmed) {
       return;
     }
 
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await fetch(`/api/update/upload/${target}`, {
-      method: 'POST',
-      body: formData
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      alert(payload.error || `${label}-Upload fehlgeschlagen`);
+    localUpload = { active: true, target, received: 0, total: file.size };
+
+    let payload;
+    try {
+      payload = await uploadFileWithProgress(target, formData);
+    } catch (errorReason) {
+      showNotice('error', errorReason.message || `${label}-Upload fehlgeschlagen`);
       return;
     }
 
-    alert(payload.message || `${label} wurde erfolgreich hochgeladen. Gerät startet neu.`);
+    showNotice('success', payload.message || `${label} wurde erfolgreich hochgeladen. Gerät startet neu.`);
     await loadStatus();
   }
 
-  $: progressPercent = status.total > 0 ? Math.min(100, Math.round((status.received / status.total) * 100)) : 0;
+  $: progressPercent = progressValue(status.received, status.total);
+  $: repoAppProgress = isRepoProgress('app') ? progressValue(status.received, status.total) : 0;
+  $: repoFullProgress = isRepoProgress('full') ? progressValue(status.received, status.total) : 0;
+  $: uploadAppProgress = isUploadProgress('app') ? progressValue(localUpload.received, localUpload.total) : 0;
+  $: uploadWebUiProgress = isUploadProgress('webui') ? progressValue(localUpload.received, localUpload.total) : 0;
   $: repoUpdateAvailable = manifest && compareVersions(manifest.version, currentVersion) > 0;
+  $: anyBusy = isBusy();
 
   onMount(() => {
     loadManifest();
@@ -218,9 +329,19 @@
     <span class="eyebrow">1. Repo</span>
     <h3>OTA nur App</h3>
     <p>Lädt die App-Binärdatei aus dem neuesten GitHub-Release und schreibt nur die App-Partition.</p>
-    <button on:click={() => startRepoUpdate('app')} disabled={!repoUpdateAvailable || status.inProgress}>
+    <button on:click={() => startRepoUpdate('app')} disabled={!repoUpdateAvailable || anyBusy}>
       App aus Repo installieren
     </button>
+    {#if isRepoProgress('app')}
+      <div class="inline-progress">
+        <div class="inline-progress-head">
+          <span>OTA läuft</span>
+          <strong>{repoAppProgress}%</strong>
+        </div>
+        <div class="mini-track"><div class="mini-fill" style={`width:${repoAppProgress}%`}></div></div>
+        <small>{status.phase}: {formatProgressText(status.received, status.total)}</small>
+      </div>
+    {/if}
     {#if manifest && !repoUpdateAvailable}
       <small>Keine neuere Release als v{currentVersion} gefunden.</small>
     {/if}
@@ -230,9 +351,19 @@
     <span class="eyebrow">2. Repo</span>
     <h3>Komplettes Update</h3>
     <p>Installiert nacheinander Web-UI und App aus dem Manifest des neuesten GitHub-Releases.</p>
-    <button on:click={() => startRepoUpdate('full')} disabled={!repoUpdateAvailable || status.inProgress}>
+    <button on:click={() => startRepoUpdate('full')} disabled={!repoUpdateAvailable || anyBusy}>
       App und Web-UI installieren
     </button>
+    {#if isRepoProgress('full')}
+      <div class="inline-progress">
+        <div class="inline-progress-head">
+          <span>OTA läuft</span>
+          <strong>{repoFullProgress}%</strong>
+        </div>
+        <div class="mini-track"><div class="mini-fill" style={`width:${repoFullProgress}%`}></div></div>
+        <small>{status.phase}: {formatProgressText(status.received, status.total)}</small>
+      </div>
+    {/if}
     {#if manifest?.releaseUrl}
       <a class="release-link" href={manifest.releaseUrl} target="_blank" rel="noopener noreferrer">Release im Browser öffnen</a>
     {/if}
@@ -242,8 +373,18 @@
     <span class="eyebrow">3. Lokal</span>
     <h3>App per BIN</h3>
     <p>Nur gültige ESP32-App-Dateien werden akzeptiert. Bootloader- und Partitionsdateien sind gesperrt.</p>
-    <input type="file" accept=".bin" on:change={(event) => appFile = event.currentTarget.files?.[0] || null} />
-    <button on:click={() => uploadLocal('app')} disabled={status.inProgress}>App hochladen</button>
+    <input type="file" accept=".bin" disabled={anyBusy} on:change={(event) => appFile = event.currentTarget.files?.[0] || null} />
+    <button on:click={() => uploadLocal('app')} disabled={anyBusy}>App hochladen</button>
+    {#if isUploadProgress('app')}
+      <div class="inline-progress">
+        <div class="inline-progress-head">
+          <span>Upload läuft</span>
+          <strong>{uploadAppProgress}%</strong>
+        </div>
+        <div class="mini-track"><div class="mini-fill" style={`width:${uploadAppProgress}%`}></div></div>
+        <small>{formatProgressText(localUpload.received, localUpload.total)}</small>
+      </div>
+    {/if}
     <small>Maximale Größe: {humanSize(status.appMaxSize || status.firmwareMaxSize)}</small>
   </article>
 
@@ -251,8 +392,18 @@
     <span class="eyebrow">4. Lokal</span>
     <h3>Web-UI per BIN</h3>
     <p>Die LittleFS-Datei wird separat geprüft und darf keine App-Signatur enthalten.</p>
-    <input type="file" accept=".bin" on:change={(event) => webUiFile = event.currentTarget.files?.[0] || null} />
-    <button on:click={() => uploadLocal('webui')} disabled={status.inProgress}>Web-UI hochladen</button>
+    <input type="file" accept=".bin" disabled={anyBusy} on:change={(event) => webUiFile = event.currentTarget.files?.[0] || null} />
+    <button on:click={() => uploadLocal('webui')} disabled={anyBusy}>Web-UI hochladen</button>
+    {#if isUploadProgress('webui')}
+      <div class="inline-progress">
+        <div class="inline-progress-head">
+          <span>Upload läuft</span>
+          <strong>{uploadWebUiProgress}%</strong>
+        </div>
+        <div class="mini-track"><div class="mini-fill" style={`width:${uploadWebUiProgress}%`}></div></div>
+        <small>{formatProgressText(localUpload.received, localUpload.total)}</small>
+      </div>
+    {/if}
     <small>Maximale Größe: {humanSize(status.webuiMaxSize)}</small>
   </article>
 </section>
@@ -366,6 +517,41 @@
     display: grid;
     gap: 12px;
     align-content: start;
+  }
+
+  .inline-progress {
+    display: grid;
+    gap: 6px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid var(--surface-border);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .inline-progress-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .inline-progress-head span {
+    color: var(--text-muted);
+    font-size: 0.82rem;
+  }
+
+  .mini-track {
+    height: 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+  }
+
+  .mini-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #57b67b 0%, #62b8dd 100%);
+    transition: width 0.18s ease;
   }
 
   button,

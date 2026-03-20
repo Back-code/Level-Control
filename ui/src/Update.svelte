@@ -156,21 +156,40 @@
     }
   }
 
-  async function startRepoUpdate(target) {
-    if (isBusy()) {
+  async function startRepoUpdate() {
+    if (isBusy() || !manifest) {
       return;
     }
 
-    const label = target === 'full' ? 'App und Web-UI' : 'nur die App';
+    // Automatisch erkennen, welche Updates verfügbar sind
+    const hasAppUpdate = manifest.assets?.app || manifest.assets?.firmware;
+    const hasWebUiUpdate = manifest.assets?.webui;
+
+    let target = 'app'; // default
+    let updateLabel = 'der App';
+
+    if (hasAppUpdate && hasWebUiUpdate) {
+      target = 'full';
+      updateLabel = 'App und Web-UI';
+    } else if (hasWebUiUpdate && !hasAppUpdate) {
+      target = 'webui';
+      updateLabel = 'der Web-UI';
+    }
+
     const confirmed = await confirmAction({
       title: 'Repo-Update starten?',
-      message: `Soll ${label} aus dem neuesten Release geladen werden?`,
+      message: `Soll die neueste Version von ${updateLabel} aus dem GitHub-Release geladen und installiert werden?`,
       confirmLabel: 'Update starten',
       cancelLabel: 'Abbrechen'
     });
 
     if (!confirmed) {
       return;
+    }
+
+    // Zur Status-Card scrollen
+    if (statusCard) {
+      statusCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     const response = await fetch('/api/update/repo', {
@@ -186,6 +205,29 @@
 
     showNotice('success', payload.message || 'Repo-Update wurde gestartet.');
     await loadStatus();
+  }
+
+  function getRepoUpdateStatus() {
+    if (!manifest) {
+      return { hasUpdate: false, label: 'Kein Release-Manifest' };
+    }
+
+    const hasAppUpdate = manifest.assets?.app || manifest.assets?.firmware;
+    const hasWebUiUpdate = manifest.assets?.webui;
+    const appNewer = compareVersions(manifest.version, currentVersion) > 0;
+
+    if (!appNewer) {
+      return { hasUpdate: false, label: 'Bereits auf neuester Version' };
+    }
+
+    const updates = [];
+    if (hasAppUpdate) updates.push('App');
+    if (hasWebUiUpdate) updates.push('Web-UI');
+
+    return {
+      hasUpdate: updates.length > 0,
+      label: `Update verfügbar: ${updates.join(' + ')}`
+    };
   }
 
   function validateLocalFile(target, file) {
@@ -312,11 +354,10 @@
   }
 
   $: progressPercent = progressValue(status.received, status.total);
-  $: repoAppProgress = isRepoProgress('app') ? progressValue(status.received, status.total) : 0;
-  $: repoFullProgress = isRepoProgress('full') ? progressValue(status.received, status.total) : 0;
+  $: repoProgress = isRepoProgress('app') || isRepoProgress('full') || isRepoProgress('webui') ? progressValue(status.received, status.total) : 0;
   $: uploadAppProgress = isUploadProgress('app') ? progressValue(localUpload.received, localUpload.total) : 0;
   $: uploadWebUiProgress = isUploadProgress('webui') ? progressValue(localUpload.received, localUpload.total) : 0;
-  $: repoUpdateAvailable = manifest && compareVersions(manifest.version, currentVersion) > 0;
+  $: repoStatus = getRepoUpdateStatus();
   $: anyBusy = isBusy();
 
   onMount(() => {
@@ -371,41 +412,24 @@
   </article>
 
   <article class="action-card">
-    <span class="eyebrow">1. Repo</span>
-    <h3>OTA nur App</h3>
-    <p>Lädt die App-Binärdatei aus dem neuesten GitHub-Release und schreibt nur die App-Partition.</p>
-    <button on:click={() => startRepoUpdate('app')} disabled={!repoUpdateAvailable || anyBusy}>
-      App aus Repo installieren
+    <span class="eyebrow">1. OTA</span>
+    <h3>Repo-Update (automatisch erkannt)</h3>
+    <p>Erkennt automatisch, welche Updates verfügbar sind und installiert diese aus dem neuesten GitHub-Release.</p>
+    <button on:click={() => startRepoUpdate()} disabled={!repoStatus.hasUpdate || anyBusy}>
+      Repo-Update starten
     </button>
-    {#if isRepoProgress('app')}
+    {#if repoStatus.hasUpdate}
+      <small class="status-info">✓ {repoStatus.label}</small>
+    {:else}
+      <small class="status-info">⊘ {repoStatus.label}</small>
+    {/if}
+    {#if isRepoProgress('app') || isRepoProgress('full') || isRepoProgress('webui')}
       <div class="inline-progress">
         <div class="inline-progress-head">
           <span>OTA läuft</span>
-          <strong>{repoAppProgress}%</strong>
+          <strong>{repoProgress}%</strong>
         </div>
-        <div class="mini-track"><div class="mini-fill" style={`width:${repoAppProgress}%`}></div></div>
-        <small>{status.phase}: {formatProgressText(status.received, status.total)}</small>
-      </div>
-    {/if}
-    {#if manifest && !repoUpdateAvailable}
-      <small>Keine neuere Release als v{currentVersion} gefunden.</small>
-    {/if}
-  </article>
-
-  <article class="action-card">
-    <span class="eyebrow">2. Repo</span>
-    <h3>Komplettes Update</h3>
-    <p>Installiert nacheinander Web-UI und App aus dem Manifest des neuesten GitHub-Releases.</p>
-    <button on:click={() => startRepoUpdate('full')} disabled={!repoUpdateAvailable || anyBusy}>
-      App und Web-UI installieren
-    </button>
-    {#if isRepoProgress('full')}
-      <div class="inline-progress">
-        <div class="inline-progress-head">
-          <span>OTA läuft</span>
-          <strong>{repoFullProgress}%</strong>
-        </div>
-        <div class="mini-track"><div class="mini-fill" style={`width:${repoFullProgress}%`}></div></div>
+        <div class="mini-track"><div class="mini-fill" style={`width:${repoProgress}%`}></div></div>
         <small>{status.phase}: {formatProgressText(status.received, status.total)}</small>
       </div>
     {/if}
@@ -415,7 +439,7 @@
   </article>
 
   <article class="action-card upload-card">
-    <span class="eyebrow">3. Lokal</span>
+    <span class="eyebrow">2. Lokal</span>
     <h3>Updates hochladen</h3>
     <p>Wählen Sie eine gültige Binärdatei (.bin). Bootloader- und Partitionsdateien sind nicht erlaubt.</p>
     
@@ -550,6 +574,16 @@
 
   .manifest-box small,
   small {
+    color: var(--text-muted);
+  }
+
+  .status-info {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    font-size: 0.8rem;
     color: var(--text-muted);
   }
 

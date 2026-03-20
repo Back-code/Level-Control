@@ -870,7 +870,7 @@ bool WebServerDashboard::applyRemoteAsset(const ManifestAsset& asset, int comman
             continue;
         }
 
-        const size_t chunkSize = stream->readBytes(buffer, std::min(available, sizeof(buffer)));
+        const size_t chunkSize = stream->readBytes(buffer, std::min<size_t>(available, sizeof(buffer)));
         if (chunkSize == 0) {
             continue;
         }
@@ -1109,8 +1109,4 @@ void WebServerDashboard::onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient 
     } else if (type == WS_EVT_DISCONNECT) {
         DebugLogger::getInstance().log(LogLevel::INFO, "WebSocket client disconnected");
     }
-}
-
-bool isMaskedPassword(const std::string& value) {
-    return value == "***" || value == kPasswordMask;
 }

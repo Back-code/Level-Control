@@ -628,7 +628,7 @@
   }
   .field-control--inline {
     display: grid;
-    grid-template-columns: minmax(120px, 160px) minmax(140px, 1fr);
+    grid-template-columns: 80px 1fr;
     gap: 8px;
     align-items: start;
   }
@@ -668,6 +668,14 @@
     padding: 8px 10px;
     background: rgba(255, 255, 255, 0.14);
     color: var(--text-main);
+  }
+  select option {
+    background-color: #0d1b33;
+    color: #e8f0ff;
+  }
+  :global(html[data-theme='day']) select option {
+    background-color: #f2fff7;
+    color: #183326;
   }
   .input-action-row {
     display: grid;
@@ -880,7 +888,7 @@
       gap: 6px;
     }
     .field-control--inline {
-      grid-template-columns: 1fr;
+      grid-template-columns: 80px 1fr;
     }
     .choice-grid {
       grid-template-columns: 1fr;

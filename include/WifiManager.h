@@ -22,7 +22,7 @@ public:
     void startAP(const std::string& ssid, const std::string& password);
     void stopAP();
     std::vector<WifiNetwork> scanNetworks();
-    void setConfig(const WifiConfig& config);
+    void setConfig(const WifiConfig& config, const StaticIpConfig& staticConfig = {});
     WifiConfig getConfig() const;
     bool isConnected() const { return WiFi.status() == WL_CONNECTED; }
     std::string getIP() const { return WiFi.localIP().toString().c_str(); }
@@ -36,6 +36,7 @@ private:
     void scheduleReconnect();
     void resetReconnectBackoff();
     WifiConfig config_;
+    StaticIpConfig staticConfig_;
     bool reconnectPending_ = false;
     unsigned long nextReconnectAttemptMs_ = 0;
     unsigned long reconnectBackoffMs_ = 2000;

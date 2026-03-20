@@ -1,6 +1,20 @@
 #include "WifiManager.h"
 #include "DebugLogger.h"
 
+namespace {
+bool hasStaticIpConfig(const StaticIpConfig& config) {
+    return !config.ip.empty() && !config.subnet.empty() && !config.dns.empty();
+}
+
+IPAddress parseIpOrDefault(const std::string& value) {
+    IPAddress address(static_cast<uint32_t>(0U));
+    if (!value.empty()) {
+        address.fromString(value.c_str());
+    }
+    return address;
+}
+}
+
 WifiManager& WifiManager::getInstance() {
     static WifiManager instance;
     return instance;
@@ -10,6 +24,7 @@ WifiManager::WifiManager() {
     Config fullConfig;
     if (ConfigStore::getInstance().load(fullConfig)) {
         config_ = fullConfig.wifi;
+        staticConfig_ = fullConfig.staticIp;
     }
 }
 
@@ -61,6 +76,17 @@ bool WifiManager::connect() {
 
     reconnectPending_ = false;
     resetReconnectBackoff();
+
+    if (hasStaticIpConfig(staticConfig_)) {
+        const IPAddress localIp = parseIpOrDefault(staticConfig_.ip);
+        const IPAddress gateway = parseIpOrDefault(staticConfig_.gateway);
+        const IPAddress subnet = parseIpOrDefault(staticConfig_.subnet);
+        const IPAddress dns = parseIpOrDefault(staticConfig_.dns);
+        WiFi.config(localIp, gateway, subnet, dns);
+    } else {
+        const IPAddress emptyIp(static_cast<uint32_t>(0U));
+        WiFi.config(emptyIp, emptyIp, emptyIp, emptyIp);
+    }
 
     WiFi.begin(config_.ssid.c_str(), config_.password.c_str());
     int attempts = 0;
@@ -120,15 +146,17 @@ std::vector<WifiNetwork> WifiManager::scanNetworks() {
     for (int i = 0; i < n; ++i) {
         networks.push_back({WiFi.SSID(i).c_str(), WiFi.RSSI(i)});
     }
+    WiFi.scanDelete();
     return networks;
 }
 
-void WifiManager::setConfig(const WifiConfig& config) {
+void WifiManager::setConfig(const WifiConfig& config, const StaticIpConfig& staticConfig) {
     config_ = config;
+    staticConfig_ = staticConfig;
     Config fullConfig;
     fullConfig.version = 1;
     fullConfig.wifi = config_;
-    fullConfig.staticIp = {};
+    fullConfig.staticIp = staticConfig_;
     fullConfig.behaelterhoehe = 95.0;
     fullConfig.offset = 0.0;
     ConfigStore::getInstance().save(fullConfig);

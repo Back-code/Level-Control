@@ -11,8 +11,55 @@
     password: '',
     staticIp: { ip: '', gateway: '', subnet: '', dns: '' }
   };
+  let wifiHasPassword = false;
+  let wifiMode = 'dhcp';
+  let wifiNetworks = [];
+  let wifiScanLoading = false;
+  let wifiScanError = '';
   let mqttConfig = { server: '', port: 1883, user: '', password: '', discovery: true };
   let mqttDeviceId = '';
+
+  function enableStaticIp() {
+    wifiMode = 'static';
+    if (!wifiConfig.staticIp.subnet) {
+      wifiConfig.staticIp.subnet = '255.255.255.0';
+    }
+    wifiConfig = { ...wifiConfig, staticIp: { ...wifiConfig.staticIp } };
+  }
+
+  function enableDhcp() {
+    wifiMode = 'dhcp';
+  }
+
+  async function scanWifiNetworks() {
+    wifiScanLoading = true;
+    wifiScanError = '';
+    try {
+      const response = await fetch('/api/wifi/scan');
+      if (!response.ok) {
+        wifiScanError = 'WiFi-Scan fehlgeschlagen.';
+        return;
+      }
+
+      const payload = await response.json();
+      wifiNetworks = payload.networks || [];
+      if (wifiNetworks.length === 0) {
+        wifiScanError = 'Keine WiFi-Netze gefunden.';
+      }
+    } catch (_) {
+      wifiScanError = 'WiFi-Scan fehlgeschlagen.';
+    } finally {
+      wifiScanLoading = false;
+    }
+  }
+
+  function selectScannedWifi(event) {
+    const nextSsid = event.currentTarget.value;
+    if (!nextSsid) {
+      return;
+    }
+    wifiConfig = { ...wifiConfig, ssid: nextSsid };
+  }
 
   function loadAllConfig() {
     loadConfig();
@@ -30,6 +77,8 @@
             dns: c.staticIp?.dns || ''
           }
         };
+        wifiHasPassword = c.hasPassword ?? false;
+        wifiMode = c.useStaticIp ? 'static' : 'dhcp';
       });
 
     fetch('/api/mqtt')
@@ -69,6 +118,13 @@
   }
 
   async function saveWifiConfig() {
+    if (wifiMode === 'static') {
+      if (!wifiConfig.staticIp.ip || !wifiConfig.staticIp.subnet || !wifiConfig.staticIp.dns) {
+        showNotice('error', 'Für statische IP sind Statische IP, Subnetz und DNS erforderlich.');
+        return;
+      }
+    }
+
     try {
       const response = await fetch('/api/wifi', {
         method: 'POST',
@@ -76,11 +132,12 @@
         body: JSON.stringify({
           ssid: wifiConfig.ssid,
           password: wifiConfig.password,
+          useStaticIp: wifiMode === 'static',
           staticIp: {
-            ip: wifiConfig.staticIp.ip,
-            gateway: wifiConfig.staticIp.gateway,
-            subnet: wifiConfig.staticIp.subnet,
-            dns: wifiConfig.staticIp.dns
+            ip: wifiMode === 'static' ? wifiConfig.staticIp.ip : '',
+            gateway: wifiMode === 'static' ? wifiConfig.staticIp.gateway : '',
+            subnet: wifiMode === 'static' ? wifiConfig.staticIp.subnet : '',
+            dns: wifiMode === 'static' ? wifiConfig.staticIp.dns : ''
           }
         })
       });
@@ -181,12 +238,53 @@
   <div class="config-section">
     <h2>WiFi</h2>
     <p>Netzwerkzugang und optionale statische IP-Konfiguration.</p>
-    <label class="field-row"><span>SSID:</span><input bind:value={wifiConfig.ssid} /></label>
-    <label class="field-row"><span>Passwort:</span><input type="password" bind:value={wifiConfig.password} /></label>
-    <label class="field-row"><span>Statische IP:</span><input bind:value={wifiConfig.staticIp.ip} /></label>
-    <label class="field-row"><span>Gateway:</span><input bind:value={wifiConfig.staticIp.gateway} /></label>
-    <label class="field-row"><span>Subnetz:</span><input bind:value={wifiConfig.staticIp.subnet} /></label>
-    <label class="field-row"><span>DNS:</span><input bind:value={wifiConfig.staticIp.dns} /></label>
+    <label class="field-row">
+      <span>SSID:</span>
+      <div class="input-action-row">
+        <input bind:value={wifiConfig.ssid} />
+        <button class="icon-button" type="button" on:click={scanWifiNetworks} aria-label="WiFi-Netze suchen" title="WiFi-Netze suchen">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4a6 6 0 1 0 3.87 10.58l4.27 4.28 1.42-1.42-4.28-4.27A6 6 0 0 0 10 4zm0 2a4 4 0 1 1 0 8 4 4 0 0 1 0-8z"/></svg>
+        </button>
+      </div>
+    </label>
+    {#if wifiScanLoading}
+      <p class="helper-text">WiFi-Scan läuft...</p>
+    {:else if wifiScanError}
+      <p class="helper-text error">{wifiScanError}</p>
+    {/if}
+    {#if wifiNetworks.length > 0}
+      <label class="field-row compact-row">
+        <span>Gefundene Netze:</span>
+        <select on:change={selectScannedWifi}>
+          <option value="">Bitte WiFi auswählen</option>
+          {#each wifiNetworks as network}
+            <option value={network.ssid}>{network.ssid} ({network.rssi} dBm)</option>
+          {/each}
+        </select>
+      </label>
+    {/if}
+
+    <label class="field-row"><span>Passwort:</span><input type="password" bind:value={wifiConfig.password} placeholder={wifiHasPassword ? '***' : ''} /></label>
+
+    <div class="choice-grid" role="radiogroup" aria-label="IP-Konfiguration">
+      <label class="choice-card">
+        <input type="radio" name="wifi-ip-mode" checked={wifiMode === 'dhcp'} on:change={enableDhcp} />
+        <span>DHCP</span>
+      </label>
+      <label class="choice-card">
+        <input type="radio" name="wifi-ip-mode" checked={wifiMode === 'static'} on:change={enableStaticIp} />
+        <span>Statische IP einstellen</span>
+      </label>
+    </div>
+
+    {#if wifiMode === 'static'}
+      <label class="field-row"><span>Statische IP:</span><input bind:value={wifiConfig.staticIp.ip} /></label>
+      <label class="field-row"><span>Gateway:</span><input bind:value={wifiConfig.staticIp.gateway} /></label>
+      <label class="field-row"><span>Subnetz:</span><input bind:value={wifiConfig.staticIp.subnet} /></label>
+      <label class="field-row"><span>DNS:</span><input bind:value={wifiConfig.staticIp.dns} /></label>
+      <p class="helper-text">Pflichtfelder: Statische IP, Subnetz und DNS. Subnetz wird standardmäßig auf 255.255.255.0 gesetzt.</p>
+    {/if}
+
     <button class="primary" on:click={saveWifiConfig}>Speichern</button>
   </div>
 {:else if module === 'mqtt_ha'}
@@ -206,37 +304,46 @@
     {/if}
     <p>Konfiguriere MQTT-Discovery oben. Alle Entitäten werden automatisch in HA erkannt.</p>
 
-    <p class="topic-heading">Discovery-Topics</p>
-    <ul class="topic-list">
-      <li class="topic-group">Messwerte</li>
-      <li><code>homeassistant/sensor/{mqttDeviceId || '{deviceId}'}/fill_level/config</code></li>
-      <li><code>homeassistant/sensor/{mqttDeviceId || '{deviceId}'}/distance_cm/config</code></li>
-      <li><code>homeassistant/sensor/{mqttDeviceId || '{deviceId}'}/raw_distance/config</code></li>
-      <li><code>homeassistant/sensor/{mqttDeviceId || '{deviceId}'}/ping_us/config</code></li>
-      <li class="topic-group">Konfiguration</li>
-      <li><code>homeassistant/number/{mqttDeviceId || '{deviceId}'}/behaelterhoehe/config</code></li>
-      <li><code>homeassistant/number/{mqttDeviceId || '{deviceId}'}/offset/config</code></li>
-      <li class="topic-group">Systeminfo</li>
-      <li><code>homeassistant/sensor/{mqttDeviceId || '{deviceId}'}/rssi/config</code></li>
-      <li><code>homeassistant/sensor/{mqttDeviceId || '{deviceId}'}/ip_address/config</code></li>
-      <li><code>homeassistant/sensor/{mqttDeviceId || '{deviceId}'}/ssid/config</code></li>
-      <li><code>homeassistant/sensor/{mqttDeviceId || '{deviceId}'}/uptime/config</code></li>
-      <li><code>homeassistant/sensor/{mqttDeviceId || '{deviceId}'}/free_heap/config</code></li>
-      <li><code>homeassistant/sensor/{mqttDeviceId || '{deviceId}'}/cpu_freq/config</code></li>
-      <li class="topic-group">OTA Update</li>
-      <li><code>homeassistant/update/{mqttDeviceId || '{deviceId}'}/ota/config</code></li>
-    </ul>
+    <details class="topic-card">
+      <summary>
+        <span class="topic-card-title">MQTT-Topics</span>
+        <span class="topic-card-meta">Discovery, Status und OTA</span>
+      </summary>
 
-    <p class="topic-heading">Status-Topics</p>
-    <ul class="topic-list">
-      <li><code>salzstand/status</code> — online / offline (LWT)</li>
-      <li><code>salzstand/sensor/state</code> — Messwerte (JSON)</li>
-      <li><code>salzstand/config/behaelterhoehe/state</code> / <code>…/set</code></li>
-      <li><code>salzstand/config/offset/state</code> / <code>…/set</code></li>
-      <li><code>salzstand/system/state</code> — CPU, RAM, WiFi (JSON)</li>
-      <li><code>salzstand/update/state</code> — OTA-Status (JSON)</li>
-      <li><code>salzstand/update/install</code> — OTA starten (Befehl)</li>
-    </ul>
+      <div class="topic-card-content">
+        <p class="topic-heading">Discovery-Topics</p>
+        <ul class="topic-list">
+          <li class="topic-group">Messwerte</li>
+          <li><code>homeassistant/sensor/{mqttDeviceId || '{deviceId}'}/fill_level/config</code></li>
+          <li><code>homeassistant/sensor/{mqttDeviceId || '{deviceId}'}/distance_cm/config</code></li>
+          <li><code>homeassistant/sensor/{mqttDeviceId || '{deviceId}'}/raw_distance/config</code></li>
+          <li><code>homeassistant/sensor/{mqttDeviceId || '{deviceId}'}/ping_us/config</code></li>
+          <li class="topic-group">Konfiguration</li>
+          <li><code>homeassistant/number/{mqttDeviceId || '{deviceId}'}/behaelterhoehe/config</code></li>
+          <li><code>homeassistant/number/{mqttDeviceId || '{deviceId}'}/offset/config</code></li>
+          <li class="topic-group">Systeminfo</li>
+          <li><code>homeassistant/sensor/{mqttDeviceId || '{deviceId}'}/rssi/config</code></li>
+          <li><code>homeassistant/sensor/{mqttDeviceId || '{deviceId}'}/ip_address/config</code></li>
+          <li><code>homeassistant/sensor/{mqttDeviceId || '{deviceId}'}/ssid/config</code></li>
+          <li><code>homeassistant/sensor/{mqttDeviceId || '{deviceId}'}/uptime/config</code></li>
+          <li><code>homeassistant/sensor/{mqttDeviceId || '{deviceId}'}/free_heap/config</code></li>
+          <li><code>homeassistant/sensor/{mqttDeviceId || '{deviceId}'}/cpu_freq/config</code></li>
+          <li class="topic-group">OTA Update</li>
+          <li><code>homeassistant/update/{mqttDeviceId || '{deviceId}'}/ota/config</code></li>
+        </ul>
+
+        <p class="topic-heading">Status-Topics</p>
+        <ul class="topic-list">
+          <li><code>salzstand/status</code> - online / offline (LWT)</li>
+          <li><code>salzstand/sensor/state</code> - Messwerte (JSON)</li>
+          <li><code>salzstand/config/behaelterhoehe/state</code> / <code>.../set</code></li>
+          <li><code>salzstand/config/offset/state</code> / <code>.../set</code></li>
+          <li><code>salzstand/system/state</code> - CPU, RAM, WiFi (JSON)</li>
+          <li><code>salzstand/update/state</code> - OTA-Status (JSON)</li>
+          <li><code>salzstand/update/install</code> - OTA starten (Befehl)</li>
+        </ul>
+      </div>
+    </details>
   </div>
 {/if}
 
@@ -288,6 +395,74 @@
     background: rgba(255, 255, 255, 0.14);
     color: var(--text-main);
   }
+  select {
+    width: min(360px, 100%);
+    border: 1px solid var(--surface-border);
+    border-radius: 10px;
+    padding: 8px 10px;
+    background: rgba(255, 255, 255, 0.14);
+    color: var(--text-main);
+  }
+  .input-action-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+  }
+  .icon-button {
+    width: 40px;
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--surface-border);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--accent);
+    cursor: pointer;
+  }
+  .icon-button svg {
+    width: 18px;
+    height: 18px;
+    fill: currentColor;
+  }
+  .compact-row {
+    margin-top: 4px;
+  }
+  .choice-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin: 12px 0 4px;
+  }
+  .choice-card {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border: 1px solid var(--surface-border);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.05);
+    cursor: pointer;
+  }
+  .choice-card input {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+  }
+  .choice-card span {
+    color: var(--text-main);
+    font-weight: 600;
+  }
+  .helper-text {
+    margin-top: 4px;
+    margin-bottom: 6px;
+    font-size: 0.84rem;
+    color: var(--text-muted);
+  }
+  .helper-text.error {
+    color: #ff9a8f;
+  }
   .checkbox-row {
     display: flex;
     align-items: center;
@@ -324,6 +499,49 @@
     margin-top: 14px;
     margin-bottom: 4px;
     font-size: 0.9rem;
+  }
+  .topic-card {
+    margin-top: 14px;
+    border: 1px solid var(--surface-border);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.05);
+    overflow: hidden;
+  }
+  .topic-card summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    cursor: pointer;
+    list-style: none;
+    color: var(--text-main);
+    user-select: none;
+  }
+  .topic-card summary::-webkit-details-marker {
+    display: none;
+  }
+  .topic-card summary::after {
+    content: '▾';
+    font-size: 0.9rem;
+    color: var(--accent);
+    transition: transform 0.2s ease;
+  }
+  .topic-card[open] summary::after {
+    transform: rotate(180deg);
+  }
+  .topic-card-title {
+    font-weight: 600;
+    color: var(--text-main);
+  }
+  .topic-card-meta {
+    margin-left: auto;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+  .topic-card-content {
+    padding: 0 14px 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
   }
   .topic-list {
     margin-top: 4px;
@@ -394,6 +612,16 @@
     .field-row {
       grid-template-columns: 1fr;
       gap: 6px;
+    }
+    .choice-grid {
+      grid-template-columns: 1fr;
+    }
+    .topic-card summary {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+    .topic-card-meta {
+      margin-left: 0;
     }
   }
 </style>

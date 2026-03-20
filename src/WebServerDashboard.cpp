@@ -16,6 +16,7 @@
 #include "EventBus.h"
 #include "MqttManager.h"
 #include "SensorManager.h"
+#include "WifiManager.h"
 
 namespace {
 constexpr char kLatestManifestUrl[] = "https://github.com/Back-code/Salzstand/releases/latest/download/manifest.json";
@@ -250,9 +251,11 @@ void WebServerDashboard::setupRoutes() {
     server_.on("/api/wifi", HTTP_GET, [](AsyncWebServerRequest *request) {
         Config config;
         if (ConfigStore::getInstance().load(config)) {
-            DynamicJsonDocument doc(256);
+            DynamicJsonDocument doc(384);
             doc["ssid"] = config.wifi.ssid;
-            doc["password"] = "";
+            doc["password"] = config.wifi.password.empty() ? "" : "***";
+            doc["hasPassword"] = !config.wifi.password.empty();
+            doc["useStaticIp"] = !config.staticIp.ip.empty() || !config.staticIp.subnet.empty() || !config.staticIp.dns.empty();
             doc["staticIp"]["ip"] = config.staticIp.ip;
             doc["staticIp"]["gateway"] = config.staticIp.gateway;
             doc["staticIp"]["subnet"] = config.staticIp.subnet;
@@ -265,13 +268,47 @@ void WebServerDashboard::setupRoutes() {
         }
     });
 
+    server_.on("/api/wifi/scan", HTTP_GET, [](AsyncWebServerRequest *request) {
+        std::vector<WifiNetwork> networks = WifiManager::getInstance().scanNetworks();
+        std::sort(networks.begin(), networks.end(), [](const WifiNetwork& left, const WifiNetwork& right) {
+            return left.rssi > right.rssi;
+        });
+
+        DynamicJsonDocument doc(2048);
+        JsonArray items = doc.createNestedArray("networks");
+        for (const auto& network : networks) {
+            if (network.ssid.empty()) {
+                continue;
+            }
+
+            bool duplicate = false;
+            for (JsonVariant item : items) {
+                if (std::string(item["ssid"] | "") == network.ssid) {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (duplicate) {
+                continue;
+            }
+
+            JsonObject entry = items.createNestedObject();
+            entry["ssid"] = network.ssid;
+            entry["rssi"] = network.rssi;
+        }
+
+        std::string json;
+        serializeJson(doc, json);
+        request->send(200, "application/json", json.c_str());
+    });
+
     server_.on("/api/wifi", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL,
         [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
         static std::string body;
         if (index == 0) body = "";
         body += std::string((char*)data, len);
         if (index + len == total) {
-            DynamicJsonDocument doc(256);
+            DynamicJsonDocument doc(384);
             deserializeJson(doc, body);
             Config config;
             ConfigStore::getInstance().load(config); // Load current
@@ -280,10 +317,22 @@ void WebServerDashboard::setupRoutes() {
             if (!newWifiPassword.empty() && newWifiPassword != "***") {
                 config.wifi.password = newWifiPassword;
             }
-            config.staticIp.ip = doc["staticIp"]["ip"] | "";
-            config.staticIp.gateway = doc["staticIp"]["gateway"] | "";
-            config.staticIp.subnet = doc["staticIp"]["subnet"] | "";
-            config.staticIp.dns = doc["staticIp"]["dns"] | "";
+
+            const bool useStaticIp = doc["useStaticIp"] | false;
+            if (useStaticIp) {
+                config.staticIp.ip = doc["staticIp"]["ip"] | "";
+                config.staticIp.gateway = doc["staticIp"]["gateway"] | "";
+                config.staticIp.subnet = doc["staticIp"]["subnet"] | "";
+                config.staticIp.dns = doc["staticIp"]["dns"] | "";
+
+                if (config.staticIp.ip.empty() || config.staticIp.subnet.empty() || config.staticIp.dns.empty()) {
+                    request->send(400, "application/json", "{\"error\":\"static_ip_requires_ip_subnet_dns\"}");
+                    return;
+                }
+            } else {
+                config.staticIp = {};
+            }
+
             ConfigStore::getInstance().save(config);
             request->send(200, "application/json", "{\"status\":\"ok\"}");
         }

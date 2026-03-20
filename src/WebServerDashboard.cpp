@@ -254,41 +254,6 @@ void WebServerDashboard::setupRoutes() {
     });
 
     server_.on("/api/wifi", HTTP_GET, [](AsyncWebServerRequest *request) {
-        if (request->hasParam("scan")) {
-            std::vector<WifiNetwork> networks = WifiManager::getInstance().scanNetworks();
-            std::sort(networks.begin(), networks.end(), [](const WifiNetwork& left, const WifiNetwork& right) {
-                return left.rssi > right.rssi;
-            });
-
-            DynamicJsonDocument doc(2048);
-            JsonArray items = doc.createNestedArray("networks");
-            for (const auto& network : networks) {
-                if (network.ssid.empty()) {
-                    continue;
-                }
-
-                bool duplicate = false;
-                for (JsonVariant item : items) {
-                    if (std::string(item["ssid"] | "") == network.ssid) {
-                        duplicate = true;
-                        break;
-                    }
-                }
-                if (duplicate) {
-                    continue;
-                }
-
-                JsonObject entry = items.createNestedObject();
-                entry["ssid"] = network.ssid;
-                entry["rssi"] = network.rssi;
-            }
-
-            std::string json;
-            serializeJson(doc, json);
-            request->send(200, "application/json", json.c_str());
-            return;
-        }
-
         Config config;
         const bool loaded = ConfigStore::getInstance().load(config);
 
@@ -311,6 +276,40 @@ void WebServerDashboard::setupRoutes() {
         doc["staticIp"]["gateway"] = loaded ? config.staticIp.gateway : "";
         doc["staticIp"]["subnet"] = loaded ? config.staticIp.subnet : "";
         doc["staticIp"]["dns"] = loaded ? config.staticIp.dns : "";
+
+        std::string json;
+        serializeJson(doc, json);
+        request->send(200, "application/json", json.c_str());
+    });
+
+    server_.on("/api/wifi/scan", HTTP_POST, [](AsyncWebServerRequest *request) {
+        std::vector<WifiNetwork> networks = WifiManager::getInstance().scanNetworks();
+        std::sort(networks.begin(), networks.end(), [](const WifiNetwork& left, const WifiNetwork& right) {
+            return left.rssi > right.rssi;
+        });
+
+        DynamicJsonDocument doc(2048);
+        JsonArray items = doc.createNestedArray("networks");
+        for (const auto& network : networks) {
+            if (network.ssid.empty()) {
+                continue;
+            }
+
+            bool duplicate = false;
+            for (JsonVariant item : items) {
+                if (std::string(item["ssid"] | "") == network.ssid) {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (duplicate) {
+                continue;
+            }
+
+            JsonObject entry = items.createNestedObject();
+            entry["ssid"] = network.ssid;
+            entry["rssi"] = network.rssi;
+        }
 
         std::string json;
         serializeJson(doc, json);

@@ -358,6 +358,7 @@
   $: uploadAppProgress = isUploadProgress('app') ? progressValue(localUpload.received, localUpload.total) : 0;
   $: uploadWebUiProgress = isUploadProgress('webui') ? progressValue(localUpload.received, localUpload.total) : 0;
   $: repoStatus = getRepoUpdateStatus();
+  $: currentReleaseUrl = `https://github.com/Back-code/Salzstand/releases/tag/v${currentVersion}`;
   $: anyBusy = isBusy();
 
   onMount(() => {
@@ -370,16 +371,22 @@
 
 <section class="update-grid">
   <article class="status-card hero" bind:this={statusCard}>
+    {#if manifestError}
+      <div class="manifest-badge warning">{manifestError}</div>
+    {:else if manifest}
+      <div class="manifest-badge success">Manifest geladen</div>
+    {/if}
+
     <div>
       <span class="eyebrow">Stand</span>
       <h2>Update-Zentrale</h2>
       <div class="version-row">
         <div class="version-item installed">
           <span class="version-label">Installierte Version</span>
-          <a href="#" class="version-link" title="v{currentVersion}">v{currentVersion}</a>
+          <a href={currentReleaseUrl} target="_blank" rel="noopener noreferrer" class="version-link">v{currentVersion}</a>
         </div>
         {#if manifest}
-          <span class="divider">|</span>
+          <span class="version-separator" aria-hidden="true"></span>
           <div class="version-item available">
             <span class="version-label">Verfügbare Version</span>
             <a href={manifest.releaseUrl} target="_blank" rel="noopener noreferrer" class="version-link">v{manifest.version}</a>
@@ -401,8 +408,6 @@
           <small>{humanSize(manifest.assets?.webui?.size)}</small>
         </div>
       </div>
-    {:else}
-      <p class="warning">{manifestError || 'Noch kein Release-Manifest gefunden.'}</p>
     {/if}
 
     <div class="status-box" class:busy={status.inProgress}>
@@ -526,6 +531,7 @@
     grid-column: 1 / -1;
     display: grid;
     gap: 16px;
+    position: relative;
   }
 
   .eyebrow {
@@ -579,6 +585,30 @@
     color: var(--text-muted);
   }
 
+  .manifest-badge {
+    position: absolute;
+    top: 18px;
+    right: 18px;
+    max-width: min(44ch, calc(100% - 36px));
+    padding: 8px 12px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    line-height: 1.25;
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--surface-border);
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .manifest-badge.success {
+    color: #9ad9a8;
+  }
+
+  .manifest-badge.warning {
+    color: #ffb58f;
+    border-color: rgba(255, 181, 143, 0.25);
+    background: rgba(99, 49, 26, 0.28);
+  }
+
   .version-row {
     display: flex;
     align-items: center;
@@ -614,9 +644,11 @@
     text-decoration: underline;
   }
 
-  .divider {
-    color: var(--surface-border);
-    font-size: 0.9rem;
+  .version-separator {
+    width: 32px;
+    height: 1px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, transparent 0%, rgba(98, 184, 221, 0.6) 50%, transparent 100%);
   }
 
   .status-badge {
@@ -769,14 +801,20 @@
     color: var(--text-main);
   }
 
-  .warning {
-    color: #ffb58f;
-  }
-
   @media (max-width: 840px) {
     .update-grid,
     .manifest-box {
       grid-template-columns: 1fr;
+    }
+
+    .hero {
+      padding-top: 64px;
+    }
+
+    .manifest-badge {
+      left: 18px;
+      right: 18px;
+      max-width: none;
     }
 
     .button-group {

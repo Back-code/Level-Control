@@ -93,6 +93,10 @@
     });
   }
 
+  function restartEsp() {
+    fetch('/api/restart', { method: 'POST' });
+  }
+
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', subtitle: 'Live-Messwerte und Netzwerkstatus in einer kompakten Uebersicht.' },
     { id: 'sensor', label: 'Sensor', subtitle: 'Sensorparameter fuer Messgeometrie und Offset konfigurieren.' },
@@ -116,15 +120,21 @@
           <p>Smart Reservoir Monitor</p>
         </div>
       </div>
-      <div class="theme-switch" role="group" aria-label="Theme-Auswahl">
-        <button class="theme-btn" class:active={theme === 'day'} on:click={() => setTheme('day')}>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0V4a1 1 0 0 1 1-1zm0 15a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm8-5a1 1 0 0 1-1 1h-1a1 1 0 1 1 0-2h1a1 1 0 0 1 1 1zM7 13a1 1 0 0 1-1 1H5a1 1 0 1 1 0-2h1a1 1 0 0 1 1 1zm9.66 5.66a1 1 0 0 1-1.41 0l-.7-.71a1 1 0 0 1 1.41-1.41l.7.7a1 1 0 0 1 0 1.42zM9.45 6.45a1 1 0 0 1-1.41 0l-.71-.7a1 1 0 1 1 1.41-1.42l.71.71a1 1 0 0 1 0 1.41zm7.2-1.66a1 1 0 0 1 0 1.41l-.7.71a1 1 0 0 1-1.42-1.41l.71-.71a1 1 0 0 1 1.41 0zM9.45 17.55a1 1 0 0 1 0 1.41l-.71.7a1 1 0 0 1-1.41-1.41l.7-.71a1 1 0 0 1 1.42 0z"/></svg>
-          Tag
+      <div class="top-controls">
+        <button class="restart-btn" on:click={restartEsp}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6V3L8 7l4 4V8c2.76 0 5 2.24 5 5a5 5 0 0 1-5 5 5 5 0 0 1-4.9-4H5.08A7 7 0 0 0 12 20a7 7 0 0 0 0-14z"/></svg>
+          Neustart
         </button>
-        <button class="theme-btn" class:active={theme === 'night'} on:click={() => setTheme('night')}>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a1 1 0 0 1 1.05 1.47A6.5 6.5 0 1 0 18.53 13.45 1 1 0 0 1 20 14.5z"/></svg>
-          Nacht
-        </button>
+        <div class="theme-switch" role="group" aria-label="Theme-Auswahl">
+          <button class="theme-btn" class:active={theme === 'day'} on:click={() => setTheme('day')}>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0V4a1 1 0 0 1 1-1zm0 15a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm8-5a1 1 0 0 1-1 1h-1a1 1 0 1 1 0-2h1a1 1 0 0 1 1 1zM7 13a1 1 0 0 1-1 1H5a1 1 0 1 1 0-2h1a1 1 0 0 1 1 1zm9.66 5.66a1 1 0 0 1-1.41 0l-.7-.71a1 1 0 0 1 1.41-1.41l.7.7a1 1 0 0 1 0 1.42zM9.45 6.45a1 1 0 0 1-1.41 0l-.71-.7a1 1 0 1 1 1.41-1.42l.71.71a1 1 0 0 1 0 1.41zm7.2-1.66a1 1 0 0 1 0 1.41l-.7.71a1 1 0 0 1-1.42-1.41l.71-.71a1 1 0 0 1 1.41 0zM9.45 17.55a1 1 0 0 1 0 1.41l-.71.7a1 1 0 0 1-1.41-1.41l.7-.71a1 1 0 0 1 1.42 0z"/></svg>
+            Tag
+          </button>
+          <button class="theme-btn" class:active={theme === 'night'} on:click={() => setTheme('night')}>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a1 1 0 0 1 1.05 1.47A6.5 6.5 0 1 0 18.53 13.45 1 1 0 0 1 20 14.5z"/></svg>
+            Nacht
+          </button>
+        </div>
       </div>
     </div>
     <nav>
@@ -288,6 +298,37 @@
     border: 1px solid var(--surface-border);
     border-radius: 999px;
     background: var(--surface-2);
+  }
+
+  .top-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .restart-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--surface-border);
+    background: var(--button-bg);
+    color: var(--button-text);
+    font-size: 0.86rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .restart-btn svg {
+    width: 15px;
+    height: 15px;
+    fill: currentColor;
+  }
+
+  .restart-btn:hover {
+    background: var(--button-active-bg);
+    color: var(--button-active-text);
   }
 
   .theme-btn {

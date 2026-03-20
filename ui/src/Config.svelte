@@ -79,10 +79,6 @@
     }).then(() => alert('MQTT-Konfiguration gespeichert. Neustart erforderlich.'));
   }
 
-  function restart() {
-    fetch('/api/restart', { method: 'POST' });
-  }
-
   onMount(() => {
     loadAllConfig();
   });
@@ -132,8 +128,6 @@
     </ul>
   </div>
 {/if}
-
-<button class="ghost" on:click={restart}>ESP32 Neustart</button>
 
 <style>
   .config-section {
@@ -194,15 +188,6 @@
     background: var(--button-active-bg);
     color: var(--button-active-text);
     font-weight: 600;
-    cursor: pointer;
-  }
-  .ghost {
-    margin-top: 16px;
-    padding: 10px 14px;
-    border: 1px solid var(--surface-border);
-    border-radius: 10px;
-    background: var(--button-bg);
-    color: var(--button-text);
     cursor: pointer;
   }
 </style>

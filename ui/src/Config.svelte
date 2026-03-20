@@ -19,14 +19,75 @@
   let wifiScanLoading = false;
   let wifiScanError = '';
   let wifiValidation = { attempted: false, touched: {} };
+  let sensorIntervalValue = '5';
+  let sensorIntervalUnit = 'seconds';
+  let sensorIntervalValidation = { attempted: false, touched: false };
   let mqttConfig = { server: '', port: 1883, user: '', password: '', discovery: true };
   let mqttHasPassword = false;
   let mqttDeviceId = '';
 
   const PASSWORD_MASK = '*****';
+  const SAMPLE_UNITS = [
+    { value: 'seconds', label: 'Sekunden', seconds: 1 },
+    { value: 'minutes', label: 'Minuten', seconds: 60 },
+    { value: 'hours', label: 'Stunden', seconds: 3600 },
+    { value: 'days', label: 'Tage', seconds: 86400 }
+  ];
+  const MIN_SAMPLE_INTERVAL_SECONDS = 5;
 
   function isMaskedPassword(value) {
     return value === '***' || value === PASSWORD_MASK;
+  }
+
+  function getUnitSeconds(unit) {
+    return SAMPLE_UNITS.find((entry) => entry.value === unit)?.seconds || 1;
+  }
+
+  function syncSensorIntervalFromSeconds(totalSeconds) {
+    const normalizedSeconds = Math.max(MIN_SAMPLE_INTERVAL_SECONDS, Number(totalSeconds) || MIN_SAMPLE_INTERVAL_SECONDS);
+
+    if (normalizedSeconds % 86400 === 0) {
+      sensorIntervalUnit = 'days';
+      sensorIntervalValue = String(normalizedSeconds / 86400);
+      return;
+    }
+    if (normalizedSeconds % 3600 === 0) {
+      sensorIntervalUnit = 'hours';
+      sensorIntervalValue = String(normalizedSeconds / 3600);
+      return;
+    }
+    if (normalizedSeconds % 60 === 0) {
+      sensorIntervalUnit = 'minutes';
+      sensorIntervalValue = String(normalizedSeconds / 60);
+      return;
+    }
+
+    sensorIntervalUnit = 'seconds';
+    sensorIntervalValue = String(normalizedSeconds);
+  }
+
+  function getSampleIntervalSeconds() {
+    const numericValue = Number(sensorIntervalValue);
+    if (!Number.isFinite(numericValue) || numericValue <= 0) {
+      return 0;
+    }
+    return Math.round(numericValue * getUnitSeconds(sensorIntervalUnit));
+  }
+
+  function hasSensorIntervalError() {
+    const shouldValidate = sensorIntervalValidation.attempted || sensorIntervalValidation.touched;
+    return shouldValidate && getSampleIntervalSeconds() < MIN_SAMPLE_INTERVAL_SECONDS;
+  }
+
+  function getSensorIntervalError() {
+    if (!hasSensorIntervalError()) {
+      return '';
+    }
+    return 'Mindestens 5 Sekunden erforderlich.';
+  }
+
+  function touchSensorInterval() {
+    sensorIntervalValidation = { ...sensorIntervalValidation, touched: true };
   }
 
   function enableStaticIp() {
@@ -150,14 +211,26 @@
       });
   }
 
+  $: if (module === 'sensor' && data.sampleIntervalSeconds) {
+    syncSensorIntervalFromSeconds(data.sampleIntervalSeconds);
+  }
+
   async function saveSensorConfig() {
+    sensorIntervalValidation = { ...sensorIntervalValidation, attempted: true };
+    const sampleIntervalSeconds = getSampleIntervalSeconds();
+    if (sampleIntervalSeconds < MIN_SAMPLE_INTERVAL_SECONDS) {
+      showNotice('error', 'Die Ultraschall-Abtastrate muss mindestens 5 Sekunden betragen.');
+      return;
+    }
+
     try {
       const response = await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           behaelterhoehe: data.behaelterhoehe,
-          offset: data.offset
+          offset: data.offset,
+          sampleIntervalSeconds
         })
       });
 
@@ -167,6 +240,8 @@
       }
 
       showNotice('success', 'Behälter-Konfiguration gespeichert.');
+      data.sampleIntervalSeconds = sampleIntervalSeconds;
+      sensorIntervalValidation = { attempted: false, touched: false };
     } catch (_) {
       showNotice('error', 'Behälter-Konfiguration konnte nicht gespeichert werden.');
     }
@@ -236,8 +311,8 @@
 
 {#if module === 'sensor'}
   <div class="config-section">
-    <h2>Behälter</h2>
-    <p>Messgeometrie und Korrekturwerte für die Füllstandsberechnung.</p>
+    <h2>Konfiguration</h2>
+    <p>Messgeometrie, Korrekturwerte und Ultraschall-Abtastrate für die Füllstandsberechnung.</p>
 
     <label class="field-row">
       <span>Offset (cm):</span>
@@ -247,6 +322,32 @@
     <label class="field-row">
       <span>Behälterhöhe (cm):</span>
       <input type="number" bind:value={data.behaelterhoehe} />
+    </label>
+
+    <label class="field-row field-row--top-align">
+      <span><FieldLabel text="Abtastrate Ultraschall:" required={true} /></span>
+      <div class="field-control field-control--inline">
+        <input
+          type="number"
+          min="1"
+          step="1"
+          bind:value={sensorIntervalValue}
+          aria-required="true"
+          aria-invalid={hasSensorIntervalError()}
+          class:input-invalid={hasSensorIntervalError()}
+          on:blur={touchSensorInterval}
+        />
+        <select bind:value={sensorIntervalUnit} on:blur={touchSensorInterval}>
+          {#each SAMPLE_UNITS as unit}
+            <option value={unit.value}>{unit.label}</option>
+          {/each}
+        </select>
+        {#if hasSensorIntervalError()}
+          <p class="field-error field-error--inline">{getSensorIntervalError()}</p>
+        {:else}
+          <p class="helper-text field-help">Mindestens 5 Sekunden. Zulässig sind Sekunden, Minuten, Stunden und Tage.</p>
+        {/if}
+      </div>
     </label>
 
     <div class="sensor-sketch" aria-label="Erklärung Behälterhöhe und Offset">
@@ -499,6 +600,12 @@
   .field-control {
     width: min(360px, 100%);
   }
+  .field-control--inline {
+    display: grid;
+    grid-template-columns: minmax(120px, 160px) minmax(140px, 1fr);
+    gap: 8px;
+    align-items: start;
+  }
   input {
     margin-left: 0;
     width: min(360px, 100%);
@@ -511,6 +618,9 @@
   .field-control input {
     width: 100%;
   }
+  .field-control--inline select {
+    width: 100%;
+  }
   .input-invalid {
     border-color: #ff6b6b;
     box-shadow: 0 0 0 1px rgba(255, 107, 107, 0.25);
@@ -520,6 +630,10 @@
     margin: 6px 0 0;
     font-size: 0.82rem;
     color: #ff9a8f;
+  }
+  .field-error--inline,
+  .field-help {
+    grid-column: 1 / -1;
   }
   select {
     width: min(360px, 100%);
@@ -738,6 +852,9 @@
     .field-row {
       grid-template-columns: 1fr;
       gap: 6px;
+    }
+    .field-control--inline {
+      grid-template-columns: 1fr;
     }
     .choice-grid {
       grid-template-columns: 1fr;

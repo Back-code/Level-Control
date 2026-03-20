@@ -30,6 +30,7 @@ struct Config {
     MqttConfig mqtt;
     float behaelterhoehe = 95.0;
     float offset = 0.0;
+    unsigned long sampleIntervalSeconds = 5;
 };
 
 class ConfigStore {

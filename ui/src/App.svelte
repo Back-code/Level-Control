@@ -27,7 +27,8 @@
     ssid: '',
     bssid: '',
     behaelterhoehe: 95,
-    offset: 0
+    offset: 0,
+    sampleIntervalSeconds: 5
   };
 
   let ws;
@@ -100,6 +101,7 @@
     fetch('/api/config').then(r => r.json()).then(config => {
       data.behaelterhoehe = config.behaelterhoehe;
       data.offset = config.offset;
+      data.sampleIntervalSeconds = config.sampleIntervalSeconds || 5;
       persistData();
     });
   }
@@ -153,7 +155,7 @@
 
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', subtitle: 'Live-Messwerte und Netzwerkstatus in einer kompakten Uebersicht.' },
-    { id: 'sensor', label: 'Behälter', subtitle: 'Behälterparameter für Messgeometrie und Offset konfigurieren.' },
+    { id: 'sensor', label: 'Konfiguration', subtitle: 'Behälterparameter und Ultraschall-Abtastrate zentral konfigurieren.' },
     { id: 'wifi', label: 'WiFi', subtitle: 'WLAN-Zugang und optionale statische Netzwerkdaten verwalten.' },
     { id: 'mqtt_ha', label: 'MQTT & HA', subtitle: 'Broker, Discovery und Home-Assistant-Anbindung zentral steuern.' },
     { id: 'update', label: 'Update', subtitle: 'OTA aus Releases oder lokales BIN-Upload mit Dateikontrolle durchführen.' },

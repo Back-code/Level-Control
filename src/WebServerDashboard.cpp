@@ -23,6 +23,7 @@ constexpr char kLatestManifestUrl[] = "https://github.com/Back-code/Salzstand/re
 constexpr char kLatestReleaseUrl[] = "https://github.com/Back-code/Salzstand/releases/latest";
 constexpr char kUpdateUserAgent[] = "Salzstand-OTA/1.0";
 constexpr char kPasswordMask[] = "*****";
+constexpr unsigned long kMinSampleIntervalSeconds = 5UL;
 constexpr uint32_t kRestartDelayMs = 1500;
 constexpr size_t kUploadBufferSize = 4096;
 constexpr unsigned long kManifestCacheTtlMs = 300000;
@@ -228,6 +229,7 @@ void WebServerDashboard::setupRoutes() {
             DynamicJsonDocument doc(256);
             doc["behaelterhoehe"] = config.behaelterhoehe;
             doc["offset"] = config.offset;
+            doc["sampleIntervalSeconds"] = config.sampleIntervalSeconds;
             std::string json;
             serializeJson(doc, json);
             request->send(200, "application/json", json.c_str());
@@ -242,13 +244,24 @@ void WebServerDashboard::setupRoutes() {
         if (index == 0) body = "";
         body += std::string((char*)data, len);
         if (index + len == total) {
-            DynamicJsonDocument doc(256);
-            deserializeJson(doc, body);
+            DynamicJsonDocument doc(384);
+            if (deserializeJson(doc, body) != DeserializationError::Ok) {
+                request->send(400, "application/json", "{\"error\":\"invalid_config_payload\"}");
+                return;
+            }
             Config config;
             ConfigStore::getInstance().load(config); // Load current
             config.behaelterhoehe = doc["behaelterhoehe"] | 95.0;
             config.offset = doc["offset"] | 0.0;
+            config.sampleIntervalSeconds = doc["sampleIntervalSeconds"] | 5UL;
+            if (config.sampleIntervalSeconds < kMinSampleIntervalSeconds) {
+                request->send(400, "application/json", "{\"error\":\"sample_interval_too_small\"}");
+                return;
+            }
             ConfigStore::getInstance().save(config);
+            SensorManager::getInstance().setBehaelterhoehe(config.behaelterhoehe);
+            SensorManager::getInstance().setOffset(config.offset);
+            SensorManager::getInstance().setSampleIntervalSeconds(config.sampleIntervalSeconds);
             request->send(200, "application/json", "{\"status\":\"ok\"}");
         }
     });

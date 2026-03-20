@@ -35,6 +35,10 @@ bool ConfigStore::load(Config& config) {
     config.mqtt.discovery = doc["mqtt"]["discovery"] | true;
     config.behaelterhoehe = doc["behaelterhoehe"] | 95.0;
     config.offset = doc["offset"] | 0.0;
+    config.sampleIntervalSeconds = doc["sampleIntervalSeconds"] | 5UL;
+    if (config.sampleIntervalSeconds < 5UL) {
+        config.sampleIntervalSeconds = 5UL;
+    }
 
     return true;
 }
@@ -58,6 +62,7 @@ bool ConfigStore::save(const Config& config) {
     doc["mqtt"]["discovery"] = config.mqtt.discovery;
     doc["behaelterhoehe"] = config.behaelterhoehe;
     doc["offset"] = config.offset;
+    doc["sampleIntervalSeconds"] = config.sampleIntervalSeconds < 5UL ? 5UL : config.sampleIntervalSeconds;
 
     std::string jsonStr;
     serializeJson(doc, jsonStr);

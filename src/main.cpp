@@ -62,16 +62,22 @@ void setup() {
 void loop() {
     static unsigned long lastBroadcast       = 0;
     static unsigned long lastSerial          = 0;
+    static unsigned long lastMeasurement     = 0;
     static unsigned long lastMqttReconnect   = 0;
     static unsigned long lastMqttPublish     = 0;
 
     WifiManager::getInstance().process();
     MqttManager::getInstance().loop();
-    SensorManager::getInstance().measure();
+
+    const unsigned long now = millis();
+    if (lastMeasurement == 0 || now - lastMeasurement >= SensorManager::getInstance().getSampleIntervalMs()) {
+        lastMeasurement = now;
+        SensorManager::getInstance().measure();
+    }
 
     // MQTT Reconnect alle 5 s prüfen
-    if (millis() - lastMqttReconnect > 5000) {
-        lastMqttReconnect = millis();
+    if (now - lastMqttReconnect > 5000) {
+        lastMqttReconnect = now;
         if (WifiManager::getInstance().isConnected() &&
             !MqttManager::getInstance().isConnected()) {
             Config config;
@@ -83,8 +89,8 @@ void loop() {
     }
 
     // MQTT Sensor-Daten alle 30 s senden
-    if (millis() - lastMqttPublish > 30000) {
-        lastMqttPublish = millis();
+    if (now - lastMqttPublish > 30000) {
+        lastMqttPublish = now;
         SensorManager& s = SensorManager::getInstance();
         const char* sensorStatus = s.hasValidReading() ? "ok" :
                                    (s.getLastPingUs() == 0 ? "timeout" : "out_of_range");
@@ -101,16 +107,16 @@ void loop() {
     }
 
     // WebSocket Broadcast alle 5 s
-    if (millis() - lastBroadcast > 5000) {
-        lastBroadcast = millis();
+    if (now - lastBroadcast > 5000) {
+        lastBroadcast = now;
         WebServerDashboard::getInstance().broadcastSensorData();
         WebServerDashboard::getInstance().broadcastWifiData();
         WebServerDashboard::getInstance().broadcastUptime();
     }
 
     // Serielle Diagnose alle 10 s
-    if (millis() - lastSerial > 10000) {
-        lastSerial = millis();
+    if (now - lastSerial > 10000) {
+        lastSerial = now;
         SensorManager& s = SensorManager::getInstance();
         Serial.printf("[Salzstand] raw=%.3fm cm=%.1f pct=%.1f valid=%d ping=%uus\n",
             s.getRawDistance(), s.getDistanceCm(), s.getDistancePercent(),

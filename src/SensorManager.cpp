@@ -4,12 +4,23 @@
 #include "ConfigStore.h"
 #include "EventBus.h"
 
+namespace {
+constexpr unsigned long kMinSampleIntervalSeconds = 5UL;
+}
+
 SensorManager& SensorManager::getInstance() {
     static SensorManager instance;
     return instance;
 }
 
 SensorManager::SensorManager() {}
+
+void SensorManager::setSampleIntervalSeconds(unsigned long seconds) {
+    if (seconds < kMinSampleIntervalSeconds) {
+        seconds = kMinSampleIntervalSeconds;
+    }
+    sampleIntervalMs_ = seconds * 1000UL;
+}
 
 void SensorManager::init() {
     pinMode(triggerPin_, OUTPUT);
@@ -20,11 +31,13 @@ void SensorManager::init() {
     if (ConfigStore::getInstance().load(cfg)) {
         behaelterhoehe_ = cfg.behaelterhoehe;
         offset_ = cfg.offset;
+        setSampleIntervalSeconds(cfg.sampleIntervalSeconds);
     }
 
     DebugLogger::getInstance().log(LogLevel::INFO,
         "SensorManager init (hoehe=" + std::to_string(behaelterhoehe_) +
-        "cm, offset=" + std::to_string(offset_) + "cm)");
+        "cm, offset=" + std::to_string(offset_) +
+        "cm, intervall=" + std::to_string(getSampleIntervalSeconds()) + "s)");
 }
 
 unsigned int SensorManager::ping() {

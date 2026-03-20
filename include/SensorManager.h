@@ -18,8 +18,11 @@ public:
 
     void setBehaelterhoehe(float h) { behaelterhoehe_ = h; }
     void setOffset(float o) { offset_ = o; }
+    void setSampleIntervalSeconds(unsigned long seconds);
     float getBehaelterhoehe() const { return behaelterhoehe_; }
     float getOffset() const { return offset_; }
+    unsigned long getSampleIntervalSeconds() const { return sampleIntervalMs_ / 1000UL; }
+    unsigned long getSampleIntervalMs() const { return sampleIntervalMs_; }
 
 private:
     SensorManager();
@@ -31,6 +34,7 @@ private:
     bool lastValid_ = false;
     float behaelterhoehe_ = 95.0;
     float offset_ = 0.0;
+    unsigned long sampleIntervalMs_ = 5000UL;
     const int triggerPin_ = 4;
     const int echoPin_ = 5;
     const int maxDistance_ = 400;

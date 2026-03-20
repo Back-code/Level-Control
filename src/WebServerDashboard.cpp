@@ -257,9 +257,14 @@ void WebServerDashboard::setupRoutes() {
         Config config;
         if (ConfigStore::getInstance().load(config)) {
             DynamicJsonDocument doc(384);
+            bool wifiHasPassword = !config.wifi.password.empty();
+            if (!wifiHasPassword && WiFi.status() == WL_CONNECTED) {
+                // Fallback: falls Passwort nicht in NVS steht, aber die aktive STA-Verbindung eins hat.
+                wifiHasPassword = !WiFi.psk().isEmpty();
+            }
             doc["ssid"] = config.wifi.ssid;
-            doc["password"] = config.wifi.password.empty() ? "" : kPasswordMask;
-            doc["hasPassword"] = !config.wifi.password.empty();
+            doc["password"] = wifiHasPassword ? kPasswordMask : "";
+            doc["hasPassword"] = wifiHasPassword;
             doc["useStaticIp"] = !config.staticIp.ip.empty() || !config.staticIp.subnet.empty() || !config.staticIp.dns.empty();
             doc["staticIp"]["ip"] = config.staticIp.ip;
             doc["staticIp"]["gateway"] = config.staticIp.gateway;

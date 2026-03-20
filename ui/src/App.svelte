@@ -3,6 +3,9 @@
   import Dashboard from './Dashboard.svelte';
   import Config from './Config.svelte';
   import DebugOverlay from './DebugOverlay.svelte';
+  import versionData from '../../version.json';
+
+  const versionStr = `${versionData.major}.${String(versionData.minor).padStart(2, '0')}.${String(versionData.commit).padStart(3, '0')}`;
 
   let activeTab = 'dashboard';
   let theme = 'night';
@@ -117,7 +120,7 @@
         </span>
         <div class="brand-copy">
           <h1>Salzstand Control</h1>
-          <p>Smart Reservoir Monitor</p>
+          <p>Smart Reservoir Monitor <span class="app-version">v{versionStr}</span></p>
         </div>
       </div>
       <div class="top-controls">
@@ -289,6 +292,14 @@
     font-size: 0.8rem;
     letter-spacing: 0.16em;
     text-transform: uppercase;
+  }
+
+  .app-version {
+    opacity: 0.55;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    margin-left: 6px;
+    font-variant-numeric: tabular-nums;
   }
 
   .theme-switch {

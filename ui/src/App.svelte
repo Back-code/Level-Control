@@ -3,6 +3,7 @@
   import Dashboard from './Dashboard.svelte';
   import Config from './Config.svelte';
   import DebugOverlay from './DebugOverlay.svelte';
+  import Update from './Update.svelte';
   import versionData from '../../version.json';
 
   const versionStr = `${versionData.major}.${String(versionData.minor).padStart(2, '0')}.${String(versionData.commit).padStart(3, '0')}`;
@@ -103,19 +104,16 @@
 
   async function checkForUpdate() {
     try {
-      const res = await fetch('https://api.github.com/repos/Back-code/Salzstand/releases/latest', {
-        headers: { Accept: 'application/vnd.github.v3+json' }
-      });
+      const res = await fetch('/api/update/manifest');
       if (!res.ok) return;
       const release = await res.json();
-      const tag = release.tag_name || '';
-      const clean = tag.replace(/^v/, '');
+      const clean = (release.version || '').replace(/^v/, '');
       const [rm, rn, rc] = clean.split('.').map(Number);
       const [lm, ln, lc] = versionStr.split('.').map(Number);
       if (rm > lm || (rm === lm && rn > ln) || (rm === lm && rn === ln && rc > lc)) {
         updateAvailable = true;
-        updateUrl = release.html_url;
-        latestTag = tag;
+        updateUrl = release.releaseUrl;
+        latestTag = `v${clean}`;
       }
     } catch (_) {
       // Offline oder kein Release – Update-Check wird übersprungen
@@ -131,6 +129,7 @@
     { id: 'sensor', label: 'Behälter', subtitle: 'Behälterparameter für Messgeometrie und Offset konfigurieren.' },
     { id: 'wifi', label: 'WiFi', subtitle: 'WLAN-Zugang und optionale statische Netzwerkdaten verwalten.' },
     { id: 'mqtt_ha', label: 'MQTT & HA', subtitle: 'Broker, Discovery und Home-Assistant-Anbindung zentral steuern.' },
+    { id: 'update', label: 'Update', subtitle: 'OTA aus Releases oder lokales BIN-Upload mit Dateikontrolle durchführen.' },
     { id: 'debug', label: 'Debug', subtitle: 'Live-Logs sowie NVS-Snapshot fuer Diagnose und Fehleranalyse.' }
   ];
 
@@ -178,6 +177,8 @@
               <svg viewBox="0 0 24 24"><path d="M12 18a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0-4c2.56 0 4.92 1.04 6.62 2.73l1.42-1.41A11.96 11.96 0 0 0 12 12c-3.12 0-5.96 1.19-8.04 3.14l1.42 1.41A9.33 9.33 0 0 1 12 14zm0-4c3.74 0 7.12 1.51 9.56 3.95l1.41-1.41A15.45 15.45 0 0 0 12 8c-4.3 0-8.19 1.75-10.97 4.57l1.41 1.41A13.44 13.44 0 0 1 12 10z"/></svg>
             {:else if tab.id === 'mqtt_ha'}
               <svg viewBox="0 0 24 24"><path d="M12 2l6 6h-4v5h-4V8H6l6-6zm-8 12h4v6h8v-6h4v8H4v-8z"/></svg>
+            {:else if tab.id === 'update'}
+              <svg viewBox="0 0 24 24"><path d="M12 3a1 1 0 0 1 1 1v8.59l2.3-2.29a1 1 0 1 1 1.4 1.41l-4 3.99a1 1 0 0 1-1.4 0l-4-3.99a1 1 0 1 1 1.4-1.41L11 12.59V4a1 1 0 0 1 1-1zm-7 14a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1z"/></svg>
             {:else}
               <svg viewBox="0 0 24 24"><path d="M19.14 12.94a7.43 7.43 0 0 0 .05-.94 7.43 7.43 0 0 0-.05-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.16 7.16 0 0 0-1.63-.94l-.36-2.54A.5.5 0 0 0 13.9 2h-3.8a.5.5 0 0 0-.49.42l-.36 2.54a7.16 7.16 0 0 0-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.71 8.48a.5.5 0 0 0 .12.64l2.03 1.58a7.43 7.43 0 0 0-.05.94c0 .32.02.63.05.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .6.22l2.39-.96c.5.39 1.05.72 1.63.94l.36 2.54a.5.5 0 0 0 .49.42h3.8a.5.5 0 0 0 .49-.42l.36-2.54c.58-.22 1.13-.55 1.63-.94l2.39.96a.5.5 0 0 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5z"/></svg>
             {/if}
@@ -198,6 +199,8 @@
       <Config bind:data {loadConfig} module="wifi" />
     {:else if activeTab === 'mqtt_ha'}
       <Config bind:data {loadConfig} module="mqtt_ha" />
+    {:else if activeTab === 'update'}
+      <Update currentVersion={versionStr} />
     {:else if activeTab === 'debug'}
       <DebugOverlay embedded={true} />
     {/if}
@@ -489,12 +492,14 @@
   .tab-icon.sensor { color: #7fd996; }
   .tab-icon.wifi { color: #ff8a80; }
   .tab-icon.mqtt_ha { color: #c4a0ff; }
+  .tab-icon.update { color: #74d9d5; }
   .tab-icon.debug { color: #ffd37d; }
 
   :global(html[data-theme='day']) .tab-icon.dashboard { color: #2363b4; }
   :global(html[data-theme='day']) .tab-icon.sensor { color: #238043; }
   :global(html[data-theme='day']) .tab-icon.wifi { color: #c34b4b; }
   :global(html[data-theme='day']) .tab-icon.mqtt_ha { color: #7b48c9; }
+  :global(html[data-theme='day']) .tab-icon.update { color: #117c78; }
   :global(html[data-theme='day']) .tab-icon.debug { color: #b07a13; }
 
   .subtitle {

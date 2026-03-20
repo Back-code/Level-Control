@@ -292,13 +292,14 @@ void WebServerDashboard::setupRoutes() {
     server_.on("/api/mqtt", HTTP_GET, [](AsyncWebServerRequest *request) {
         Config config;
         if (ConfigStore::getInstance().load(config)) {
-            DynamicJsonDocument doc(256);
+            DynamicJsonDocument doc(384);
             doc["server"] = config.mqtt.server;
             doc["port"] = config.mqtt.port;
             doc["user"] = config.mqtt.user;
             doc["password"] = config.mqtt.password.empty() ? "" : "***";
             doc["hasPassword"] = !config.mqtt.password.empty();
             doc["discovery"] = config.mqtt.discovery;
+            doc["device_id"] = MqttManager::getInstance().getDeviceId();
             std::string json;
             serializeJson(doc, json);
             request->send(200, "application/json", json.c_str());

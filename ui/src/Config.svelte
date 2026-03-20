@@ -12,6 +12,7 @@
     staticIp: { ip: '', gateway: '', subnet: '', dns: '' }
   };
   let mqttConfig = { server: '', port: 1883, user: '', password: '', discovery: true };
+  let mqttDeviceId = '';
 
   function loadAllConfig() {
     loadConfig();
@@ -41,6 +42,7 @@
           password: c.password || '',
           discovery: c.discovery ?? true
         };
+        mqttDeviceId = c.device_id || '';
       });
   }
 
@@ -199,15 +201,41 @@
     <button class="primary" on:click={saveMqttConfig}>Speichern</button>
 
     <h3>Home Assistant</h3>
-    <p>Konfiguriere MQTT-Discovery oben. Die Sensoren werden automatisch in HA erkannt.</p>
-    <p>Discovery-Topics:</p>
-    <ul>
-      <li>homeassistant/sensor/{'{deviceId}'}/fill_level/config</li>
-      <li>homeassistant/sensor/{'{deviceId}'}/distance_cm/config</li>
-      <li>homeassistant/sensor/{'{deviceId}'}/raw_distance/config</li>
-      <li>homeassistant/sensor/{'{deviceId}'}/ping_us/config</li>
-      <li>homeassistant/number/{'{deviceId}'}/behaelterhoehe/config</li>
-      <li>homeassistant/number/{'{deviceId}'}/offset/config</li>
+    {#if mqttDeviceId}
+      <p class="device-id-row">Geräte-ID: <code class="device-id-code">{mqttDeviceId}</code></p>
+    {/if}
+    <p>Konfiguriere MQTT-Discovery oben. Alle Entitäten werden automatisch in HA erkannt.</p>
+
+    <p class="topic-heading">Discovery-Topics</p>
+    <ul class="topic-list">
+      <li class="topic-group">Messwerte</li>
+      <li><code>homeassistant/sensor/{mqttDeviceId || '{deviceId}'}/fill_level/config</code></li>
+      <li><code>homeassistant/sensor/{mqttDeviceId || '{deviceId}'}/distance_cm/config</code></li>
+      <li><code>homeassistant/sensor/{mqttDeviceId || '{deviceId}'}/raw_distance/config</code></li>
+      <li><code>homeassistant/sensor/{mqttDeviceId || '{deviceId}'}/ping_us/config</code></li>
+      <li class="topic-group">Konfiguration</li>
+      <li><code>homeassistant/number/{mqttDeviceId || '{deviceId}'}/behaelterhoehe/config</code></li>
+      <li><code>homeassistant/number/{mqttDeviceId || '{deviceId}'}/offset/config</code></li>
+      <li class="topic-group">Systeminfo</li>
+      <li><code>homeassistant/sensor/{mqttDeviceId || '{deviceId}'}/rssi/config</code></li>
+      <li><code>homeassistant/sensor/{mqttDeviceId || '{deviceId}'}/ip_address/config</code></li>
+      <li><code>homeassistant/sensor/{mqttDeviceId || '{deviceId}'}/ssid/config</code></li>
+      <li><code>homeassistant/sensor/{mqttDeviceId || '{deviceId}'}/uptime/config</code></li>
+      <li><code>homeassistant/sensor/{mqttDeviceId || '{deviceId}'}/free_heap/config</code></li>
+      <li><code>homeassistant/sensor/{mqttDeviceId || '{deviceId}'}/cpu_freq/config</code></li>
+      <li class="topic-group">OTA Update</li>
+      <li><code>homeassistant/update/{mqttDeviceId || '{deviceId}'}/ota/config</code></li>
+    </ul>
+
+    <p class="topic-heading">Status-Topics</p>
+    <ul class="topic-list">
+      <li><code>salzstand/status</code> — online / offline (LWT)</li>
+      <li><code>salzstand/sensor/state</code> — Messwerte (JSON)</li>
+      <li><code>salzstand/config/behaelterhoehe/state</code> / <code>…/set</code></li>
+      <li><code>salzstand/config/offset/state</code> / <code>…/set</code></li>
+      <li><code>salzstand/system/state</code> — CPU, RAM, WiFi (JSON)</li>
+      <li><code>salzstand/update/state</code> — OTA-Status (JSON)</li>
+      <li><code>salzstand/update/install</code> — OTA starten (Befehl)</li>
     </ul>
   </div>
 {/if}
@@ -274,6 +302,60 @@
     margin-top: 8px;
     margin-bottom: 0;
     padding-left: 18px;
+  }
+  .device-id-row {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+  .device-id-code {
+    font-family: monospace;
+    background: rgba(98, 184, 221, 0.15);
+    border-radius: 5px;
+    padding: 2px 6px;
+    color: var(--accent);
+    font-size: 0.85rem;
+    user-select: all;
+    cursor: text;
+  }
+  .topic-heading {
+    font-weight: 600;
+    color: var(--text-main);
+    margin-top: 14px;
+    margin-bottom: 4px;
+    font-size: 0.9rem;
+  }
+  .topic-list {
+    margin-top: 4px;
+    margin-bottom: 8px;
+    padding-left: 0;
+    list-style: none;
+  }
+  .topic-list li {
+    padding: 2px 0;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    word-break: break-all;
+  }
+  .topic-list li:not(.topic-group) {
+    padding-left: 12px;
+  }
+  .topic-group {
+    color: var(--text-main);
+    font-weight: 600;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 10px;
+    opacity: 0.65;
+  }
+  .topic-list code {
+    font-family: monospace;
+    font-size: 0.82rem;
+    background: rgba(255, 255, 255, 0.07);
+    border-radius: 4px;
+    padding: 1px 5px;
+    color: var(--text-main);
   }
   .primary {
     margin-top: 10px;

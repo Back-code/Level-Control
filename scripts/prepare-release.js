@@ -66,4 +66,30 @@ const manifest = {
 
 writeFileSync(join(releaseDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
 
+const releaseNotes = [
+  `## Salzstand v${versionStr}`,
+  '',
+  'Release-Assets für OTA und manuelles Flashen.',
+  '',
+  'Enthalten:',
+  `- ${firmware.target}`,
+  `- ${webui.target}`,
+  `- ${copiedAssets.find((asset) => asset.kind === 'bootloader').target}`,
+  `- ${copiedAssets.find((asset) => asset.kind === 'partitions').target}`,
+  '- manifest.json',
+  '- SHA256SUMS.txt',
+  '',
+  'Hinweis:',
+  'Für OTA werden app.bin, web-ui.bin und manifest.json verwendet.',
+  'Für vollständiges Recovery per Kabel stehen zusätzlich bootloader.bin und partitions.bin bereit.',
+  '',
+  'Standard-Checks vor Veröffentlichung:',
+  '- Firmware und LittleFS erfolgreich gebaut',
+  '- manifest.json verweist auf denselben Tag',
+  '- SHA256SUMS.txt liegt bei',
+  '- OTA-Test aus der Web-UI gegen das veröffentlichte Release durchgeführt'
+].join('\n') + '\n';
+
+writeFileSync(join(releaseDir, 'release-notes.txt'), releaseNotes);
+
 process.stdout.write(`Release-Artefakte erstellt: release/v${versionStr}\n`);

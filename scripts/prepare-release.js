@@ -14,7 +14,7 @@ const releaseDir = join(root, 'release', `v${versionStr}`);
 const assets = [
   { source: 'bootloader.bin', target: `salzstand-v${versionStr}-bootloader.bin`, kind: 'bootloader' },
   { source: 'partitions.bin', target: `salzstand-v${versionStr}-partitions.bin`, kind: 'partitions' },
-  { source: 'firmware.bin', target: `salzstand-v${versionStr}-app.bin`, kind: 'firmware' },
+  { source: 'firmware.bin', target: `salzstand-v${versionStr}-app.bin`, kind: 'app' },
   { source: 'littlefs.bin', target: `salzstand-v${versionStr}-web-ui.bin`, kind: 'webui' }
 ];
 
@@ -42,18 +42,18 @@ const sums = copiedAssets
   .join('\n') + '\n';
 writeFileSync(join(releaseDir, 'SHA256SUMS.txt'), sums);
 
-const firmware = copiedAssets.find((asset) => asset.kind === 'firmware');
+const app = copiedAssets.find((asset) => asset.kind === 'app');
 const webui = copiedAssets.find((asset) => asset.kind === 'webui');
 
 const manifest = {
   version: versionStr,
   releaseUrl: `https://github.com/Back-code/Salzstand/releases/tag/v${versionStr}`,
   assets: {
-    firmware: {
-      name: firmware.target,
-      url: `https://github.com/Back-code/Salzstand/releases/download/v${versionStr}/${firmware.target}`,
-      sha256: firmware.sha256,
-      size: firmware.size
+    app: {
+      name: app.target,
+      url: `https://github.com/Back-code/Salzstand/releases/download/v${versionStr}/${app.target}`,
+      sha256: app.sha256,
+      size: app.size
     },
     webui: {
       name: webui.target,
@@ -72,7 +72,7 @@ const releaseNotes = [
   'Release-Assets für OTA und manuelles Flashen.',
   '',
   'Enthalten:',
-  `- ${firmware.target}`,
+  `- ${app.target}`,
   `- ${webui.target}`,
   `- ${copiedAssets.find((asset) => asset.kind === 'bootloader').target}`,
   `- ${copiedAssets.find((asset) => asset.kind === 'partitions').target}`,
@@ -84,7 +84,7 @@ const releaseNotes = [
   'Für vollständiges Recovery per Kabel stehen zusätzlich bootloader.bin und partitions.bin bereit.',
   '',
   'Standard-Checks vor Veröffentlichung:',
-  '- Firmware und LittleFS erfolgreich gebaut',
+  '- App und LittleFS erfolgreich gebaut',
   '- manifest.json verweist auf denselben Tag',
   '- SHA256SUMS.txt liegt bei',
   '- OTA-Test aus der Web-UI gegen das veröffentlichte Release durchgeführt'

@@ -29,7 +29,7 @@ private:
     struct ReleaseManifest {
         std::string version;
         std::string releaseUrl;
-        ManifestAsset firmware;
+        ManifestAsset app;
         ManifestAsset webui;
         bool valid = false;
     };
@@ -75,7 +75,7 @@ private:
     bool validateUploadStart(const String& target, const String& filename, size_t contentLength, std::string& error) const;
     bool validateUploadChunk(const String& target, const uint8_t *data, size_t len, size_t index, std::string& error) const;
     void handleUpload(AsyncWebServerRequest *request, const String& target, const String& filename, size_t index, uint8_t *data, size_t len, bool final);
-    size_t getFirmwarePartitionSize() const;
+    size_t getAppPartitionSize() const;
     size_t getFilesystemPartitionSize() const;
 };
 

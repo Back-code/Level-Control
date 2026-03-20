@@ -16,11 +16,12 @@
     availableVersion: '',
     received: 0,
     total: 0,
+    appMaxSize: 0,
     firmwareMaxSize: 0,
     webuiMaxSize: 0
   };
 
-  let firmwareFile = null;
+  let appFile = null;
   let webUiFile = null;
 
   function compareVersions(left, right) {
@@ -69,7 +70,7 @@
   }
 
   async function startRepoUpdate(target) {
-    const label = target === 'full' ? 'Firmware und Web-UI' : 'nur die Firmware';
+    const label = target === 'full' ? 'App und Web-UI' : 'nur die App';
     if (!confirm(`Soll ${label} aus dem neuesten Release geladen werden?`)) {
       return;
     }
@@ -102,19 +103,21 @@
       return 'Bootloader- und Partitionsdateien dürfen hier nicht hochgeladen werden.';
     }
 
-    if (target === 'firmware') {
+    const maxAppSize = status.appMaxSize || status.firmwareMaxSize;
+
+    if (target === 'app') {
       if (lowerName.includes('littlefs') || lowerName.includes('web-ui')) {
-        return 'Diese Datei sieht nach einer Web-UI-Datei aus. Bitte die Firmware-BIN wählen.';
+        return 'Diese Datei sieht nach einer Web-UI-Datei aus. Bitte die App-BIN wählen.';
       }
-      if (status.firmwareMaxSize && file.size > status.firmwareMaxSize) {
-        return 'Die Datei ist größer als die verfügbare Firmware-Partition.';
+      if (maxAppSize && file.size > maxAppSize) {
+        return 'Die Datei ist größer als die verfügbare App-Partition.';
       }
       if (file.size < 65536) {
-        return 'Die Datei ist für eine Firmware unplausibel klein.';
+        return 'Die Datei ist für eine App unplausibel klein.';
       }
     } else {
       if (lowerName.includes('firmware') || lowerName.includes('app')) {
-        return 'Diese Datei sieht nach einer Firmware aus. Bitte die Web-UI-BIN wählen.';
+        return 'Diese Datei sieht nach einer App aus. Bitte die Web-UI-BIN wählen.';
       }
       if (status.webuiMaxSize && file.size > status.webuiMaxSize) {
         return 'Die Datei ist größer als die LittleFS-Partition.';
@@ -128,14 +131,14 @@
   }
 
   async function uploadLocal(target) {
-    const file = target === 'firmware' ? firmwareFile : webUiFile;
+    const file = target === 'app' ? appFile : webUiFile;
     const error = validateLocalFile(target, file);
     if (error) {
       alert(error);
       return;
     }
 
-    const label = target === 'firmware' ? 'Firmware' : 'Web-UI';
+    const label = target === 'app' ? 'App' : 'Web-UI';
     if (!confirm(`Soll die lokale ${label}-Datei jetzt installiert werden?`)) {
       return;
     }
@@ -184,9 +187,9 @@
     {#if manifest}
       <div class="manifest-box">
         <div>
-          <span>Firmware</span>
-          <strong>{manifest.assets?.firmware?.name || 'nicht vorhanden'}</strong>
-          <small>{humanSize(manifest.assets?.firmware?.size)}</small>
+          <span>App</span>
+          <strong>{manifest.assets?.app?.name || manifest.assets?.firmware?.name || 'nicht vorhanden'}</strong>
+          <small>{humanSize(manifest.assets?.app?.size || manifest.assets?.firmware?.size)}</small>
         </div>
         <div>
           <span>Web-UI</span>
@@ -213,10 +216,10 @@
 
   <article class="action-card">
     <span class="eyebrow">1. Repo</span>
-    <h3>OTA nur Firmware</h3>
-    <p>Lädt die App-Binärdatei aus dem neuesten GitHub-Release und schreibt nur die Firmware-Partition.</p>
-    <button on:click={() => startRepoUpdate('firmware')} disabled={!repoUpdateAvailable || status.inProgress}>
-      Firmware aus Repo installieren
+    <h3>OTA nur App</h3>
+    <p>Lädt die App-Binärdatei aus dem neuesten GitHub-Release und schreibt nur die App-Partition.</p>
+    <button on:click={() => startRepoUpdate('app')} disabled={!repoUpdateAvailable || status.inProgress}>
+      App aus Repo installieren
     </button>
     {#if manifest && !repoUpdateAvailable}
       <small>Keine neuere Release als v{currentVersion} gefunden.</small>
@@ -226,9 +229,9 @@
   <article class="action-card">
     <span class="eyebrow">2. Repo</span>
     <h3>Komplettes Update</h3>
-    <p>Installiert nacheinander Web-UI und Firmware aus dem Manifest des neuesten GitHub-Releases.</p>
+    <p>Installiert nacheinander Web-UI und App aus dem Manifest des neuesten GitHub-Releases.</p>
     <button on:click={() => startRepoUpdate('full')} disabled={!repoUpdateAvailable || status.inProgress}>
-      Firmware und Web-UI installieren
+      App und Web-UI installieren
     </button>
     {#if manifest?.releaseUrl}
       <a class="release-link" href={manifest.releaseUrl} target="_blank" rel="noopener noreferrer">Release im Browser öffnen</a>
@@ -237,17 +240,17 @@
 
   <article class="action-card upload-card">
     <span class="eyebrow">3. Lokal</span>
-    <h3>Firmware per BIN</h3>
-    <p>Nur gültige ESP32-Firmware-Dateien werden akzeptiert. Bootloader- und Partitionsdateien sind gesperrt.</p>
-    <input type="file" accept=".bin" on:change={(event) => firmwareFile = event.currentTarget.files?.[0] || null} />
-    <button on:click={() => uploadLocal('firmware')} disabled={status.inProgress}>Firmware hochladen</button>
-    <small>Maximale Größe: {humanSize(status.firmwareMaxSize)}</small>
+    <h3>App per BIN</h3>
+    <p>Nur gültige ESP32-App-Dateien werden akzeptiert. Bootloader- und Partitionsdateien sind gesperrt.</p>
+    <input type="file" accept=".bin" on:change={(event) => appFile = event.currentTarget.files?.[0] || null} />
+    <button on:click={() => uploadLocal('app')} disabled={status.inProgress}>App hochladen</button>
+    <small>Maximale Größe: {humanSize(status.appMaxSize || status.firmwareMaxSize)}</small>
   </article>
 
   <article class="action-card upload-card">
     <span class="eyebrow">4. Lokal</span>
     <h3>Web-UI per BIN</h3>
-    <p>Die LittleFS-Datei wird separat geprüft und darf keine Firmware-Signatur enthalten.</p>
+    <p>Die LittleFS-Datei wird separat geprüft und darf keine App-Signatur enthalten.</p>
     <input type="file" accept=".bin" on:change={(event) => webUiFile = event.currentTarget.files?.[0] || null} />
     <button on:click={() => uploadLocal('webui')} disabled={status.inProgress}>Web-UI hochladen</button>
     <small>Maximale Größe: {humanSize(status.webuiMaxSize)}</small>

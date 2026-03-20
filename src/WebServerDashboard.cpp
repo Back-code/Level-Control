@@ -324,8 +324,11 @@ void WebServerDashboard::setupUpdateRoutes() {
             return;
         }
 
-        const std::string target = doc["target"] | "";
-        if (target != "firmware" && target != "webui" && target != "full") {
+        std::string target = doc["target"] | "";
+        if (target == "firmware") {
+            target = "app";
+        }
+        if (target != "app" && target != "webui" && target != "full") {
             request->send(400, "application/json", "{\"error\":\"Ungültiges Update-Ziel\"}");
             return;
         }
@@ -339,10 +342,17 @@ void WebServerDashboard::setupUpdateRoutes() {
         request->send(202, "application/json", "{\"status\":\"started\"}");
     });
 
+    server_.on("/api/update/upload/app", HTTP_POST,
+        [](AsyncWebServerRequest *request) {},
+        [this](AsyncWebServerRequest *request, const String& filename, size_t index, uint8_t *data, size_t len, bool final) {
+            handleUpload(request, "app", filename, index, data, len, final);
+        });
+
+    // Backward-compatible alias
     server_.on("/api/update/upload/firmware", HTTP_POST,
         [](AsyncWebServerRequest *request) {},
         [this](AsyncWebServerRequest *request, const String& filename, size_t index, uint8_t *data, size_t len, bool final) {
-            handleUpload(request, "firmware", filename, index, data, len, final);
+            handleUpload(request, "app", filename, index, data, len, final);
         });
 
     server_.on("/api/update/upload/webui", HTTP_POST,
@@ -415,7 +425,8 @@ void WebServerDashboard::sendUpdateStatus(AsyncWebServerRequest *request) const 
     doc["availableVersion"] = updateState_.availableVersion;
     doc["received"] = updateState_.received;
     doc["total"] = updateState_.total;
-    doc["firmwareMaxSize"] = getFirmwarePartitionSize();
+    doc["appMaxSize"] = getAppPartitionSize();
+    doc["firmwareMaxSize"] = getAppPartitionSize();
     doc["webuiMaxSize"] = getFilesystemPartitionSize();
     doc["manifestUrl"] = kLatestManifestUrl;
 
@@ -475,15 +486,21 @@ bool WebServerDashboard::fetchLatestManifest(ReleaseManifest& manifest, std::str
 
     manifest.version = doc["version"] | "";
     manifest.releaseUrl = doc["releaseUrl"] | kLatestReleaseUrl;
-    manifest.firmware.name = doc["assets"]["firmware"]["name"] | "";
-    manifest.firmware.url = doc["assets"]["firmware"]["url"] | "";
-    manifest.firmware.sha256 = toLowerCopy(doc["assets"]["firmware"]["sha256"] | "");
-    manifest.firmware.size = doc["assets"]["firmware"]["size"] | 0;
+    manifest.app.name = doc["assets"]["app"]["name"] | "";
+    manifest.app.url = doc["assets"]["app"]["url"] | "";
+    manifest.app.sha256 = toLowerCopy(doc["assets"]["app"]["sha256"] | "");
+    manifest.app.size = doc["assets"]["app"]["size"] | 0;
+    if (manifest.app.url.empty()) {
+        manifest.app.name = doc["assets"]["firmware"]["name"] | "";
+        manifest.app.url = doc["assets"]["firmware"]["url"] | "";
+        manifest.app.sha256 = toLowerCopy(doc["assets"]["firmware"]["sha256"] | "");
+        manifest.app.size = doc["assets"]["firmware"]["size"] | 0;
+    }
     manifest.webui.name = doc["assets"]["webui"]["name"] | "";
     manifest.webui.url = doc["assets"]["webui"]["url"] | "";
     manifest.webui.sha256 = toLowerCopy(doc["assets"]["webui"]["sha256"] | "");
     manifest.webui.size = doc["assets"]["webui"]["size"] | 0;
-    manifest.valid = !manifest.version.empty() && !manifest.firmware.url.empty() && !manifest.webui.url.empty();
+    manifest.valid = !manifest.version.empty() && !manifest.app.url.empty() && !manifest.webui.url.empty();
 
     if (!manifest.valid) {
         error = "Manifest enthält nicht alle erforderlichen Assets";
@@ -531,17 +548,17 @@ void WebServerDashboard::runRemoteUpdateTask(const std::string& target) {
         }
     }
 
-    if ((target == "firmware" || target == "full") && !manifest.firmware.url.empty()) {
-        if (!applyRemoteAsset(manifest.firmware, U_FLASH, "firmware", error)) {
+    if ((target == "app" || target == "full") && !manifest.app.url.empty()) {
+        if (!applyRemoteAsset(manifest.app, U_FLASH, "app", error)) {
             markUpdateFailed(error);
             return;
         }
     }
 
     if (target == "full") {
-        markUpdateSucceeded("Firmware und Web-UI wurden erfolgreich aktualisiert");
-    } else if (target == "firmware") {
-        markUpdateSucceeded("Firmware wurde erfolgreich aktualisiert");
+        markUpdateSucceeded("App und Web-UI wurden erfolgreich aktualisiert");
+    } else if (target == "app") {
+        markUpdateSucceeded("App wurde erfolgreich aktualisiert");
     } else {
         markUpdateSucceeded("Web-UI wurde erfolgreich aktualisiert");
     }
@@ -620,7 +637,7 @@ bool WebServerDashboard::applyRemoteAsset(const ManifestAsset& asset, int comman
                     LittleFS.begin();
                 }
                 http.end();
-                error = command == U_FLASH ? "Firmware-Asset ist kein gültiges ESP32-Image" : "Web-UI-Asset sieht wie eine Firmware aus";
+                error = command == U_FLASH ? "App-Asset ist kein gültiges ESP32-Image" : "Web-UI-Asset sieht wie eine App aus";
                 mbedtls_sha256_free(&shaContext);
                 return false;
             }
@@ -677,7 +694,7 @@ bool WebServerDashboard::validateUploadStart(const String& target, const String&
         return false;
     }
 
-    if (target == "firmware") {
+    if (target == "app") {
         if (lowerName.find("bootloader") != std::string::npos || lowerName.find("partition") != std::string::npos) {
             error = "Bootloader- oder Partitionsdateien dürfen hier nicht hochgeladen werden";
             return false;
@@ -694,12 +711,12 @@ bool WebServerDashboard::validateUploadStart(const String& target, const String&
 
 bool WebServerDashboard::validateUploadChunk(const String& target, const uint8_t *data, size_t len, size_t index, std::string& error) const {
     if (index == 0 && len > 0) {
-        if (target == "firmware" && data[0] != 0xE9) {
-            error = "Die hochgeladene Firmware ist kein gültiges ESP32-Binary";
+        if (target == "app" && data[0] != 0xE9) {
+            error = "Die hochgeladene App ist kein gültiges ESP32-Binary";
             return false;
         }
         if (target == "webui" && data[0] == 0xE9) {
-            error = "Die Web-UI-Datei sieht wie eine Firmware aus";
+            error = "Die Web-UI-Datei sieht wie eine App aus";
             return false;
         }
     }
@@ -732,7 +749,7 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
             LittleFS.end();
         }
 
-        if (!Update.begin(UPDATE_SIZE_UNKNOWN, target == "firmware" ? U_FLASH : U_SPIFFS)) {
+        if (!Update.begin(UPDATE_SIZE_UNKNOWN, target == "app" ? U_FLASH : U_SPIFFS)) {
             uploadFailed_ = true;
             uploadActive_ = false;
             if (target == "webui") {
@@ -760,15 +777,15 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
 
     if (!uploadFailed_ && len > 0) {
         const size_t nextReceived = index + len;
-        const size_t limit = target == "firmware" ? getFirmwarePartitionSize() : getFilesystemPartitionSize();
+        const size_t limit = target == "app" ? getAppPartitionSize() : getFilesystemPartitionSize();
         if (limit > 0 && nextReceived > limit) {
             uploadFailed_ = true;
             Update.abort();
             if (target == "webui") {
                 LittleFS.begin();
             }
-            markUpdateFailed(target == "firmware"
-                ? "Firmware-Datei überschreitet die verfügbare App-Partition"
+            markUpdateFailed(target == "app"
+                ? "App-Datei überschreitet die verfügbare App-Partition"
                 : "Web-UI-Datei überschreitet die LittleFS-Partition");
         }
     }
@@ -799,13 +816,13 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
     }
 
     const size_t finalSize = index + len;
-    if ((target == "firmware" && finalSize < 65536) || (target == "webui" && finalSize < 4096)) {
+    if ((target == "app" && finalSize < 65536) || (target == "webui" && finalSize < 4096)) {
         Update.abort();
         if (target == "webui") {
             LittleFS.begin();
         }
-        markUpdateFailed(target == "firmware"
-            ? "Firmware-Datei ist für ein ESP32-Image unplausibel klein"
+        markUpdateFailed(target == "app"
+            ? "App-Datei ist für ein ESP32-Image unplausibel klein"
             : "Web-UI-Datei ist unplausibel klein");
         request->send(400, "application/json", (std::string("{\"error\":\"") + updateState_.message + "\"}").c_str());
         return;
@@ -820,15 +837,15 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
         return;
     }
 
-    const std::string successMessage = target == "firmware"
-        ? "Firmware wurde erfolgreich hochgeladen"
+    const std::string successMessage = target == "app"
+        ? "App wurde erfolgreich hochgeladen"
         : "Web-UI wurde erfolgreich hochgeladen";
     markUpdateSucceeded(successMessage);
     scheduleRestart(kRestartDelayMs);
     request->send(200, "application/json", (std::string("{\"status\":\"ok\",\"message\":\"") + successMessage + "\"}").c_str());
 }
 
-size_t WebServerDashboard::getFirmwarePartitionSize() const {
+size_t WebServerDashboard::getAppPartitionSize() const {
     const esp_partition_t *partition = esp_ota_get_next_update_partition(nullptr);
     return partition ? partition->size : 0;
 }

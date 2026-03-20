@@ -66,12 +66,3 @@ bool ConfigStore::save(const Config& config) {
     prefs.end();
     return success;
 }
-
-void ConfigStore::migrateIfNeeded(Config& config) {
-    if (config.version < 1) {
-        config.version = 1;
-        config.behaelterhoehe = 95.0;
-        config.offset = 0.0;
-        save(config);
-    }
-}

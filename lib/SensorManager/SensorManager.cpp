@@ -1,3 +1,4 @@
+#include <Arduino.h>
 #include "SensorManager.h"
 #include "DebugLogger.h"
 #include "MqttManager.h"

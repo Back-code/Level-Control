@@ -2,7 +2,6 @@
 #define CONFIG_STORE_H
 
 #include <string>
-#include <ArduinoJson.h>
 
 struct WifiConfig {
     std::string ssid;
@@ -39,7 +38,6 @@ public:
 
     bool load(Config& config);
     bool save(const Config& config);
-    void migrateIfNeeded(Config& config);
 
 private:
     ConfigStore();

@@ -31,7 +31,6 @@ public:
     static EventBus& getInstance();
 
     void subscribe(EventType type, EventHandler handler);
-    void unsubscribe(EventType type, EventHandler handler);
     void publish(const Event& event);
 
 private:

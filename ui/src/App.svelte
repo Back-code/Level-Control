@@ -7,6 +7,10 @@
 
   const versionStr = `${versionData.major}.${String(versionData.minor).padStart(2, '0')}.${String(versionData.commit).padStart(3, '0')}`;
 
+  let updateAvailable = false;
+  let updateUrl = '';
+  let latestTag = '';
+
   let activeTab = 'dashboard';
   let theme = 'night';
   const DATA_CACHE_KEY = 'salzstand-last-data';
@@ -82,6 +86,7 @@
 
     // Load initial config
     loadConfig();
+    checkForUpdate();
 
     return () => {
       if (ws) ws.close();
@@ -94,6 +99,27 @@
       data.offset = config.offset;
       persistData();
     });
+  }
+
+  async function checkForUpdate() {
+    try {
+      const res = await fetch('https://api.github.com/repos/Back-code/Salzstand/releases/latest', {
+        headers: { Accept: 'application/vnd.github.v3+json' }
+      });
+      if (!res.ok) return;
+      const release = await res.json();
+      const tag = release.tag_name || '';
+      const clean = tag.replace(/^v/, '');
+      const [rm, rn, rc] = clean.split('.').map(Number);
+      const [lm, ln, lc] = versionStr.split('.').map(Number);
+      if (rm > lm || (rm === lm && rn > ln) || (rm === lm && rn === ln && rc > lc)) {
+        updateAvailable = true;
+        updateUrl = release.html_url;
+        latestTag = tag;
+      }
+    } catch (_) {
+      // Offline oder kein Release – Update-Check wird übersprungen
+    }
   }
 
   function restartEsp() {
@@ -120,7 +146,7 @@
         </span>
         <div class="brand-copy">
           <h1>Salzstand Control</h1>
-          <p>Smart Reservoir Monitor <span class="app-version">v{versionStr}</span></p>
+          <p>Smart Reservoir Monitor <span class="app-version">v{versionStr}</span>{#if updateAvailable}<a class="update-badge" href={updateUrl} target="_blank" rel="noopener noreferrer" title="Update verfügbar: {latestTag}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 13v-4H8l4-4 4 4h-3v4h-2z"/></svg></a>{/if}</p>
         </div>
       </div>
       <div class="top-controls">
@@ -300,6 +326,27 @@
     letter-spacing: 0.08em;
     margin-left: 6px;
     font-variant-numeric: tabular-nums;
+  }
+
+  .update-badge {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 5px;
+    color: #f59e0b;
+    vertical-align: middle;
+    text-decoration: none;
+    transition: transform 0.15s, color 0.15s;
+  }
+
+  .update-badge:hover {
+    transform: scale(1.2);
+    color: #d97706;
+  }
+
+  .update-badge svg {
+    width: 14px;
+    height: 14px;
+    fill: currentColor;
   }
 
   .theme-switch {

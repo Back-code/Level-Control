@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { showNotice } from './dialogStore.js';
+  import FieldLabel from './FieldLabel.svelte';
   import PasswordInput from './PasswordInput.svelte';
 
   export let data;
@@ -290,11 +291,10 @@
     </div>
 
     {#if wifiMode === 'static'}
-      <label class="field-row"><span>Statische IP:</span><input bind:value={wifiConfig.staticIp.ip} /></label>
-      <label class="field-row"><span>Gateway:</span><input bind:value={wifiConfig.staticIp.gateway} /></label>
-      <label class="field-row"><span>Subnetz:</span><input bind:value={wifiConfig.staticIp.subnet} /></label>
-      <label class="field-row"><span>DNS:</span><input bind:value={wifiConfig.staticIp.dns} /></label>
-      <p class="helper-text">Pflichtfelder: Statische IP, Subnetz und DNS. Subnetz wird standardmäßig auf 255.255.255.0 gesetzt.</p>
+      <label class="field-row"><span><FieldLabel text="Statische IP:" required={true} /></span><input bind:value={wifiConfig.staticIp.ip} aria-required="true" /></label>
+      <label class="field-row"><span><FieldLabel text="Gateway:" /></span><input bind:value={wifiConfig.staticIp.gateway} /></label>
+      <label class="field-row"><span><FieldLabel text="Subnetz:" required={true} /></span><input bind:value={wifiConfig.staticIp.subnet} aria-required="true" /></label>
+      <label class="field-row"><span><FieldLabel text="DNS:" required={true} /></span><input bind:value={wifiConfig.staticIp.dns} aria-required="true" /></label>
     {/if}
 
     <button class="primary" on:click={saveWifiConfig}>Speichern</button>
@@ -303,7 +303,7 @@
   <div class="config-section">
     <h2>MQTT & HA</h2>
     <p>Broker-Zugangsdaten und Home Assistant Discovery.</p>
-    <label class="field-row"><span>Server:</span><input bind:value={mqttConfig.server} /></label>
+    <label class="field-row"><span><FieldLabel text="Server:" /></span><input bind:value={mqttConfig.server} /></label>
     <label class="field-row"><span>Port:</span><input type="number" bind:value={mqttConfig.port} /></label>
     <label class="field-row"><span>Benutzer:</span><input bind:value={mqttConfig.user} /></label>
     <div class="field-row">

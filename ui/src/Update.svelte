@@ -153,6 +153,7 @@
       return;
     }
 
+    alert(payload.message || `${label} wurde erfolgreich hochgeladen. Gerät startet neu.`);
     await loadStatus();
   }
 

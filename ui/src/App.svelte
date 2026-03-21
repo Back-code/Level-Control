@@ -229,7 +229,8 @@
         </span>
         <div class="brand-copy">
           <h1>Salzstand Control</h1>
-          <p>Smart Reservoir Monitor <span class="app-version">v{versionStr}</span>{#if updateAvailable}<a class="update-badge" href={updateUrl} target="_blank" rel="noopener noreferrer" title="Update verfügbar: {latestTag}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 13v-4H8l4-4 4 4h-3v4h-2z"/></svg></a>{/if}</p>
+          <p class="brand-line">Smart Reservoir Monitor <span class="app-version">v{versionStr}</span>{#if updateAvailable}<a class="update-badge" href={updateUrl} target="_blank" rel="noopener noreferrer" title="Update verfügbar: {latestTag}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 13v-4H8l4-4 4 4h-3v4h-2z"/></svg></a>{/if}</p>
+
         </div>
       </div>
       <div class="top-controls">
@@ -260,6 +261,10 @@
       {/each}
     </aside>
 
+    <div class="sidebar-credit-box">
+      <a href="https://salzstand.montag.nrw" target="_blank" rel="noopener noreferrer">salzstand.montag.nrw</a>
+    </div>
+
     <section class="module-shell">
       {#if activeTab === 'dashboard'}
         <Dashboard bind:data />
@@ -289,6 +294,10 @@
       Mehr
     </button>
   </nav>
+
+  <footer class="app-footer">
+    <p>© 2026 by Marc Montag. All rights reserved.</p>
+  </footer>
 </main>
 
 <style>
@@ -399,12 +408,35 @@
     min-width: 0;
   }
 
-  .brand-copy p {
+  .brand-line {
     margin: 3px 0 0;
     color: var(--text-muted);
     font-size: 0.8rem;
     letter-spacing: 0.16em;
     text-transform: uppercase;
+  }
+
+  .sidebar-credit-box {
+    background: var(--surface);
+    border: 1px solid var(--surface-border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    box-shadow: var(--shadow);
+    font-size: 0.68rem;
+    letter-spacing: 0.04em;
+    text-align: center;
+    opacity: 0.6;
+  }
+
+  .sidebar-credit-box a {
+    color: var(--text-muted);
+    text-decoration: none;
+    text-underline-offset: 2px;
+  }
+
+  .sidebar-credit-box a:hover {
+    text-decoration: underline;
+    opacity: 1;
   }
 
   .app-version {
@@ -505,8 +537,23 @@
   .app-layout {
     display: grid;
     grid-template-columns: 240px minmax(0, 1fr);
+    grid-template-areas:
+      "sidebar content"
+      "credit  content";
     gap: 14px;
     align-items: start;
+  }
+
+  .sidebar-nav {
+    grid-area: sidebar;
+  }
+
+  .sidebar-credit-box {
+    grid-area: credit;
+  }
+
+  .module-shell {
+    grid-area: content;
   }
 
   .sidebar-nav {
@@ -618,6 +665,20 @@
     min-height: 340px;
   }
 
+  .app-footer {
+    margin-top: 14px;
+    padding: 0 2px;
+  }
+
+  .app-footer p {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.74rem;
+    letter-spacing: 0.05em;
+    text-align: right;
+    opacity: 0.82;
+  }
+
   @media (max-width: 900px) {
     main {
       padding: 10px;
@@ -676,6 +737,16 @@
       border-color: rgba(98, 184, 221, 0.42);
       background: rgba(98, 184, 221, 0.16);
       color: var(--text-main);
+    }
+
+    .app-footer {
+      margin-top: 12px;
+      padding-bottom: 6px;
+    }
+
+    .app-footer p {
+      text-align: left;
+      font-size: 0.7rem;
     }
 
     .mobile-more-trigger {

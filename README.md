@@ -326,7 +326,7 @@ npm install
 npm run build
 ```
 
-Die gebauten Dateien landen in `ui/dist/` und müssen nach `data/` kopiert werden.
+Die gebauten Dateien werden per `extra_scripts` automatisch nach `data/` geschrieben.
 
 ### Firmware kompilieren und flashen
 
@@ -337,6 +337,10 @@ pio run --target uploadfs
 # Firmware kompilieren und flashen
 pio run --target upload
 ```
+
+Hinweis zur Speicheraufteilung auf ESP32-C3:
+- Das Projekt nutzt eine benutzerdefinierte Partitionstabelle in `partitions.csv`.
+- Ergebnis: deutlich größere OTA-App-Slots (je `0x1A0000`) und weiterhin ausreichend LittleFS (`0x0B0000`).
 
 ### Seriell-Monitor
 

@@ -7,6 +7,7 @@
   export let data;
   export let loadConfig;
   export let module = 'sensor';
+  export let onDirtyStateChange = () => {};
 
   let wifiConfig = {
     ssid: '',
@@ -19,10 +20,19 @@
   let wifiScanLoading = false;
   let wifiScanError = '';
   let wifiValidation = { attempted: false, touched: {} };
+  let wifiConfigDirty = false;
+  let sensorOffsetValue = '0';
+  let sensorHeightValue = '95';
+  let sensorConfigDirty = false;
   let sensorIntervalValue = '5';
   let sensorIntervalUnit = 'seconds';
   let sensorIntervalValidation = { attempted: false, touched: false };
+  let sensorIntervalDirty = false;
+  let lastSyncedSampleIntervalSeconds = null;
+  let lastSyncedSensorOffset = null;
+  let lastSyncedSensorHeight = null;
   let mqttConfig = { server: '', port: 1883, user: '', password: '', discovery: true };
+  let mqttConfigDirty = false;
   let mqttHasPassword = false;
   let mqttDeviceId = '';
   const DEFAULT_PUSH_SENDER_NAME = 'Salzstand Control';
@@ -47,7 +57,9 @@
     subjectTemplate: DEFAULT_PUSH_SUBJECT,
     bodyTemplate: DEFAULT_PUSH_BODY
   };
+  let pushConfigDirty = false;
   let pushHasAuthPassword = false;
+  let lastReportedDirtyState = null;
 
   const PASSWORD_MASK = '*****';
   const SAMPLE_UNITS = [
@@ -212,6 +224,85 @@
     sensorIntervalValidation = { ...sensorIntervalValidation, touched: true };
   }
 
+  function markSensorIntervalDirty() {
+    sensorIntervalDirty = true;
+    sensorConfigDirty = true;
+  }
+
+  function markSensorConfigDirty() {
+    sensorConfigDirty = true;
+  }
+
+  function markWifiConfigDirty() {
+    wifiConfigDirty = true;
+  }
+
+  function markMqttConfigDirty() {
+    mqttConfigDirty = true;
+  }
+
+  function markPushConfigDirty() {
+    pushConfigDirty = true;
+  }
+
+  function isCurrentModuleDirty() {
+    if (module === 'sensor') {
+      return sensorConfigDirty || sensorIntervalDirty;
+    }
+    if (module === 'wifi') {
+      return wifiConfigDirty;
+    }
+    if (module === 'mqtt_ha') {
+      return mqttConfigDirty;
+    }
+    if (module === 'push') {
+      return pushConfigDirty;
+    }
+    return false;
+  }
+
+  function reportDirtyState(force = false) {
+    const currentDirtyState = isCurrentModuleDirty();
+    if (force || currentDirtyState !== lastReportedDirtyState) {
+      onDirtyStateChange(currentDirtyState);
+      lastReportedDirtyState = currentDirtyState;
+    }
+  }
+
+  export async function saveCurrentModule() {
+    if (module === 'sensor') {
+      return await saveSensorConfig();
+    }
+    if (module === 'wifi') {
+      return await saveWifiConfig();
+    }
+    if (module === 'mqtt_ha') {
+      return await saveMqttConfig();
+    }
+    if (module === 'push') {
+      return await savePushConfig();
+    }
+    return true;
+  }
+
+  export function discardCurrentModuleChanges() {
+    if (module === 'sensor') {
+      sensorConfigDirty = false;
+      sensorIntervalDirty = false;
+      sensorIntervalValidation = { attempted: false, touched: false };
+    } else if (module === 'wifi') {
+      wifiConfigDirty = false;
+      wifiValidation = { attempted: false, touched: {} };
+    } else if (module === 'mqtt_ha') {
+      mqttConfigDirty = false;
+    } else if (module === 'push') {
+      pushConfigDirty = false;
+    }
+
+    loadAllConfig();
+    reportDirtyState(true);
+  }
+
   function enableStaticIp() {
     wifiMode = 'static';
     if (!wifiConfig.staticIp.subnet) {
@@ -303,6 +394,9 @@
     fetch('/api/wifi', { cache: 'no-store' })
       .then(r => r.json())
       .then(c => {
+        if (wifiConfigDirty) {
+          return;
+        }
         wifiConfig = {
           ssid: c.ssid || '',
           password: isMaskedPassword(c.password || '') ? '' : (c.password || ''),
@@ -321,6 +415,9 @@
     fetch('/api/mqtt', { cache: 'no-store' })
       .then(r => r.json())
       .then(c => {
+        if (mqttConfigDirty) {
+          return;
+        }
         mqttConfig = {
           server: c.server || '',
           port: c.port || 1883,
@@ -335,6 +432,9 @@
     fetch('/api/push', { cache: 'no-store' })
       .then(r => r.json())
       .then(c => {
+        if (pushConfigDirty) {
+          return;
+        }
         pushConfig = {
           enabled: c.enabled ?? false,
           smtpServer: c.smtpServer || '',
@@ -359,15 +459,34 @@
   }
 
   $: if (module === 'sensor' && data.sampleIntervalSeconds) {
-    syncSensorIntervalFromSeconds(data.sampleIntervalSeconds);
+    const nextSampleIntervalSeconds = Math.max(MIN_SAMPLE_INTERVAL_SECONDS, Number(data.sampleIntervalSeconds) || MIN_SAMPLE_INTERVAL_SECONDS);
+    const shouldSyncFromConfig = !sensorIntervalDirty && nextSampleIntervalSeconds !== lastSyncedSampleIntervalSeconds;
+    if (shouldSyncFromConfig) {
+      syncSensorIntervalFromSeconds(nextSampleIntervalSeconds);
+      lastSyncedSampleIntervalSeconds = nextSampleIntervalSeconds;
+    }
   }
+
+  $: if (module === 'sensor') {
+    const nextOffset = String(data.offset ?? '');
+    const nextHeight = String(data.behaelterhoehe ?? '');
+    const shouldSyncGeometry = !sensorConfigDirty && (nextOffset !== lastSyncedSensorOffset || nextHeight !== lastSyncedSensorHeight);
+    if (shouldSyncGeometry) {
+      sensorOffsetValue = nextOffset;
+      sensorHeightValue = nextHeight;
+      lastSyncedSensorOffset = nextOffset;
+      lastSyncedSensorHeight = nextHeight;
+    }
+  }
+
+  $: reportDirtyState();
 
   async function saveSensorConfig() {
     sensorIntervalValidation = { ...sensorIntervalValidation, attempted: true };
     const sampleIntervalSeconds = getSampleIntervalSeconds();
     if (sampleIntervalSeconds < MIN_SAMPLE_INTERVAL_SECONDS) {
       showNotice('error', 'Die Ultraschall-Abtastrate muss mindestens 5 Sekunden betragen.');
-      return;
+      return false;
     }
 
     try {
@@ -375,22 +494,31 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          behaelterhoehe: data.behaelterhoehe,
-          offset: data.offset,
+          behaelterhoehe: Number(sensorHeightValue),
+          offset: Number(sensorOffsetValue),
           sampleIntervalSeconds
         })
       });
 
       if (!response.ok) {
         showNotice('error', 'Behälter-Konfiguration konnte nicht gespeichert werden.');
-        return;
+        return false;
       }
 
       showNotice('success', 'Behälter-Konfiguration gespeichert.');
+      data.offset = Number(sensorOffsetValue);
+      data.behaelterhoehe = Number(sensorHeightValue);
       data.sampleIntervalSeconds = sampleIntervalSeconds;
+      lastSyncedSensorOffset = String(data.offset);
+      lastSyncedSensorHeight = String(data.behaelterhoehe);
+      lastSyncedSampleIntervalSeconds = sampleIntervalSeconds;
+      sensorConfigDirty = false;
+      sensorIntervalDirty = false;
       sensorIntervalValidation = { attempted: false, touched: false };
+      return true;
     } catch (_) {
       showNotice('error', 'Behälter-Konfiguration konnte nicht gespeichert werden.');
+      return false;
     }
   }
 
@@ -399,7 +527,7 @@
       wifiValidation = { ...wifiValidation, attempted: true };
       if (!wifiConfig.staticIp.ip || !wifiConfig.staticIp.subnet || !wifiConfig.staticIp.dns) {
         showNotice('error', 'Für statische IP sind Statische IP, Subnetz und DNS erforderlich.');
-        return;
+        return false;
       }
     }
 
@@ -422,13 +550,16 @@
 
       if (!response.ok) {
         showNotice('error', 'WiFi-Konfiguration konnte nicht gespeichert werden.');
-        return;
+        return false;
       }
 
       showNotice('success', 'WiFi-Konfiguration gespeichert. Neustart erforderlich.');
+      wifiConfigDirty = false;
       wifiValidation = { attempted: false, touched: {} };
+      return true;
     } catch (_) {
       showNotice('error', 'WiFi-Konfiguration konnte nicht gespeichert werden.');
+      return false;
     }
   }
 
@@ -442,12 +573,15 @@
 
       if (!response.ok) {
         showNotice('error', 'MQTT-Konfiguration konnte nicht gespeichert werden.');
-        return;
+        return false;
       }
 
       showNotice('success', 'MQTT-Konfiguration gespeichert. Neustart erforderlich.');
+      mqttConfigDirty = false;
+      return true;
     } catch (_) {
       showNotice('error', 'MQTT-Konfiguration konnte nicht gespeichert werden.');
+      return false;
     }
   }
 
@@ -505,6 +639,7 @@
         sendMinute: time.minute
       };
       showNotice('success', 'Push-Konfiguration gespeichert.');
+      pushConfigDirty = false;
       return true;
     } catch (_) {
       showNotice('error', 'Push-Konfiguration konnte nicht gespeichert werden.');
@@ -564,18 +699,18 @@
 </script>
 
 {#if module === 'sensor'}
-  <div class="config-section">
+  <div class="config-section" on:input={markSensorConfigDirty}>
     <h2>Konfiguration</h2>
     <p>Messgeometrie, Korrekturwerte und Ultraschall-Abtastrate für die Füllstandsberechnung.</p>
 
     <label class="field-row">
       <span>Offset (cm):</span>
-      <input class="sensor-fixed-width" type="number" bind:value={data.offset} />
+      <input class="sensor-fixed-width" type="number" bind:value={sensorOffsetValue} />
     </label>
 
     <label class="field-row">
       <span>Behälterhöhe (cm):</span>
-      <input class="sensor-fixed-width" type="number" bind:value={data.behaelterhoehe} />
+      <input class="sensor-fixed-width" type="number" bind:value={sensorHeightValue} />
     </label>
 
     <label class="field-row field-row--top-align">
@@ -586,12 +721,13 @@
           min="1"
           step="1"
           bind:value={sensorIntervalValue}
+          on:input={markSensorIntervalDirty}
           aria-required="true"
           aria-invalid={hasSensorIntervalError()}
           class:input-invalid={hasSensorIntervalError()}
           on:blur={touchSensorInterval}
         />
-        <select bind:value={sensorIntervalUnit} on:blur={touchSensorInterval}>
+        <select bind:value={sensorIntervalUnit} on:change={markSensorIntervalDirty} on:blur={touchSensorInterval}>
           {#each SAMPLE_UNITS as unit}
             <option value={unit.value}>{unit.label}</option>
           {/each}
@@ -647,7 +783,7 @@
     <button class="primary" on:click={saveSensorConfig}>Speichern</button>
   </div>
 {:else if module === 'wifi'}
-  <div class="config-section">
+  <div class="config-section" on:input={markWifiConfigDirty} on:change={markWifiConfigDirty}>
     <h2>WiFi</h2>
     <p>Netzwerkzugang und optionale statische IP-Konfiguration.</p>
     <label class="field-row">
@@ -747,7 +883,7 @@
     <button class="primary" on:click={saveWifiConfig}>Speichern</button>
   </div>
 {:else if module === 'push'}
-  <div class="config-section">
+  <div class="config-section" on:input={markPushConfigDirty} on:change={markPushConfigDirty}>
     <h2>Push Nachricht</h2>
     <p>E-Mail-Benachrichtigung bei Schwellwert mit Sofortversand und geplanten Erinnerungen.</p>
 
@@ -805,7 +941,7 @@
     </div>
   </div>
 {:else if module === 'mqtt_ha'}
-  <div class="config-section">
+  <div class="config-section" on:input={markMqttConfigDirty} on:change={markMqttConfigDirty}>
     <h2>MQTT & HA</h2>
     <p>Broker-Zugangsdaten und Home Assistant Discovery.</p>
     <div class="mqtt-status-row">

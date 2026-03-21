@@ -15,6 +15,11 @@
   let latestTag = '';
 
   let activeTab = 'dashboard';
+  let pendingTab = null;
+  let showUnsavedDialog = false;
+  let unsavedActionLoading = false;
+  let activeConfigDirty = false;
+  let configModuleRef;
   let theme = 'night';
   const DATA_CACHE_KEY = 'salzstand-last-data';
   let data = {
@@ -33,6 +38,75 @@
   };
 
   let ws;
+  const EDITABLE_MODULE_TABS = ['sensor', 'wifi', 'mqtt_ha', 'push'];
+
+  function isEditableModuleTab(tabId) {
+    return EDITABLE_MODULE_TABS.includes(tabId);
+  }
+
+  function handleConfigDirtyStateChange(isDirty) {
+    activeConfigDirty = Boolean(isDirty);
+  }
+
+  function requestTabChange(nextTab) {
+    if (nextTab === activeTab) {
+      return;
+    }
+
+    if (isEditableModuleTab(activeTab) && activeConfigDirty) {
+      pendingTab = nextTab;
+      showUnsavedDialog = true;
+      return;
+    }
+
+    activeTab = nextTab;
+  }
+
+  function closeUnsavedDialog() {
+    if (unsavedActionLoading) {
+      return;
+    }
+    showUnsavedDialog = false;
+    pendingTab = null;
+  }
+
+  function handleUnsavedBackdropClick(event) {
+    if (event.target === event.currentTarget) {
+      closeUnsavedDialog();
+    }
+  }
+
+  async function saveAndLeave() {
+    if (unsavedActionLoading || !pendingTab) {
+      return;
+    }
+
+    unsavedActionLoading = true;
+    try {
+      const saved = await configModuleRef?.saveCurrentModule?.();
+      if (!saved) {
+        return;
+      }
+      activeConfigDirty = false;
+      activeTab = pendingTab;
+      showUnsavedDialog = false;
+      pendingTab = null;
+    } finally {
+      unsavedActionLoading = false;
+    }
+  }
+
+  function discardAndLeave() {
+    if (unsavedActionLoading || !pendingTab) {
+      return;
+    }
+
+    configModuleRef?.discardCurrentModuleChanges?.();
+    activeConfigDirty = false;
+    activeTab = pendingTab;
+    showUnsavedDialog = false;
+    pendingTab = null;
+  }
 
   function restoreCachedData() {
     try {
@@ -178,6 +252,18 @@
 <main>
   <GlobalDialogs />
 
+  {#if showUnsavedDialog}
+    <div class="unsaved-backdrop" role="presentation" on:click={handleUnsavedBackdropClick}>
+      <div class="unsaved-dialog" role="dialog" aria-modal="true" aria-labelledby="unsaved-title">
+        <h3 id="unsaved-title">Du verlässt die Seite, deine Eingaben sind noch nicht gespeichert!</h3>
+        <div class="unsaved-actions">
+          <button class="unsaved-save" type="button" on:click={saveAndLeave} disabled={unsavedActionLoading}>Speichern &amp; verlassen</button>
+          <button class="unsaved-discard" type="button" on:click={discardAndLeave} disabled={unsavedActionLoading}>Verwerfen &amp; verlassen</button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
   <header class="topbar">
     <div class="topbar-row">
       <div class="brand">
@@ -208,7 +294,7 @@
     </div>
     <nav>
       {#each tabs as tab}
-        <button on:click={() => activeTab = tab.id} class:active={activeTab === tab.id}>
+        <button on:click={() => requestTabChange(tab.id)} class:active={activeTab === tab.id}>
           <span class={"tab-icon " + tab.id} aria-hidden="true">
             {#if tab.id === 'dashboard'}
               <svg viewBox="0 0 24 24"><path d="M4 13h7V4H4v9zm9 7h7V4h-7v16zM4 20h7v-5H4v5z"/></svg>
@@ -237,13 +323,13 @@
     {#if activeTab === 'dashboard'}
       <Dashboard bind:data />
     {:else if activeTab === 'sensor'}
-      <Config bind:data {loadConfig} module="sensor" />
+      <Config bind:this={configModuleRef} bind:data {loadConfig} module="sensor" onDirtyStateChange={handleConfigDirtyStateChange} />
     {:else if activeTab === 'wifi'}
-      <Config bind:data {loadConfig} module="wifi" />
+      <Config bind:this={configModuleRef} bind:data {loadConfig} module="wifi" onDirtyStateChange={handleConfigDirtyStateChange} />
     {:else if activeTab === 'mqtt_ha'}
-      <Config bind:data {loadConfig} module="mqtt_ha" />
+      <Config bind:this={configModuleRef} bind:data {loadConfig} module="mqtt_ha" onDirtyStateChange={handleConfigDirtyStateChange} />
     {:else if activeTab === 'push'}
-      <Config bind:data {loadConfig} module="push" />
+      <Config bind:this={configModuleRef} bind:data {loadConfig} module="push" onDirtyStateChange={handleConfigDirtyStateChange} />
     {:else if activeTab === 'update'}
       <Update currentVersion={versionStr} />
     {:else if activeTab === 'debug'}
@@ -297,6 +383,72 @@
     max-width: 1300px;
     margin: 0 auto;
     padding: 16px;
+  }
+
+  .unsaved-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(0, 8, 20, 0.65);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+
+  .unsaved-dialog {
+    width: min(560px, 100%);
+    border: 1px solid var(--surface-border);
+    border-radius: 14px;
+    background: var(--card-grad);
+    box-shadow: var(--shadow);
+    padding: 18px;
+  }
+
+  .unsaved-dialog h3 {
+    margin: 0;
+    color: var(--text-main);
+    font-size: 1.02rem;
+    line-height: 1.35;
+  }
+
+  .unsaved-actions {
+    margin-top: 14px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .unsaved-save,
+  .unsaved-discard {
+    border: none;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-weight: 700;
+    cursor: pointer;
+    color: #ffffff;
+  }
+
+  .unsaved-save {
+    background: #2f9e44;
+  }
+
+  .unsaved-save:hover {
+    background: #27863a;
+  }
+
+  .unsaved-discard {
+    background: #d94848;
+  }
+
+  .unsaved-discard:hover {
+    background: #bd3b3b;
+  }
+
+  .unsaved-save:disabled,
+  .unsaved-discard:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
   }
 
   .topbar {

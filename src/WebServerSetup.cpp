@@ -153,8 +153,10 @@ function showMsg(cls,txt){
         std::string password = request->arg("password").c_str();
         WifiConfig config{ssid, password};
         WifiManager::getInstance().setConfig(config);
+        request->onDisconnect([]() {
+            delay(500);
+            ESP.restart();
+        });
         request->send(200, "text/plain", "OK");
-        delay(1000);
-        ESP.restart();
     });
 }

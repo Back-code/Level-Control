@@ -631,6 +631,7 @@
     grid-template-columns: 80px 1fr;
     gap: 30px;
     align-items: start;
+    width: 100%;
   }
   input {
     margin-left: 0;

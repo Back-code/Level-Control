@@ -126,11 +126,12 @@ std::vector<WifiNetwork> WifiManager::scanNetworks() {
 void WifiManager::setConfig(const WifiConfig& config) {
     config_ = config;
     Config fullConfig;
-    fullConfig.version = 1;
+    if (!ConfigStore::getInstance().load(fullConfig)) {
+        fullConfig.version = 1;
+        fullConfig.behaelterhoehe = 95.0;
+        fullConfig.offset = 0.0;
+    }
     fullConfig.wifi = config_;
-    fullConfig.staticIp = {};
-    fullConfig.behaelterhoehe = 95.0;
-    fullConfig.offset = 0.0;
     ConfigStore::getInstance().save(fullConfig);
 }
 

@@ -172,11 +172,13 @@ void WifiManager::setConfig(const WifiConfig& config, const StaticIpConfig& stat
     config_ = config;
     staticConfig_ = staticConfig;
     Config fullConfig;
-    fullConfig.version = 1;
+    if (!ConfigStore::getInstance().load(fullConfig)) {
+        fullConfig.version = 1;
+        fullConfig.behaelterhoehe = 95.0;
+        fullConfig.offset = 0.0;
+    }
     fullConfig.wifi = config_;
     fullConfig.staticIp = staticConfig_;
-    fullConfig.behaelterhoehe = 95.0;
-    fullConfig.offset = 0.0;
     ConfigStore::getInstance().save(fullConfig);
 }
 

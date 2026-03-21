@@ -29,6 +29,9 @@ constexpr unsigned long kMinSampleIntervalSeconds = 5UL;
 constexpr uint32_t kRestartDelayMs = 1500;
 constexpr size_t kUploadBufferSize = 4096;
 constexpr unsigned long kManifestCacheTtlMs = 300000;
+constexpr char kUiFallbackHtml[] PROGMEM = R"HTML(
+<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Salzstand UI startet...</title><style>body{font-family:Segoe UI,Tahoma,sans-serif;background:#0f172a;color:#e2e8f0;display:grid;place-items:center;min-height:100vh;margin:0}.card{max-width:520px;background:#111827;border:1px solid #334155;border-radius:14px;padding:20px}h1{font-size:1.1rem;margin:0 0 10px}p{line-height:1.5;color:#cbd5e1}</style></head><body><div class="card"><h1>UI wird initialisiert</h1><p>Das Dateisystem wird gerade bereitgestellt. Diese Seite versucht automatisch neu zu laden.</p><p id="s">Nächster Versuch in 3s...</p></div><script>let t=3;const s=document.getElementById('s');const i=setInterval(()=>{t--;s.textContent='Nächster Versuch in '+t+'s...';if(t<=0){clearInterval(i);location.reload();}},1000);</script></body></html>
+)HTML";
 
 struct RemoteUpdateContext {
     WebServerDashboard *dashboard;
@@ -693,7 +696,7 @@ void WebServerDashboard::setupRoutes() {
     // Explizite Route fuer index.html als robuste Absicherung gegen Static-Fallback-Probleme.
     server_.on("/index.html", HTTP_GET, [this](AsyncWebServerRequest *request) {
         if (!ensureLittleFsMounted()) {
-            request->send(503, "application/json", "{\"error\":\"ui_not_available\"}");
+            request->send(200, "text/html", kUiFallbackHtml);
             return;
         }
         request->send(LittleFS, "/index.html", "text/html");

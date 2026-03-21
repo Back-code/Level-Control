@@ -64,11 +64,13 @@ private:
     bool uploadActive_ = false;
     bool uploadFailed_ = false;
     bool restartScheduled_ = false;
+    bool littleFsMounted_ = false;
     String uploadTarget_;
     String uploadFilename_;
 
     void setupRoutes();
     void setupUpdateRoutes();
+    bool ensureLittleFsMounted();
     void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len);
 
     void resetUpdateState(const std::string& source, const std::string& target);

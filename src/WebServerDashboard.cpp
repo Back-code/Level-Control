@@ -128,13 +128,28 @@ WebServerDashboard& WebServerDashboard::getInstance() {
 }
 
 WebServerDashboard::WebServerDashboard() : server_(80), ws_("/ws") {
-    if (!LittleFS.begin()) {
+    littleFsMounted_ = LittleFS.begin();
+    if (!littleFsMounted_) {
         DebugLogger::getInstance().log(LogLevel::ERROR, "LittleFS mount failed");
     }
     ws_.onEvent([this](AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
         onWsEvent(server, client, type, arg, data, len);
     });
     server_.addHandler(&ws_);
+}
+
+bool WebServerDashboard::ensureLittleFsMounted() {
+    if (littleFsMounted_) {
+        return true;
+    }
+
+    littleFsMounted_ = LittleFS.begin();
+    if (littleFsMounted_) {
+        DebugLogger::getInstance().log(LogLevel::INFO, "LittleFS remounted");
+    } else {
+        DebugLogger::getInstance().log(LogLevel::ERROR, "LittleFS remount failed");
+    }
+    return littleFsMounted_;
 }
 
 void WebServerDashboard::init() {
@@ -676,8 +691,8 @@ void WebServerDashboard::setupRoutes() {
     });
 
     // Explizite Route fuer index.html als robuste Absicherung gegen Static-Fallback-Probleme.
-    server_.on("/index.html", HTTP_GET, [](AsyncWebServerRequest *request) {
-        if (!LittleFS.begin()) {
+    server_.on("/index.html", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        if (!ensureLittleFsMounted()) {
             request->send(503, "application/json", "{\"error\":\"ui_not_available\"}");
             return;
         }

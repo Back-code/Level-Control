@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { createHash } from 'crypto';
+import { spawnSync } from 'child_process';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
@@ -10,6 +11,44 @@ const buildDir = join(root, '.pio', 'build', 'esp32-c3-devkitm-1');
 const version = JSON.parse(readFileSync(join(root, 'version.json'), 'utf8'));
 const versionStr = `${version.major}.${String(version.minor).padStart(2, '0')}.${String(version.commit).padStart(3, '0')}`;
 const releaseDir = join(root, 'release', `v${versionStr}`);
+
+function runGit(args) {
+  const result = spawnSync('git', args, {
+    cwd: root,
+    encoding: 'utf8'
+  });
+  if (result.status !== 0) {
+    return '';
+  }
+  return (result.stdout || '').trim();
+}
+
+function getPreviousTag(currentTag) {
+  const tagOutput = runGit(['tag', '--sort=v:refname']);
+  if (!tagOutput) {
+    return '';
+  }
+  const tags = tagOutput
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => /^v\d+\.\d+\.\d+$/.test(line));
+
+  const previous = tags.filter((tag) => tag !== currentTag).pop();
+  return previous || '';
+}
+
+function getChangelogLines(previousTag) {
+  const range = previousTag ? `${previousTag}..HEAD` : 'HEAD';
+  const logOutput = runGit(['log', '--pretty=format:%s', range]);
+  if (!logOutput) {
+    return [];
+  }
+  return logOutput
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => `- ${line}`);
+}
 
 const assets = [
   { source: 'bootloader.bin', target: `salzstand-v${versionStr}-bootloader.bin`, kind: 'bootloader' },
@@ -44,6 +83,9 @@ writeFileSync(join(releaseDir, 'SHA256SUMS.txt'), sums);
 
 const app = copiedAssets.find((asset) => asset.kind === 'app');
 const webui = copiedAssets.find((asset) => asset.kind === 'webui');
+const currentTag = `v${versionStr}`;
+const previousTag = getPreviousTag(currentTag);
+const changelogLines = getChangelogLines(previousTag);
 
 const manifest = {
   version: versionStr,
@@ -70,6 +112,9 @@ const releaseNotes = [
   `## Salzstand v${versionStr}`,
   '',
   'Release-Assets für OTA und manuelles Flashen.',
+  '',
+  previousTag ? `Changelog seit ${previousTag}:` : 'Changelog:',
+  ...(changelogLines.length ? changelogLines : ['- Keine Änderungen gefunden.']),
   '',
   'Enthalten:',
   `- ${app.target}`,

@@ -629,7 +629,7 @@
   .field-control--inline {
     display: grid;
     grid-template-columns: 80px 1fr;
-    gap: 15px;
+    gap: 30px;
     align-items: start;
   }
   input {

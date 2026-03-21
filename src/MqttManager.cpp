@@ -29,6 +29,7 @@ static const char* TOPIC_UPDATE_STATE      = "salzstand/update/state";
 static const char* TOPIC_UPDATE_INSTALL    = "salzstand/update/install";
 static const char* TOPIC_CFG_SAMPLE_STATE  = "salzstand/config/sampleinterval/state";
 static const char* TOPIC_CFG_SAMPLE_SET    = "salzstand/config/sampleinterval/set";
+static constexpr unsigned long kMetadataRepublishIntervalMs = 60000UL;
 
 static std::string toLowerCopy(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
@@ -134,11 +135,22 @@ void MqttManager::handleMessage(const char* topic, const std::string& payload) {
 
 // ------------------------------------------------------------------ Subscribe
 void MqttManager::subscribeToTopics() {
-    mqttClient_.subscribe(TOPIC_CFG_HOEHE_SET);
-    mqttClient_.subscribe(TOPIC_CFG_OFFSET_SET);
-    mqttClient_.subscribe(TOPIC_CFG_SAMPLE_SET);
-    mqttClient_.subscribe(TOPIC_UPDATE_INSTALL);
-    DebugLogger::getInstance().log(LogLevel::INFO, "MQTT: config topics subscribed");
+    const bool okHoehe = mqttClient_.subscribe(TOPIC_CFG_HOEHE_SET);
+    const bool okOffset = mqttClient_.subscribe(TOPIC_CFG_OFFSET_SET);
+    const bool okSample = mqttClient_.subscribe(TOPIC_CFG_SAMPLE_SET);
+    const bool okUpdate = mqttClient_.subscribe(TOPIC_UPDATE_INSTALL);
+
+    if (okHoehe && okOffset && okSample && okUpdate) {
+        DebugLogger::getInstance().log(LogLevel::INFO, "MQTT: config topics subscribed");
+    } else {
+        DebugLogger::getInstance().log(
+            LogLevel::WARN,
+            std::string("MQTT subscribe failed: hoehe=") + (okHoehe ? "1" : "0") +
+            " offset=" + (okOffset ? "1" : "0") +
+            " sample=" + (okSample ? "1" : "0") +
+            " update=" + (okUpdate ? "1" : "0")
+        );
+    }
 }
 
 // ------------------------------------------------------------------ Init
@@ -226,6 +238,9 @@ void MqttManager::connect() {
             publishConfig();
             publishSystemState();
             publishUpdateState();
+        } else {
+            DebugLogger::getInstance().log(LogLevel::WARN,
+                "MQTT: ConfigStore load failed during connect, skip discovery/config publish");
         }
 
         DebugLogger::getInstance().log(LogLevel::INFO, "MQTT connected");
@@ -246,6 +261,22 @@ void MqttManager::loop() {
     if (mqttClient_.connected()) {
         mqttClient_.loop();
         state_ = MqttConnectionState::CONNECTED;
+
+        static unsigned long lastMetadataRepublishMs = 0;
+        const unsigned long now = millis();
+        if (lastMetadataRepublishMs == 0 || now - lastMetadataRepublishMs >= kMetadataRepublishIntervalMs) {
+            lastMetadataRepublishMs = now;
+            Config config;
+            if (ConfigStore::getInstance().load(config)) {
+                publishConfig();
+                if (config.mqtt.discovery) {
+                    publishDiscovery();
+                }
+            } else {
+                DebugLogger::getInstance().log(LogLevel::WARN,
+                    "MQTT: ConfigStore load failed during periodic metadata republish");
+            }
+        }
     }
 }
 
@@ -263,7 +294,10 @@ void MqttManager::disconnect() {
 // ------------------------------------------------------------------ Publish generic
 void MqttManager::publish(const char* topic, const char* payload, bool retain) {
     if (isConnected()) {
-        mqttClient_.publish(topic, payload, retain);
+        if (!mqttClient_.publish(topic, payload, retain)) {
+            DebugLogger::getInstance().log(LogLevel::WARN,
+                std::string("MQTT publish failed: ") + topic);
+        }
     }
 }
 

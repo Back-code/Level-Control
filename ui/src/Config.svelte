@@ -631,10 +631,6 @@
     grid-template-columns: 80px 1fr;
     gap: 8px;
     align-items: start;
-    width: 100%;
-  }
-  .field-control--inline input {
-    width: 100%;
   }
   input {
     margin-left: 0;

@@ -25,6 +25,9 @@
   let mqttConfig = { server: '', port: 1883, user: '', password: '', discovery: true };
   let mqttHasPassword = false;
   let mqttDeviceId = '';
+  const DEFAULT_PUSH_SENDER_NAME = 'Salzstand Control';
+  const DEFAULT_PUSH_SUBJECT = 'Salzstand Control Warnung: Stand hat {level_percent}% erreicht. Salz nachfüllen!';
+  const DEFAULT_PUSH_BODY = 'Der Füllstand hat {level_percent}% ({level_cm} cm) erreicht.\nBitte Salz nachfüllen!\nDein Salzstand Control';
   let pushConfig = {
     enabled: false,
     smtpServer: '',
@@ -33,15 +36,16 @@
     startTls: false,
     authUser: '',
     authPassword: '',
-    senderName: '',
+    senderName: DEFAULT_PUSH_SENDER_NAME,
     senderEmail: '',
     recipientEmail: '',
     triggerPercent: 20,
     sendHour: 8,
     sendMinute: 0,
-    cycleMinutes: 1440,
-    subjectTemplate: 'Salzstand Warnung: {level_percent}%',
-    bodyTemplate: 'Der Fuellstand liegt bei {level_percent}% ({level_cm} cm).'
+    reminderCycle: 'day',
+    reminderWeekday: 1,
+    subjectTemplate: DEFAULT_PUSH_SUBJECT,
+    bodyTemplate: DEFAULT_PUSH_BODY
   };
   let pushHasAuthPassword = false;
 
@@ -53,6 +57,26 @@
     { value: 'days', label: 'Tage', seconds: 86400 }
   ];
   const MIN_SAMPLE_INTERVAL_SECONDS = 5;
+  const PUSH_CYCLE_OPTIONS = [
+    { value: 'day', label: 'Tag' },
+    { value: 'week', label: 'Woche' },
+    { value: 'month', label: 'Monat' }
+  ];
+  const WEEKDAY_OPTIONS = [
+    { value: 1, label: 'Montag' },
+    { value: 2, label: 'Dienstag' },
+    { value: 3, label: 'Mittwoch' },
+    { value: 4, label: 'Donnerstag' },
+    { value: 5, label: 'Freitag' },
+    { value: 6, label: 'Samstag' },
+    { value: 7, label: 'Sonntag' }
+  ];
+  const TIME_OPTIONS = Array.from({ length: 96 }, (_, index) => {
+    const hour = Math.floor(index / 4);
+    const minute = (index % 4) * 15;
+    const value = toTimeString(hour, minute);
+    return { value, label: value };
+  });
 
   function toTimeString(hour, minute) {
     const h = Math.max(0, Math.min(23, Number(hour) || 0));
@@ -65,6 +89,72 @@
     const hour = Math.max(0, Math.min(23, Number(rawHour) || 0));
     const minute = Math.max(0, Math.min(59, Number(rawMinute) || 0));
     return { hour, minute };
+  }
+
+  function normalizeReminderCycle(value) {
+    return ['day', 'week', 'month'].includes(value) ? value : 'day';
+  }
+
+  function normalizeReminderWeekday(value) {
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue) || numericValue < 1 || numericValue > 7) {
+      return 1;
+    }
+    return Math.round(numericValue);
+  }
+
+  function reminderCycleFromLegacyMinutes(value) {
+    const cycleMinutes = Number(value) || 1440;
+    if (cycleMinutes >= 43200) {
+      return 'month';
+    }
+    if (cycleMinutes >= 10080) {
+      return 'week';
+    }
+    return 'day';
+  }
+
+  function getPushEncryptionMode() {
+    if (pushConfig.useSsl) {
+      return 'ssl';
+    }
+    if (pushConfig.startTls) {
+      return 'starttls';
+    }
+    return 'none';
+  }
+
+  function applyPushEncryptionMode(mode) {
+    const useSsl = mode === 'ssl';
+    const startTls = mode === 'starttls';
+    let smtpPort = Math.max(1, Number(pushConfig.smtpPort) || 0);
+
+    if (useSsl && (!smtpPort || smtpPort === 587)) {
+      smtpPort = 465;
+    }
+    if (startTls && (!smtpPort || smtpPort === 465)) {
+      smtpPort = 587;
+    }
+    if (!useSsl && !startTls && !smtpPort) {
+      smtpPort = 587;
+    }
+
+    pushConfig = {
+      ...pushConfig,
+      useSsl,
+      startTls,
+      smtpPort
+    };
+  }
+
+  function getReminderDescription() {
+    if (pushConfig.reminderCycle === 'week') {
+      return 'Erinnerung jede Woche am ausgewählten Tag zur Uhrzeit.';
+    }
+    if (pushConfig.reminderCycle === 'month') {
+      return 'Erinnerung am ersten ausgewählten Wochentag des Monats zur Uhrzeit.';
+    }
+    return 'Erinnerung jeden Tag zur ausgewählten Uhrzeit.';
   }
 
   function isMaskedPassword(value) {
@@ -253,15 +343,16 @@
           startTls: c.startTls ?? false,
           authUser: c.authUser || '',
           authPassword: isMaskedPassword(c.authPassword || '') ? '' : (c.authPassword || ''),
-          senderName: c.senderName || '',
+          senderName: c.senderName || DEFAULT_PUSH_SENDER_NAME,
           senderEmail: c.senderEmail || '',
           recipientEmail: c.recipientEmail || '',
           triggerPercent: c.triggerPercent ?? 20,
           sendHour: c.sendHour ?? 8,
           sendMinute: c.sendMinute ?? 0,
-          cycleMinutes: c.cycleMinutes ?? 1440,
-          subjectTemplate: c.subjectTemplate || 'Salzstand Warnung: {level_percent}%',
-          bodyTemplate: c.bodyTemplate || 'Der Fuellstand liegt bei {level_percent}% ({level_cm} cm).'
+          reminderCycle: normalizeReminderCycle(c.reminderCycle || reminderCycleFromLegacyMinutes(c.cycleMinutes)),
+          reminderWeekday: normalizeReminderWeekday(c.reminderWeekday ?? 1),
+          subjectTemplate: c.subjectTemplate || DEFAULT_PUSH_SUBJECT,
+          bodyTemplate: c.bodyTemplate || DEFAULT_PUSH_BODY
         };
         pushHasAuthPassword = (c.hasAuthPassword ?? false) || isMaskedPassword(c.authPassword || '');
       });
@@ -362,10 +453,12 @@
 
   async function savePushConfig() {
     const triggerPercent = Math.max(0, Math.min(100, Number(pushConfig.triggerPercent) || 0));
-    const cycleMinutes = Math.max(1, Number(pushConfig.cycleMinutes) || 1);
     const time = parseTimeString(toTimeString(pushConfig.sendHour, pushConfig.sendMinute));
     const useSsl = Boolean(pushConfig.useSsl);
     const startTls = !useSsl && Boolean(pushConfig.startTls);
+    const reminderCycle = normalizeReminderCycle(pushConfig.reminderCycle);
+    const reminderWeekday = normalizeReminderWeekday(pushConfig.reminderWeekday);
+    const cycleMinutes = reminderCycle === 'week' ? 10080 : reminderCycle === 'month' ? 43200 : 1440;
     let smtpPort = Math.max(1, Number(pushConfig.smtpPort) || 0);
     if (useSsl && (!smtpPort || smtpPort === 587)) {
       smtpPort = 465;
@@ -388,6 +481,8 @@
           startTls,
           triggerPercent,
           cycleMinutes,
+          reminderCycle,
+          reminderWeekday,
           sendHour: time.hour,
           sendMinute: time.minute
         })
@@ -404,7 +499,8 @@
         useSsl,
         startTls,
         triggerPercent,
-        cycleMinutes,
+        reminderCycle,
+        reminderWeekday,
         sendHour: time.hour,
         sendMinute: time.minute
       };
@@ -653,63 +749,59 @@
 {:else if module === 'push'}
   <div class="config-section">
     <h2>Push Nachricht</h2>
-    <p>E-Mail Benachrichtigung bei Schwellwert mit Zeitfenster und Versandzyklus.</p>
+    <p>E-Mail-Benachrichtigung bei Schwellwert mit Sofortversand und geplanten Erinnerungen.</p>
 
     <label class="checkbox-row"><input type="checkbox" bind:checked={pushConfig.enabled} /> Push Benachrichtigung aktivieren</label>
 
-    <label class="field-row"><span>SMTP Server:</span><input bind:value={pushConfig.smtpServer} /></label>
+    <label class="field-row"><span>SMTP-Server:</span><input bind:value={pushConfig.smtpServer} /></label>
     <label class="field-row"><span>SMTP Port:</span><input type="number" min="1" bind:value={pushConfig.smtpPort} /></label>
 
-    <div class="choice-grid" role="group" aria-label="SMTP Sicherheit">
-      <label class="choice-card"><input type="checkbox" checked={pushConfig.useSsl} on:change={(e) => {
-        const checked = e.currentTarget.checked;
-        pushConfig = {
-          ...pushConfig,
-          useSsl: checked,
-          startTls: checked ? false : pushConfig.startTls,
-          smtpPort: checked && Number(pushConfig.smtpPort) === 587 ? 465 : pushConfig.smtpPort
-        };
-      }} /><span>SSL/TLS (implizit)</span></label>
-      <label class="choice-card"><input type="checkbox" checked={pushConfig.startTls} on:change={(e) => {
-        const checked = e.currentTarget.checked;
-        pushConfig = {
-          ...pushConfig,
-          startTls: checked,
-          useSsl: checked ? false : pushConfig.useSsl,
-          smtpPort: checked && Number(pushConfig.smtpPort) === 465 ? 587 : pushConfig.smtpPort
-        };
-      }} /><span>STARTTLS</span></label>
-    </div>
+    <label class="field-row field-row--top-align">
+      <span>Verschlüsselung:</span>
+      <div class="field-control field-control--choice">
+        <div class="choice-grid choice-grid--triple" role="radiogroup" aria-label="SMTP-Verschlüsselung">
+          <label class="choice-card"><input type="radio" name="push-encryption" checked={getPushEncryptionMode() === 'none'} on:change={() => applyPushEncryptionMode('none')} /><span>Keine</span></label>
+          <label class="choice-card"><input type="radio" name="push-encryption" checked={getPushEncryptionMode() === 'ssl'} on:change={() => applyPushEncryptionMode('ssl')} /><span>SSL/TLS</span></label>
+          <label class="choice-card"><input type="radio" name="push-encryption" checked={getPushEncryptionMode() === 'starttls'} on:change={() => applyPushEncryptionMode('starttls')} /><span>STARTTLS</span></label>
+        </div>
+        {#if getPushEncryptionMode() === 'starttls'}
+          <p class="helper-text error">STARTTLS wird aktuell vom SMTP-Client noch nicht unterstützt. Für den Versand bitte derzeit SSL/TLS verwenden.</p>
+        {/if}
+      </div>
+    </label>
 
-    <label class="field-row"><span>SMTP Benutzer:</span><input bind:value={pushConfig.authUser} /></label>
+    <label class="field-row"><span>SMTP-Benutzer:</span><input bind:value={pushConfig.authUser} /></label>
     <div class="field-row">
-      <span>SMTP Passwort:</span>
+      <span>SMTP-Passwort:</span>
       <PasswordInput bind:value={pushConfig.authPassword} hasStoredPassword={pushHasAuthPassword} mask={PASSWORD_MASK} />
     </div>
 
-    <h3>Absender / Empfaenger</h3>
+    <h3>Absender / Empfänger</h3>
     <label class="field-row"><span>Absender Name:</span><input bind:value={pushConfig.senderName} /></label>
-    <label class="field-row"><span>Versenderadresse:</span><input type="email" bind:value={pushConfig.senderEmail} /></label>
-    <label class="field-row"><span>Empfaengeradresse:</span><input type="email" bind:value={pushConfig.recipientEmail} /></label>
+    <label class="field-row"><span>Absenderadresse:</span><input type="email" bind:value={pushConfig.senderEmail} /></label>
+    <label class="field-row"><span>Empfängeradresse:</span><input type="email" bind:value={pushConfig.recipientEmail} /></label>
 
-    <h3>Ausloeser</h3>
-    <label class="field-row"><span>Schwellwert (%):</span><input type="number" min="0" max="100" step="0.1" bind:value={pushConfig.triggerPercent} /></label>
+    <h3>Auslöser</h3>
+    <label class="field-row"><span>Schwellwert &lt; (%):</span><input type="number" min="0" max="100" step="0.1" bind:value={pushConfig.triggerPercent} /></label>
 
     <h3>Zeitsteuerung</h3>
-    <label class="field-row"><span>Versand ab Uhrzeit:</span><input type="time" value={toTimeString(pushConfig.sendHour, pushConfig.sendMinute)} on:change={(e) => {
+    <p class="helper-text">Beim Erreichen des Schwellwerts wird sofort gesendet. Danach laufen Erinnerungen nach dem gewählten Zyklus.</p>
+    <label class="field-row"><span>Zyklus:</span><select class="theme-select" bind:value={pushConfig.reminderCycle}><option value="day">Tag</option><option value="week">Woche</option><option value="month">Monat</option></select></label>
+    <label class="field-row"><span>Uhrzeit:</span><select class="theme-select time-select" value={toTimeString(pushConfig.sendHour, pushConfig.sendMinute)} on:change={(e) => {
       const parsed = parseTimeString(e.currentTarget.value);
       pushConfig = { ...pushConfig, sendHour: parsed.hour, sendMinute: parsed.minute };
-    }} /></label>
-    <label class="field-row"><span>Zyklus (Minuten):</span><input type="number" min="1" step="1" bind:value={pushConfig.cycleMinutes} /></label>
+    }}>{#each TIME_OPTIONS as option}<option value={option.value}>{option.label}</option>{/each}</select></label>
+    <label class="field-row"><span>Tag:</span><select class="theme-select" bind:value={pushConfig.reminderWeekday} disabled={pushConfig.reminderCycle === 'day'}>{#each WEEKDAY_OPTIONS as option}<option value={option.value}>{option.label}</option>{/each}</select></label>
+    <p class="helper-text">{getReminderDescription()}</p>
 
     <h3>Vorlage</h3>
     <label class="field-row"><span>Betreff:</span><input bind:value={pushConfig.subjectTemplate} /></label>
     <label class="field-row field-row--top-align"><span>Body:</span><textarea rows="6" bind:value={pushConfig.bodyTemplate}></textarea></label>
     <p class="helper-text">Platzhalter: <code>{'{level_percent}'}</code>, <code>{'{level_cm}'}</code>, <code>{'{raw_distance_m}'}</code>, <code>{'{timestamp}'}</code>, <code>{'{device_id}'}</code>, <code>{'{ip}'}</code>, <code>{'{ssid}'}</code></p>
 
-    <div class="button-row">
-      <button class="secondary-sm" type="button" on:click={sendPushTest}>Test-E-Mail senden</button>
+    <div class="button-row button-row--push">
       <button class="primary" on:click={savePushConfig}>Speichern</button>
+      <button class="secondary-sm" type="button" on:click={sendPushTest}>Test-E-Mail senden</button>
     </div>
   </div>
 {:else if module === 'mqtt_ha'}
@@ -829,6 +921,9 @@
   .field-control {
     width: min(360px, 100%);
   }
+  .field-control--choice {
+    width: min(560px, 100%);
+  }
   .field-control--inline {
     display: grid;
     grid-template-columns: 80px minmax(0, 1fr);
@@ -897,17 +992,57 @@
     width: min(360px, 100%);
     border: 1px solid var(--surface-border);
     border-radius: 10px;
-    padding: 8px 10px;
+    padding: 8px 42px 8px 12px;
     background: rgba(255, 255, 255, 0.14);
     color: var(--text-main);
+    appearance: none;
+    background-image:
+      linear-gradient(45deg, transparent 50%, var(--accent) 50%),
+      linear-gradient(135deg, var(--accent) 50%, transparent 50%),
+      linear-gradient(to right, transparent, transparent);
+    background-position:
+      calc(100% - 20px) calc(50% - 3px),
+      calc(100% - 14px) calc(50% - 3px),
+      100% 0;
+    background-size: 6px 6px, 6px 6px, 2.5em 100%;
+    background-repeat: no-repeat;
+  }
+  .theme-select {
+    background-color: var(--surface-2);
+    color: var(--text-main);
+    border: 1px solid var(--surface-border);
+  }
+  .theme-select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(98, 184, 221, 0.2);
+  }
+  :global(html[data-theme='night']) .theme-select {
+    background-color: rgba(10, 24, 48, 0.96);
+    color: #e8f0ff;
+  }
+  :global(html[data-theme='day']) .theme-select {
+    background-color: rgba(242, 255, 247, 0.96);
+    color: #163326;
+  }
+  .theme-select option {
+    color: inherit;
   }
   select option {
     background-color: #0d1b33;
     color: #e8f0ff;
   }
+  :global(html[data-theme='night']) select {
+    background-color: rgba(10, 24, 48, 0.92);
+    color: #e8f0ff;
+  }
   :global(html[data-theme='day']) select option {
     background-color: #f2fff7;
     color: #183326;
+  }
+  :global(html[data-theme='day']) select {
+    background-color: rgba(242, 255, 247, 0.92);
+    color: #163326;
   }
   .input-action-row {
     display: grid;
@@ -940,6 +1075,10 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
     margin: 12px 0 4px;
+  }
+  .choice-grid--triple {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-top: 0;
   }
   .choice-card {
     display: flex;
@@ -1098,6 +1237,13 @@
     flex-wrap: wrap;
     margin-top: 10px;
   }
+  .button-row--push {
+    gap: 400px;
+    flex-wrap: nowrap;
+  }
+  .time-select {
+    width: min(180px, 100%);
+  }
   .sensor-sketch {
     margin-top: 14px;
     margin-bottom: 8px;
@@ -1131,6 +1277,13 @@
     }
     .choice-grid {
       grid-template-columns: 1fr;
+    }
+    .choice-grid--triple {
+      grid-template-columns: 1fr;
+    }
+    .button-row--push {
+      gap: 12px;
+      flex-wrap: wrap;
     }
     .topic-card summary {
       align-items: flex-start;

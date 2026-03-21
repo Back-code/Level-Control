@@ -26,7 +26,6 @@ constexpr char kLatestReleaseUrl[] = "https://github.com/Back-code/Salzstand/rel
 constexpr char kUpdateUserAgent[] = "Salzstand-OTA/1.0";
 constexpr char kPasswordMask[] = "*****";
 constexpr unsigned long kMinSampleIntervalSeconds = 5UL;
-constexpr unsigned long kMinPushCycleMinutes = 1UL;
 constexpr uint32_t kRestartDelayMs = 1500;
 constexpr size_t kUploadBufferSize = 4096;
 constexpr unsigned long kManifestCacheTtlMs = 300000;
@@ -96,6 +95,30 @@ int compareVersions(const std::string& left, const std::string& right) {
         return leftPatch < rightPatch ? -1 : 1;
     }
     return 0;
+}
+
+std::string normalizeReminderCycle(const std::string& value) {
+    if (value == "week" || value == "month") {
+        return value;
+    }
+    return "day";
+}
+
+std::string reminderCycleFromLegacyMinutes(unsigned long cycleMinutes) {
+    if (cycleMinutes >= 43200UL) {
+        return "month";
+    }
+    if (cycleMinutes >= 10080UL) {
+        return "week";
+    }
+    return "day";
+}
+
+int normalizeReminderWeekday(int value) {
+    if (value < 1 || value > 7) {
+        return 1;
+    }
+    return value;
 }
 }
 
@@ -492,7 +515,8 @@ void WebServerDashboard::setupRoutes() {
             doc["triggerPercent"] = config.push.triggerPercent;
             doc["sendHour"] = config.push.sendHour;
             doc["sendMinute"] = config.push.sendMinute;
-            doc["cycleMinutes"] = config.push.cycleMinutes;
+            doc["reminderCycle"] = config.push.reminderCycle;
+            doc["reminderWeekday"] = config.push.reminderWeekday;
             doc["subjectTemplate"] = config.push.subjectTemplate;
             doc["bodyTemplate"] = config.push.bodyTemplate;
             std::string json;
@@ -528,15 +552,22 @@ void WebServerDashboard::setupRoutes() {
             config.push.authPassword = newAuthPassword;
         }
 
-        config.push.senderName = doc["senderName"] | "";
+        config.push.senderName = doc["senderName"] | "Salzstand Control";
         config.push.senderEmail = doc["senderEmail"] | "";
         config.push.recipientEmail = doc["recipientEmail"] | "";
         config.push.triggerPercent = doc["triggerPercent"] | 20.0f;
         config.push.sendHour = doc["sendHour"] | 8;
         config.push.sendMinute = doc["sendMinute"] | 0;
-        config.push.cycleMinutes = doc["cycleMinutes"] | 1440UL;
-        config.push.subjectTemplate = doc["subjectTemplate"] | "Salzstand Warnung: {level_percent}%";
-        config.push.bodyTemplate = doc["bodyTemplate"] | "Der Fuellstand liegt bei {level_percent}% ({level_cm} cm).";
+        const unsigned long legacyCycleMinutes = doc["cycleMinutes"] | 1440UL;
+        const std::string reminderCycle = doc["reminderCycle"] | "";
+        config.push.reminderCycle = reminderCycle.empty()
+            ? reminderCycleFromLegacyMinutes(legacyCycleMinutes)
+            : normalizeReminderCycle(reminderCycle);
+        config.push.reminderWeekday = normalizeReminderWeekday(doc["reminderWeekday"] | 1);
+        config.push.subjectTemplate = doc["subjectTemplate"]
+            | "Salzstand Control Warnung: Stand hat {level_percent}% erreicht. Salz nachfüllen!";
+        config.push.bodyTemplate = doc["bodyTemplate"]
+            | "Der Füllstand hat {level_percent}% ({level_cm} cm) erreicht.\nBitte Salz nachfüllen!\nDein Salzstand Control";
 
         if (config.push.smtpPort <= 0) config.push.smtpPort = 587;
         if (config.push.useSsl && config.push.smtpPort == 587) {
@@ -551,8 +582,16 @@ void WebServerDashboard::setupRoutes() {
         if (config.push.sendHour > 23) config.push.sendHour = 23;
         if (config.push.sendMinute < 0) config.push.sendMinute = 0;
         if (config.push.sendMinute > 59) config.push.sendMinute = 59;
-        if (config.push.cycleMinutes < kMinPushCycleMinutes) {
-            config.push.cycleMinutes = kMinPushCycleMinutes;
+        if (config.push.senderName.empty()) {
+            config.push.senderName = "Salzstand Control";
+        }
+        config.push.reminderCycle = normalizeReminderCycle(config.push.reminderCycle);
+        config.push.reminderWeekday = normalizeReminderWeekday(config.push.reminderWeekday);
+        if (config.push.subjectTemplate.empty()) {
+            config.push.subjectTemplate = "Salzstand Control Warnung: Stand hat {level_percent}% erreicht. Salz nachfüllen!";
+        }
+        if (config.push.bodyTemplate.empty()) {
+            config.push.bodyTemplate = "Der Füllstand hat {level_percent}% ({level_cm} cm) erreicht.\nBitte Salz nachfüllen!\nDein Salzstand Control";
         }
 
         if (!ConfigStore::getInstance().save(config)) {

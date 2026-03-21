@@ -31,15 +31,16 @@ struct PushConfig {
     bool startTls = false;
     std::string authUser;
     std::string authPassword;
-    std::string senderName;
+    std::string senderName = "Salzstand Control";
     std::string senderEmail;
     std::string recipientEmail;
     float triggerPercent = 20.0f;
     int sendHour = 8;
     int sendMinute = 0;
-    unsigned long cycleMinutes = 1440UL;
-    std::string subjectTemplate = "Salzstand Warnung: {level_percent}%";
-    std::string bodyTemplate = "Der Fuellstand liegt bei {level_percent}% ({level_cm} cm).";
+    std::string reminderCycle = "day";
+    int reminderWeekday = 1;
+    std::string subjectTemplate = "Salzstand Control Warnung: Stand hat {level_percent}% erreicht. Salz nachfüllen!";
+    std::string bodyTemplate = "Der Füllstand hat {level_percent}% ({level_cm} cm) erreicht.\nBitte Salz nachfüllen!\nDein Salzstand Control";
 };
 
 struct Config {

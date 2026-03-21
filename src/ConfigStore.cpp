@@ -2,6 +2,42 @@
 #include <Preferences.h>
 #include <ArduinoJson.h>
 
+namespace {
+std::string normalizeReminderCycle(const std::string& value) {
+    if (value == "week" || value == "month") {
+        return value;
+    }
+    return "day";
+}
+
+std::string reminderCycleFromLegacyMinutes(unsigned long cycleMinutes) {
+    if (cycleMinutes >= 43200UL) {
+        return "month";
+    }
+    if (cycleMinutes >= 10080UL) {
+        return "week";
+    }
+    return "day";
+}
+
+int normalizeReminderWeekday(int value) {
+    if (value < 1 || value > 7) {
+        return 1;
+    }
+    return value;
+}
+
+unsigned long legacyMinutesFromReminderCycle(const std::string& cycle) {
+    if (cycle == "week") {
+        return 10080UL;
+    }
+    if (cycle == "month") {
+        return 43200UL;
+    }
+    return 1440UL;
+}
+}
+
 ConfigStore& ConfigStore::getInstance() {
     static ConfigStore instance;
     return instance;
@@ -40,15 +76,22 @@ bool ConfigStore::load(Config& config) {
     config.push.startTls = doc["push"]["startTls"] | false;
     config.push.authUser = doc["push"]["authUser"] | "";
     config.push.authPassword = doc["push"]["authPassword"] | "";
-    config.push.senderName = doc["push"]["senderName"] | "";
+    config.push.senderName = doc["push"]["senderName"] | "Salzstand Control";
     config.push.senderEmail = doc["push"]["senderEmail"] | "";
     config.push.recipientEmail = doc["push"]["recipientEmail"] | "";
     config.push.triggerPercent = doc["push"]["triggerPercent"] | 20.0f;
     config.push.sendHour = doc["push"]["sendHour"] | 8;
     config.push.sendMinute = doc["push"]["sendMinute"] | 0;
-    config.push.cycleMinutes = doc["push"]["cycleMinutes"] | 1440UL;
-    config.push.subjectTemplate = doc["push"]["subjectTemplate"] | "Salzstand Warnung: {level_percent}%";
-    config.push.bodyTemplate = doc["push"]["bodyTemplate"] | "Der Fuellstand liegt bei {level_percent}% ({level_cm} cm).";
+    const unsigned long legacyCycleMinutes = doc["push"]["cycleMinutes"] | 1440UL;
+    const std::string storedReminderCycle = doc["push"]["reminderCycle"] | "";
+    config.push.reminderCycle = storedReminderCycle.empty()
+        ? reminderCycleFromLegacyMinutes(legacyCycleMinutes)
+        : normalizeReminderCycle(storedReminderCycle);
+    config.push.reminderWeekday = normalizeReminderWeekday(doc["push"]["reminderWeekday"] | 1);
+    config.push.subjectTemplate = doc["push"]["subjectTemplate"]
+        | "Salzstand Control Warnung: Stand hat {level_percent}% erreicht. Salz nachfüllen!";
+    config.push.bodyTemplate = doc["push"]["bodyTemplate"]
+        | "Der Füllstand hat {level_percent}% ({level_cm} cm) erreicht.\nBitte Salz nachfüllen!\nDein Salzstand Control";
     if (config.push.smtpPort <= 0) {
         config.push.smtpPort = 587;
     }
@@ -64,8 +107,16 @@ bool ConfigStore::load(Config& config) {
     if (config.push.sendMinute < 0 || config.push.sendMinute > 59) {
         config.push.sendMinute = 0;
     }
-    if (config.push.cycleMinutes < 1UL) {
-        config.push.cycleMinutes = 1UL;
+    if (config.push.senderName.empty()) {
+        config.push.senderName = "Salzstand Control";
+    }
+    config.push.reminderCycle = normalizeReminderCycle(config.push.reminderCycle);
+    config.push.reminderWeekday = normalizeReminderWeekday(config.push.reminderWeekday);
+    if (config.push.subjectTemplate.empty()) {
+        config.push.subjectTemplate = "Salzstand Control Warnung: Stand hat {level_percent}% erreicht. Salz nachfüllen!";
+    }
+    if (config.push.bodyTemplate.empty()) {
+        config.push.bodyTemplate = "Der Füllstand hat {level_percent}% ({level_cm} cm) erreicht.\nBitte Salz nachfüllen!\nDein Salzstand Control";
     }
     config.behaelterhoehe = doc["behaelterhoehe"] | 95.0;
     config.offset = doc["offset"] | 0.0;
@@ -101,7 +152,7 @@ bool ConfigStore::save(const Config& config) {
     doc["push"]["startTls"] = config.push.startTls;
     doc["push"]["authUser"] = config.push.authUser;
     doc["push"]["authPassword"] = config.push.authPassword;
-    doc["push"]["senderName"] = config.push.senderName;
+    doc["push"]["senderName"] = config.push.senderName.empty() ? "Salzstand Control" : config.push.senderName;
     doc["push"]["senderEmail"] = config.push.senderEmail;
     doc["push"]["recipientEmail"] = config.push.recipientEmail;
     doc["push"]["triggerPercent"] = config.push.triggerPercent < 0.0f
@@ -113,9 +164,16 @@ bool ConfigStore::save(const Config& config) {
     doc["push"]["sendMinute"] = config.push.sendMinute < 0
         ? 0
         : (config.push.sendMinute > 59 ? 59 : config.push.sendMinute);
-    doc["push"]["cycleMinutes"] = config.push.cycleMinutes < 1UL ? 1UL : config.push.cycleMinutes;
-    doc["push"]["subjectTemplate"] = config.push.subjectTemplate;
-    doc["push"]["bodyTemplate"] = config.push.bodyTemplate;
+    const std::string reminderCycle = normalizeReminderCycle(config.push.reminderCycle);
+    doc["push"]["reminderCycle"] = reminderCycle;
+    doc["push"]["reminderWeekday"] = normalizeReminderWeekday(config.push.reminderWeekday);
+    doc["push"]["cycleMinutes"] = legacyMinutesFromReminderCycle(reminderCycle);
+    doc["push"]["subjectTemplate"] = config.push.subjectTemplate.empty()
+        ? "Salzstand Control Warnung: Stand hat {level_percent}% erreicht. Salz nachfüllen!"
+        : config.push.subjectTemplate;
+    doc["push"]["bodyTemplate"] = config.push.bodyTemplate.empty()
+        ? "Der Füllstand hat {level_percent}% ({level_cm} cm) erreicht.\nBitte Salz nachfüllen!\nDein Salzstand Control"
+        : config.push.bodyTemplate;
     doc["behaelterhoehe"] = config.behaelterhoehe;
     doc["offset"] = config.offset;
     doc["sampleIntervalSeconds"] = config.sampleIntervalSeconds < 5UL ? 5UL : config.sampleIntervalSeconds;

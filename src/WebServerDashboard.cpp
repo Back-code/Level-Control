@@ -670,13 +670,9 @@ void WebServerDashboard::setupRoutes() {
         }
     });
 
-    // Root explizit bedienen, damit die UI auch bei Handler-Reihenfolge stabil lädt.
+    // Root explizit bedienen; eigentliche Datei-Auslieferung macht der Static-Handler.
     server_.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-        if (!LittleFS.exists("/index.html")) {
-            request->send(503, "application/json", "{\"error\":\"ui_not_available\"}");
-            return;
-        }
-        request->send(LittleFS, "/index.html", "text/html");
+        request->redirect("/index.html");
     });
 
     // Serve static files from LittleFS (nach API-Routen registrieren)

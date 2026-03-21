@@ -333,17 +333,17 @@
 
     <label class="field-row">
       <span>Offset (cm):</span>
-      <input type="number" bind:value={data.offset} />
+      <input class="sensor-fixed-width" type="number" bind:value={data.offset} />
     </label>
 
     <label class="field-row">
       <span>Behälterhöhe (cm):</span>
-      <input type="number" bind:value={data.behaelterhoehe} />
+      <input class="sensor-fixed-width" type="number" bind:value={data.behaelterhoehe} />
     </label>
 
     <label class="field-row field-row--top-align">
       <span><FieldLabel text="Abtastrate Ultraschall:" required={true} /></span>
-      <div class="field-control field-control--inline">
+      <div class="field-control field-control--inline sensor-inline-width">
         <input
           type="number"
           min="1"
@@ -628,9 +628,26 @@
   }
   .field-control--inline {
     display: grid;
-    grid-template-columns: 80px 1fr;
+    grid-template-columns: 80px minmax(0, 1fr);
     gap: 30px;
     align-items: start;
+    width: min(360px, 100%);
+  }
+  .sensor-fixed-width {
+    width: min(250px, 100%);
+  }
+  .sensor-inline-width {
+    width: min(250px, 100%);
+    grid-template-columns: 70px 150px;
+    gap: 30px;
+  }
+  .field-control--inline.sensor-inline-width input {
+    width: 70px;
+  }
+  .field-control--inline.sensor-inline-width select {
+    width: 150px;
+  }
+  .field-control--inline input {
     width: 100%;
   }
   input {
@@ -646,7 +663,7 @@
     width: 100%;
   }
   .field-control--inline select {
-    width: 100%;
+    width: 100px;
   }
   .input-invalid {
     border-color: #ff6b6b;

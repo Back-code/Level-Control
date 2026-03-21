@@ -5,7 +5,6 @@
 <section class="dashboard-hero">
   <p class="eyebrow">Monitoring</p>
   <h2>Live Dashboard</h2>
-  <p class="hero-sub">Echtzeitansicht für Füllstand, Netzwerk und Laufzeit des Sensors.</p>
 </section>
 
 <div class="grid">
@@ -59,12 +58,6 @@
     background: linear-gradient(100deg, var(--text-main) 0%, var(--accent) 100%);
     -webkit-background-clip: text;
     background-clip: text;
-  }
-
-  .hero-sub {
-    margin: 0;
-    color: var(--text-muted);
-    font-size: 0.9rem;
   }
 
   .grid {

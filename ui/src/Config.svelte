@@ -261,8 +261,7 @@
     return false;
   }
 
-  function reportDirtyState(force = false) {
-    const currentDirtyState = isCurrentModuleDirty();
+  function reportDirtyState(force = false, currentDirtyState = isCurrentModuleDirty()) {
     if (force || currentDirtyState !== lastReportedDirtyState) {
       onDirtyStateChange(currentDirtyState);
       lastReportedDirtyState = currentDirtyState;
@@ -479,7 +478,7 @@
     }
   }
 
-  $: reportDirtyState();
+  $: reportDirtyState(false, isCurrentModuleDirty());
 
   async function saveSensorConfig() {
     sensorIntervalValidation = { ...sensorIntervalValidation, attempted: true };
@@ -701,7 +700,6 @@
 {#if module === 'sensor'}
   <div class="config-section" on:input={markSensorConfigDirty}>
     <h2>Konfiguration</h2>
-    <p>Messgeometrie, Korrekturwerte und Ultraschall-Abtastrate für die Füllstandsberechnung.</p>
 
     <label class="field-row">
       <span>Offset (cm):</span>
@@ -785,7 +783,6 @@
 {:else if module === 'wifi'}
   <div class="config-section" on:input={markWifiConfigDirty} on:change={markWifiConfigDirty}>
     <h2>WiFi</h2>
-    <p>Netzwerkzugang und optionale statische IP-Konfiguration.</p>
     <label class="field-row">
       <span>SSID:</span>
       <div class="input-action-row">
@@ -885,7 +882,6 @@
 {:else if module === 'push'}
   <div class="config-section" on:input={markPushConfigDirty} on:change={markPushConfigDirty}>
     <h2>Push Nachricht</h2>
-    <p>E-Mail-Benachrichtigung bei Schwellwert mit Sofortversand und geplanten Erinnerungen.</p>
 
     <label class="checkbox-row"><input type="checkbox" bind:checked={pushConfig.enabled} /> Push Benachrichtigung aktivieren</label>
 
@@ -943,7 +939,6 @@
 {:else if module === 'mqtt_ha'}
   <div class="config-section" on:input={markMqttConfigDirty} on:change={markMqttConfigDirty}>
     <h2>MQTT & HA</h2>
-    <p>Broker-Zugangsdaten und Home Assistant Discovery.</p>
     <div class="mqtt-status-row">
       <span class="mqtt-dot mqtt-dot--{data.mqttState || 'unknown'}" aria-hidden="true"></span>
       <span class="mqtt-state-text">{getMqttStateLabel(data.mqttState)}</span>
@@ -1182,8 +1177,9 @@
   }
   .input-action-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 8px;
+    grid-template-columns: minmax(0, 360px) auto;
+    justify-content: start;
+    gap: 30px;
     align-items: center;
   }
   .icon-button {
@@ -1408,6 +1404,11 @@
       grid-template-columns: 1fr;
       gap: 6px;
     }
+    .input-action-row {
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+    }
+
     .field-control--inline {
       grid-template-columns: 80px 1fr;
     }

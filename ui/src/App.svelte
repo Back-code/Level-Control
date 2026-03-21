@@ -15,11 +15,6 @@
   let latestTag = '';
 
   let activeTab = 'dashboard';
-  let pendingTab = null;
-  let showUnsavedDialog = false;
-  let unsavedActionLoading = false;
-  let activeConfigDirty = false;
-  let configModuleRef;
   let theme = 'night';
   const DATA_CACHE_KEY = 'salzstand-last-data';
   let data = {
@@ -38,74 +33,31 @@
   };
 
   let ws;
-  const EDITABLE_MODULE_TABS = ['sensor', 'wifi', 'mqtt_ha', 'push'];
+  let showMobileMoreMenu = false;
 
-  function isEditableModuleTab(tabId) {
-    return EDITABLE_MODULE_TABS.includes(tabId);
-  }
-
-  function handleConfigDirtyStateChange(isDirty) {
-    activeConfigDirty = Boolean(isDirty);
-  }
+  const MOBILE_PRIMARY_TAB_IDS = ['dashboard', 'sensor', 'wifi'];
 
   function requestTabChange(nextTab) {
     if (nextTab === activeTab) {
+      showMobileMoreMenu = false;
       return;
     }
-
-    if (isEditableModuleTab(activeTab) && activeConfigDirty) {
-      pendingTab = nextTab;
-      showUnsavedDialog = true;
-      return;
-    }
-
     activeTab = nextTab;
+    showMobileMoreMenu = false;
   }
 
-  function closeUnsavedDialog() {
-    if (unsavedActionLoading) {
-      return;
-    }
-    showUnsavedDialog = false;
-    pendingTab = null;
+  function toggleMobileMoreMenu() {
+    showMobileMoreMenu = !showMobileMoreMenu;
   }
 
-  function handleUnsavedBackdropClick(event) {
+  function closeMobileMoreMenu() {
+    showMobileMoreMenu = false;
+  }
+
+  function handleMobileMoreBackdropClick(event) {
     if (event.target === event.currentTarget) {
-      closeUnsavedDialog();
+      closeMobileMoreMenu();
     }
-  }
-
-  async function saveAndLeave() {
-    if (unsavedActionLoading || !pendingTab) {
-      return;
-    }
-
-    unsavedActionLoading = true;
-    try {
-      const saved = await configModuleRef?.saveCurrentModule?.();
-      if (!saved) {
-        return;
-      }
-      activeConfigDirty = false;
-      activeTab = pendingTab;
-      showUnsavedDialog = false;
-      pendingTab = null;
-    } finally {
-      unsavedActionLoading = false;
-    }
-  }
-
-  function discardAndLeave() {
-    if (unsavedActionLoading || !pendingTab) {
-      return;
-    }
-
-    configModuleRef?.discardCurrentModuleChanges?.();
-    activeConfigDirty = false;
-    activeTab = pendingTab;
-    showUnsavedDialog = false;
-    pendingTab = null;
   }
 
   function restoreCachedData() {
@@ -246,19 +198,24 @@
     { id: 'debug', label: 'Debug', subtitle: 'Live-Logs sowie NVS-Snapshot fuer Diagnose und Fehleranalyse.' }
   ];
 
-  $: activeTabMeta = tabs.find(tab => tab.id === activeTab) || tabs[0];
+  $: mobilePrimaryTabs = tabs.filter((tab) => MOBILE_PRIMARY_TAB_IDS.includes(tab.id));
+  $: mobileMoreTabs = tabs.filter((tab) => !MOBILE_PRIMARY_TAB_IDS.includes(tab.id));
+  $: isMoreTabActive = mobileMoreTabs.some((tab) => tab.id === activeTab);
 </script>
 
 <main>
   <GlobalDialogs />
 
-  {#if showUnsavedDialog}
-    <div class="unsaved-backdrop" role="presentation" on:click={handleUnsavedBackdropClick}>
-      <div class="unsaved-dialog" role="dialog" aria-modal="true" aria-labelledby="unsaved-title">
-        <h3 id="unsaved-title">Du verlässt die Seite, deine Eingaben sind noch nicht gespeichert!</h3>
-        <div class="unsaved-actions">
-          <button class="unsaved-save" type="button" on:click={saveAndLeave} disabled={unsavedActionLoading}>Speichern &amp; verlassen</button>
-          <button class="unsaved-discard" type="button" on:click={discardAndLeave} disabled={unsavedActionLoading}>Verwerfen &amp; verlassen</button>
+  {#if showMobileMoreMenu}
+    <div class="mobile-more-backdrop" role="presentation" on:click={handleMobileMoreBackdropClick}>
+      <div class="mobile-more-sheet" role="dialog" aria-modal="true" aria-label="Weitere Module">
+        <h3>Weitere Module</h3>
+        <div class="mobile-more-list">
+          {#each mobileMoreTabs as tab}
+            <button class="mobile-more-item" class:active={activeTab === tab.id} on:click={() => requestTabChange(tab.id)}>
+              {tab.label}
+            </button>
+          {/each}
         </div>
       </div>
     </div>
@@ -268,7 +225,7 @@
     <div class="topbar-row">
       <div class="brand">
         <span class="brand-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M12 2 3 6v6c0 5.25 3.66 9.8 9 10 5.34-.2 9-4.75 9-10V6l-9-4zm0 3.18 6 2.67v4.15c0 3.76-2.47 7.24-6 7.98-3.53-.74-6-4.22-6-7.98V7.85l6-2.67zM8 12h8v2H8v-2z"/></svg>
+          <svg viewBox="0 0 24 24"><path d="M6.25 12a1.75 1.75 0 1 1 3.5 0 1.75 1.75 0 0 1-3.5 0Zm5.2 0a.95.95 0 0 1 .95-.95A5.6 5.6 0 0 0 18 5.45a.95.95 0 1 1 1.9 0 7.5 7.5 0 0 1-7.5 7.5.95.95 0 0 1-.95-.95Zm.95 4.55a.95.95 0 0 1 0-1.9A9.2 9.2 0 0 0 21.6 5.45a.95.95 0 1 1 1.9 0c0 6.04-4.91 10.95-10.95 10.95a.95.95 0 0 1-.15 0Zm0-8.95a.95.95 0 1 1 0-1.9 1.7 1.7 0 0 0 1.7-1.7.95.95 0 1 1 1.9 0 3.6 3.6 0 0 1-3.6 3.6Z"/></svg>
         </span>
         <div class="brand-copy">
           <h1>Salzstand Control</h1>
@@ -292,50 +249,46 @@
         </div>
       </div>
     </div>
-    <nav>
-      {#each tabs as tab}
-        <button on:click={() => requestTabChange(tab.id)} class:active={activeTab === tab.id}>
-          <span class={"tab-icon " + tab.id} aria-hidden="true">
-            {#if tab.id === 'dashboard'}
-              <svg viewBox="0 0 24 24"><path d="M4 13h7V4H4v9zm9 7h7V4h-7v16zM4 20h7v-5H4v5z"/></svg>
-            {:else if tab.id === 'sensor'}
-              <svg viewBox="0 0 24 24"><path d="M7 4a2 2 0 0 0-2 2v12a5 5 0 1 0 10 0V6a2 2 0 0 0-2-2H7zm2 2h2v8.26a3 3 0 1 1-2 0V6z"/></svg>
-            {:else if tab.id === 'wifi'}
-              <svg viewBox="0 0 24 24"><path d="M12 18a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0-4c2.56 0 4.92 1.04 6.62 2.73l1.42-1.41A11.96 11.96 0 0 0 12 12c-3.12 0-5.96 1.19-8.04 3.14l1.42 1.41A9.33 9.33 0 0 1 12 14zm0-4c3.74 0 7.12 1.51 9.56 3.95l1.41-1.41A15.45 15.45 0 0 0 12 8c-4.3 0-8.19 1.75-10.97 4.57l1.41 1.41A13.44 13.44 0 0 1 12 10z"/></svg>
-            {:else if tab.id === 'mqtt_ha'}
-              <svg viewBox="0 0 24 24"><path d="M12 2l6 6h-4v5h-4V8H6l6-6zm-8 12h4v6h8v-6h4v8H4v-8z"/></svg>
-            {:else if tab.id === 'push'}
-              <svg viewBox="0 0 24 24"><path d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 3-8 5-8-5V6l8 5 8-5v1z"/></svg>
-            {:else if tab.id === 'update'}
-              <svg viewBox="0 0 24 24"><path d="M12 3a1 1 0 0 1 1 1v8.59l2.3-2.29a1 1 0 1 1 1.4 1.41l-4 3.99a1 1 0 0 1-1.4 0l-4-3.99a1 1 0 1 1 1.4-1.41L11 12.59V4a1 1 0 0 1 1-1zm-7 14a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1z"/></svg>
-            {:else}
-              <svg viewBox="0 0 24 24"><path d="M19.14 12.94a7.43 7.43 0 0 0 .05-.94 7.43 7.43 0 0 0-.05-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.16 7.16 0 0 0-1.63-.94l-.36-2.54A.5.5 0 0 0 13.9 2h-3.8a.5.5 0 0 0-.49.42l-.36 2.54a7.16 7.16 0 0 0-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.71 8.48a.5.5 0 0 0 .12.64l2.03 1.58a7.43 7.43 0 0 0-.05.94c0 .32.02.63.05.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .6.22l2.39-.96c.5.39 1.05.72 1.63.94l.36 2.54a.5.5 0 0 0 .49.42h3.8a.5.5 0 0 0 .49-.42l.36-2.54c.58-.22 1.13-.55 1.63-.94l2.39.96a.5.5 0 0 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5z"/></svg>
-            {/if}
-          </span>
-          <span>{tab.label}</span>
-        </button>
-      {/each}
-    </nav>
-    <p class="subtitle">{activeTabMeta.subtitle}</p>
   </header>
 
-  <section class="module-shell">
-    {#if activeTab === 'dashboard'}
-      <Dashboard bind:data />
-    {:else if activeTab === 'sensor'}
-      <Config bind:this={configModuleRef} bind:data {loadConfig} module="sensor" onDirtyStateChange={handleConfigDirtyStateChange} />
-    {:else if activeTab === 'wifi'}
-      <Config bind:this={configModuleRef} bind:data {loadConfig} module="wifi" onDirtyStateChange={handleConfigDirtyStateChange} />
-    {:else if activeTab === 'mqtt_ha'}
-      <Config bind:this={configModuleRef} bind:data {loadConfig} module="mqtt_ha" onDirtyStateChange={handleConfigDirtyStateChange} />
-    {:else if activeTab === 'push'}
-      <Config bind:this={configModuleRef} bind:data {loadConfig} module="push" onDirtyStateChange={handleConfigDirtyStateChange} />
-    {:else if activeTab === 'update'}
-      <Update currentVersion={versionStr} />
-    {:else if activeTab === 'debug'}
-      <DebugOverlay embedded={true} />
-    {/if}
-  </section>
+  <div class="app-layout">
+    <aside class="sidebar-nav" aria-label="Hauptnavigation">
+      {#each tabs as tab}
+        <button class="sidebar-item" class:active={activeTab === tab.id} on:click={() => requestTabChange(tab.id)}>
+          {tab.label}
+        </button>
+      {/each}
+    </aside>
+
+    <section class="module-shell">
+      {#if activeTab === 'dashboard'}
+        <Dashboard bind:data />
+      {:else if activeTab === 'sensor'}
+        <Config bind:data {loadConfig} module="sensor" />
+      {:else if activeTab === 'wifi'}
+        <Config bind:data {loadConfig} module="wifi" />
+      {:else if activeTab === 'mqtt_ha'}
+        <Config bind:data {loadConfig} module="mqtt_ha" />
+      {:else if activeTab === 'push'}
+        <Config bind:data {loadConfig} module="push" />
+      {:else if activeTab === 'update'}
+        <Update currentVersion={versionStr} />
+      {:else if activeTab === 'debug'}
+        <DebugOverlay embedded={true} />
+      {/if}
+    </section>
+  </div>
+
+  <nav class="mobile-nav" aria-label="Mobile Navigation">
+    {#each mobilePrimaryTabs as tab}
+      <button class="mobile-nav-item" class:active={activeTab === tab.id} on:click={() => requestTabChange(tab.id)}>
+        {tab.label}
+      </button>
+    {/each}
+    <button class="mobile-nav-item mobile-more-trigger" class:active={isMoreTabActive || showMobileMoreMenu} on:click={toggleMobileMoreMenu}>
+      Mehr
+    </button>
+  </nav>
 </main>
 
 <style>
@@ -383,72 +336,6 @@
     max-width: 1300px;
     margin: 0 auto;
     padding: 16px;
-  }
-
-  .unsaved-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 1000;
-    background: rgba(0, 8, 20, 0.65);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 16px;
-  }
-
-  .unsaved-dialog {
-    width: min(560px, 100%);
-    border: 1px solid var(--surface-border);
-    border-radius: 14px;
-    background: var(--card-grad);
-    box-shadow: var(--shadow);
-    padding: 18px;
-  }
-
-  .unsaved-dialog h3 {
-    margin: 0;
-    color: var(--text-main);
-    font-size: 1.02rem;
-    line-height: 1.35;
-  }
-
-  .unsaved-actions {
-    margin-top: 14px;
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-  }
-
-  .unsaved-save,
-  .unsaved-discard {
-    border: none;
-    border-radius: 10px;
-    padding: 10px 14px;
-    font-weight: 700;
-    cursor: pointer;
-    color: #ffffff;
-  }
-
-  .unsaved-save {
-    background: #2f9e44;
-  }
-
-  .unsaved-save:hover {
-    background: #27863a;
-  }
-
-  .unsaved-discard {
-    background: #d94848;
-  }
-
-  .unsaved-discard:hover {
-    background: #bd3b3b;
-  }
-
-  .unsaved-save:disabled,
-  .unsaved-discard:disabled {
-    opacity: 0.65;
-    cursor: not-allowed;
   }
 
   .topbar {
@@ -615,97 +502,111 @@
     box-shadow: 0 6px 14px rgba(0, 0, 0, 0.18);
   }
 
-  nav {
-    position: relative;
-    display: flex;
-    flex-wrap: wrap;
+  .app-layout {
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr);
+    gap: 14px;
+    align-items: start;
+  }
+
+  .sidebar-nav {
+    position: sticky;
+    top: 108px;
+    display: grid;
     gap: 8px;
-    margin-top: 4px;
-    padding-bottom: 8px;
-  }
-
-  nav button {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 16px;
-    border: none;
-    border-radius: 999px;
-    background: var(--button-bg);
-    color: var(--button-text);
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s ease;
-  }
-
-  nav button.active {
-    background: var(--button-active-bg);
-    color: var(--button-active-text);
-    box-shadow: 0 8px 18px rgba(8, 28, 58, 0.35);
-  }
-
-  nav button::after {
-    content: '';
-    position: absolute;
-    left: 16px;
-    right: 16px;
-    bottom: -8px;
-    height: 3px;
-    border-radius: 999px;
-    transform: scaleX(0);
-    transform-origin: center;
-    background: linear-gradient(90deg, var(--accent) 0%, #9fd5ff 100%);
-    transition: transform 0.22s ease;
-  }
-
-  nav button.active::after {
-    transform: scaleX(1);
-  }
-
-  nav button:hover {
-    transform: translateY(-1px);
-  }
-
-  .tab-icon {
-    width: 28px;
-    height: 28px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.22);
-    color: var(--text-main);
+    background: var(--surface);
     border: 1px solid var(--surface-border);
+    border-radius: 10px;
+    padding: 10px;
+    box-shadow: var(--shadow);
   }
 
-  .tab-icon svg {
-    width: 16px;
-    height: 16px;
-    fill: currentColor;
-  }
-
-  .tab-icon.dashboard { color: #6fc0ff; }
-  .tab-icon.sensor { color: #7fd996; }
-  .tab-icon.wifi { color: #ff8a80; }
-  .tab-icon.mqtt_ha { color: #c4a0ff; }
-  .tab-icon.push { color: #ffa96b; }
-  .tab-icon.update { color: #74d9d5; }
-  .tab-icon.debug { color: #ffd37d; }
-
-  :global(html[data-theme='day']) .tab-icon.dashboard { color: #2363b4; }
-  :global(html[data-theme='day']) .tab-icon.sensor { color: #238043; }
-  :global(html[data-theme='day']) .tab-icon.wifi { color: #c34b4b; }
-  :global(html[data-theme='day']) .tab-icon.mqtt_ha { color: #7b48c9; }
-  :global(html[data-theme='day']) .tab-icon.push { color: #b45b22; }
-  :global(html[data-theme='day']) .tab-icon.update { color: #117c78; }
-  :global(html[data-theme='day']) .tab-icon.debug { color: #b07a13; }
-
-  .subtitle {
-    margin: 12px 2px 0;
+  .sidebar-item {
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: transparent;
     color: var(--text-muted);
-    font-size: 0.92rem;
-    line-height: 1.35;
+    text-align: left;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+  }
+
+  .sidebar-item:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: var(--surface-border);
+    color: var(--text-main);
+  }
+
+  .sidebar-item.active {
+    background: rgba(98, 184, 221, 0.16);
+    border-color: rgba(98, 184, 221, 0.42);
+    color: var(--text-main);
+  }
+
+  :global(html[data-theme='day']) .sidebar-item:hover {
+    background: rgba(63, 154, 102, 0.08);
+  }
+
+  :global(html[data-theme='day']) .sidebar-item.active {
+    background: rgba(63, 154, 102, 0.14);
+    border-color: rgba(63, 154, 102, 0.35);
+  }
+
+  .mobile-nav {
+    display: none;
+  }
+
+  .mobile-more-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    background: rgba(3, 10, 22, 0.5);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding: 10px;
+  }
+
+  .mobile-more-sheet {
+    width: min(480px, 100%);
+    border: 1px solid var(--surface-border);
+    border-radius: 12px;
+    background: var(--card-grad);
+    box-shadow: var(--shadow);
+    padding: 12px;
+  }
+
+  .mobile-more-sheet h3 {
+    margin: 2px 0 10px;
+    font-size: 0.96rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .mobile-more-list {
+    display: grid;
+    gap: 6px;
+  }
+
+  .mobile-more-item {
+    border: 1px solid var(--surface-border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-main);
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    text-align: left;
+    padding: 10px 12px;
+    cursor: pointer;
+  }
+
+  .mobile-more-item.active {
+    background: rgba(98, 184, 221, 0.18);
+    border-color: rgba(98, 184, 221, 0.42);
   }
 
   .module-shell {
@@ -714,20 +615,42 @@
     border-radius: 16px;
     padding: 18px;
     box-shadow: var(--shadow);
+    min-height: 340px;
   }
 
-  @media (max-width: 640px) {
+  @media (max-width: 900px) {
     main {
       padding: 10px;
+      padding-bottom: 86px;
+    }
+
+    .app-layout {
+      display: block;
+    }
+
+    .sidebar-nav {
+      display: none;
     }
 
     .module-shell {
       padding: 12px;
     }
 
-    nav {
+    .mobile-nav {
+      position: fixed;
+      left: 10px;
+      right: 10px;
+      bottom: 10px;
+      z-index: 95;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 6px;
-      padding-bottom: 6px;
+      border: 1px solid var(--surface-border);
+      border-radius: 10px;
+      background: var(--surface-2);
+      backdrop-filter: blur(10px);
+      box-shadow: var(--shadow);
+      padding: 6px;
     }
 
     .topbar-row {
@@ -736,15 +659,34 @@
       margin-bottom: 12px;
     }
 
-    nav button {
-      padding: 8px 12px;
-      font-size: 0.9rem;
+    .mobile-nav-item {
+      border: 1px solid transparent;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      padding: 10px 6px;
+      text-align: center;
+      cursor: pointer;
     }
 
-    nav button::after {
-      left: 12px;
-      right: 12px;
-      bottom: -6px;
+    .mobile-nav-item.active {
+      border-color: rgba(98, 184, 221, 0.42);
+      background: rgba(98, 184, 221, 0.16);
+      color: var(--text-main);
+    }
+
+    .mobile-more-trigger {
+      color: var(--button-text);
+    }
+  }
+
+  @media (max-width: 420px) {
+    .mobile-nav-item {
+      font-size: 0.72rem;
+      padding: 9px 4px;
     }
   }
 </style>

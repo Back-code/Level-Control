@@ -37,8 +37,9 @@
 <style>
   .password-input-wrap {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 8px;
+    grid-template-columns: minmax(0, 360px) auto;
+    justify-content: start;
+    gap: 30px;
     align-items: center;
   }
 
@@ -74,5 +75,12 @@
   .password-toggle:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+  }
+
+  @media (max-width: 640px) {
+    .password-input-wrap {
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+    }
   }
 </style>

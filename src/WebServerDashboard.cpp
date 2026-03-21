@@ -631,16 +631,6 @@ void WebServerDashboard::setupRoutes() {
         request->send(500, "application/json", json.c_str());
     });
 
-    server_.onNotFound([](AsyncWebServerRequest *request) {
-        DynamicJsonDocument doc(256);
-        doc["error"] = "route_not_found";
-        doc["url"] = request->url();
-        doc["method"] = request->methodToString();
-        std::string json;
-        serializeJson(doc, json);
-        request->send(404, "application/json", json.c_str());
-    });
-
     server_.on("/api/restart", HTTP_POST, [](AsyncWebServerRequest *request) {
         request->send(200, "application/json", "{\"status\":\"restarting\"}");
         delay(1000);
@@ -680,8 +670,27 @@ void WebServerDashboard::setupRoutes() {
         }
     });
 
+    // Root explizit bedienen, damit die UI auch bei Handler-Reihenfolge stabil lädt.
+    server_.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (!LittleFS.exists("/index.html")) {
+            request->send(503, "application/json", "{\"error\":\"ui_not_available\"}");
+            return;
+        }
+        request->send(LittleFS, "/index.html", "text/html");
+    });
+
     // Serve static files from LittleFS (nach API-Routen registrieren)
     server_.serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
+
+    server_.onNotFound([](AsyncWebServerRequest *request) {
+        DynamicJsonDocument doc(256);
+        doc["error"] = "route_not_found";
+        doc["url"] = request->url();
+        doc["method"] = request->methodToString();
+        std::string json;
+        serializeJson(doc, json);
+        request->send(404, "application/json", json.c_str());
+    });
 }
 
 void WebServerDashboard::setupUpdateRoutes() {

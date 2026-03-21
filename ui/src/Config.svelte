@@ -362,7 +362,7 @@
         {#if hasSensorIntervalError()}
           <p class="field-error field-error--inline">{getSensorIntervalError()}</p>
         {:else}
-          <p class="helper-text field-help">Mindestens 5 Sekunden. Zulässig sind Sekunden, Minuten, Stunden und Tage.</p>
+          <p class="helper-text field-help">Kleinster zulässiger Wert: 5 Sekunden.</p>
         {/if}
       </div>
     </label>
@@ -631,6 +631,10 @@
     grid-template-columns: 80px 1fr;
     gap: 8px;
     align-items: start;
+    width: 100%;
+  }
+  .field-control--inline input {
+    width: 100%;
   }
   input {
     margin-left: 0;

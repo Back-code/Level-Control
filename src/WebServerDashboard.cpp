@@ -1,4 +1,5 @@
 #include "WebServerDashboard.h"
+#include <AsyncJson.h>
 #include <ArduinoJson.h>
 #include "GeneratedVersion.h"
 #include <HTTPClient.h>
@@ -15,6 +16,7 @@
 #include "ConfigStore.h"
 #include "EventBus.h"
 #include "MqttManager.h"
+#include "PushNotificationManager.h"
 #include "SensorManager.h"
 #include "WifiManager.h"
 
@@ -24,6 +26,7 @@ constexpr char kLatestReleaseUrl[] = "https://github.com/Back-code/Salzstand/rel
 constexpr char kUpdateUserAgent[] = "Salzstand-OTA/1.0";
 constexpr char kPasswordMask[] = "*****";
 constexpr unsigned long kMinSampleIntervalSeconds = 5UL;
+constexpr unsigned long kMinPushCycleMinutes = 1UL;
 constexpr uint32_t kRestartDelayMs = 1500;
 constexpr size_t kUploadBufferSize = 4096;
 constexpr unsigned long kManifestCacheTtlMs = 300000;
@@ -471,6 +474,134 @@ void WebServerDashboard::setupRoutes() {
         request->send(200, "application/json", "{\"status\":\"ok\"}");
     });
 
+    server_.on("/api/push", HTTP_GET, [](AsyncWebServerRequest *request) {
+        Config config;
+        if (ConfigStore::getInstance().load(config)) {
+            DynamicJsonDocument doc(1024);
+            doc["enabled"] = config.push.enabled;
+            doc["smtpServer"] = config.push.smtpServer;
+            doc["smtpPort"] = config.push.smtpPort;
+            doc["useSsl"] = config.push.useSsl;
+            doc["startTls"] = config.push.startTls;
+            doc["authUser"] = config.push.authUser;
+            doc["authPassword"] = config.push.authPassword.empty() ? "" : kPasswordMask;
+            doc["hasAuthPassword"] = !config.push.authPassword.empty();
+            doc["senderName"] = config.push.senderName;
+            doc["senderEmail"] = config.push.senderEmail;
+            doc["recipientEmail"] = config.push.recipientEmail;
+            doc["triggerPercent"] = config.push.triggerPercent;
+            doc["sendHour"] = config.push.sendHour;
+            doc["sendMinute"] = config.push.sendMinute;
+            doc["cycleMinutes"] = config.push.cycleMinutes;
+            doc["subjectTemplate"] = config.push.subjectTemplate;
+            doc["bodyTemplate"] = config.push.bodyTemplate;
+            std::string json;
+            serializeJson(doc, json);
+            request->send(200, "application/json", json.c_str());
+        } else {
+            request->send(500, "application/json", "{\"error\":\"Push config load failed\"}");
+        }
+    });
+
+    auto* pushPostHandler = new AsyncCallbackJsonWebHandler("/api/push", [](AsyncWebServerRequest *request, JsonVariant &json) {
+        JsonObject doc = json.as<JsonObject>();
+        if (doc.isNull()) {
+            request->send(400, "application/json", "{\"error\":\"invalid_push_payload\"}");
+            return;
+        }
+
+        Config config;
+        ConfigStore::getInstance().load(config);
+
+        config.push.enabled = doc["enabled"] | false;
+        config.push.smtpServer = doc["smtpServer"] | "";
+        config.push.smtpPort = doc["smtpPort"] | 587;
+        config.push.useSsl = doc["useSsl"] | false;
+        config.push.startTls = doc["startTls"] | false;
+        if (config.push.useSsl && config.push.startTls) {
+            config.push.startTls = false;
+        }
+        config.push.authUser = doc["authUser"] | "";
+
+        std::string newAuthPassword = doc["authPassword"] | "";
+        if (!newAuthPassword.empty() && !isMaskedPassword(newAuthPassword)) {
+            config.push.authPassword = newAuthPassword;
+        }
+
+        config.push.senderName = doc["senderName"] | "";
+        config.push.senderEmail = doc["senderEmail"] | "";
+        config.push.recipientEmail = doc["recipientEmail"] | "";
+        config.push.triggerPercent = doc["triggerPercent"] | 20.0f;
+        config.push.sendHour = doc["sendHour"] | 8;
+        config.push.sendMinute = doc["sendMinute"] | 0;
+        config.push.cycleMinutes = doc["cycleMinutes"] | 1440UL;
+        config.push.subjectTemplate = doc["subjectTemplate"] | "Salzstand Warnung: {level_percent}%";
+        config.push.bodyTemplate = doc["bodyTemplate"] | "Der Fuellstand liegt bei {level_percent}% ({level_cm} cm).";
+
+        if (config.push.smtpPort <= 0) config.push.smtpPort = 587;
+        if (config.push.useSsl && config.push.smtpPort == 587) {
+            config.push.smtpPort = 465;
+        }
+        if (config.push.startTls && config.push.smtpPort == 465) {
+            config.push.smtpPort = 587;
+        }
+        if (config.push.triggerPercent < 0.0f) config.push.triggerPercent = 0.0f;
+        if (config.push.triggerPercent > 100.0f) config.push.triggerPercent = 100.0f;
+        if (config.push.sendHour < 0) config.push.sendHour = 0;
+        if (config.push.sendHour > 23) config.push.sendHour = 23;
+        if (config.push.sendMinute < 0) config.push.sendMinute = 0;
+        if (config.push.sendMinute > 59) config.push.sendMinute = 59;
+        if (config.push.cycleMinutes < kMinPushCycleMinutes) {
+            config.push.cycleMinutes = kMinPushCycleMinutes;
+        }
+
+        if (!ConfigStore::getInstance().save(config)) {
+            request->send(500, "application/json", "{\"error\":\"push_config_save_failed\"}");
+            return;
+        }
+
+        request->send(200, "application/json", "{\"status\":\"ok\"}");
+    });
+    server_.addHandler(pushPostHandler);
+
+    server_.on("/api/push/test", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->send(405, "application/json", "{\"error\":\"method_not_allowed_use_post\"}");
+    });
+
+    server_.on("/api/push/test", HTTP_POST, [](AsyncWebServerRequest *request) {
+        std::string error;
+        if (PushNotificationManager::getInstance().sendTestEmail(error)) {
+            request->send(200, "application/json", "{\"status\":\"ok\"}");
+            return;
+        }
+
+        if (error.empty()) {
+            error = "Unbekannter SMTP-Fehler";
+        }
+
+        DynamicJsonDocument doc(768);
+        doc["error"] = error;
+        std::string json;
+        serializeJson(doc, json);
+
+        if (json.empty()) {
+            request->send(500, "application/json", "{\"error\":\"SMTP-Fehler (Antwort zu gross)\"}");
+            return;
+        }
+
+        request->send(500, "application/json", json.c_str());
+    });
+
+    server_.onNotFound([](AsyncWebServerRequest *request) {
+        DynamicJsonDocument doc(256);
+        doc["error"] = "route_not_found";
+        doc["url"] = request->url();
+        doc["method"] = request->methodToString();
+        std::string json;
+        serializeJson(doc, json);
+        request->send(404, "application/json", json.c_str());
+    });
+
     server_.on("/api/restart", HTTP_POST, [](AsyncWebServerRequest *request) {
         request->send(200, "application/json", "{\"status\":\"restarting\"}");
         delay(1000);
@@ -481,7 +612,7 @@ void WebServerDashboard::setupRoutes() {
         // Return NVS content as JSON
         Config config;
         if (ConfigStore::getInstance().load(config)) {
-            DynamicJsonDocument doc(512);
+            DynamicJsonDocument doc(1024);
             doc["version"] = config.version;
             doc["wifi"]["ssid"] = config.wifi.ssid;
             doc["wifi"]["password"] = kPasswordMask; // Don't expose password
@@ -494,6 +625,12 @@ void WebServerDashboard::setupRoutes() {
             doc["mqtt"]["user"] = config.mqtt.user;
             doc["mqtt"]["password"] = kPasswordMask; // Don't expose password
             doc["mqtt"]["discovery"] = config.mqtt.discovery;
+            doc["push"]["enabled"] = config.push.enabled;
+            doc["push"]["smtpServer"] = config.push.smtpServer;
+            doc["push"]["smtpPort"] = config.push.smtpPort;
+            doc["push"]["senderEmail"] = config.push.senderEmail;
+            doc["push"]["recipientEmail"] = config.push.recipientEmail;
+            doc["push"]["authPassword"] = kPasswordMask;
             doc["behaelterhoehe"] = config.behaelterhoehe;
             doc["offset"] = config.offset;
             std::string json;

@@ -25,6 +25,25 @@
   let mqttConfig = { server: '', port: 1883, user: '', password: '', discovery: true };
   let mqttHasPassword = false;
   let mqttDeviceId = '';
+  let pushConfig = {
+    enabled: false,
+    smtpServer: '',
+    smtpPort: 587,
+    useSsl: false,
+    startTls: false,
+    authUser: '',
+    authPassword: '',
+    senderName: '',
+    senderEmail: '',
+    recipientEmail: '',
+    triggerPercent: 20,
+    sendHour: 8,
+    sendMinute: 0,
+    cycleMinutes: 1440,
+    subjectTemplate: 'Salzstand Warnung: {level_percent}%',
+    bodyTemplate: 'Der Fuellstand liegt bei {level_percent}% ({level_cm} cm).'
+  };
+  let pushHasAuthPassword = false;
 
   const PASSWORD_MASK = '*****';
   const SAMPLE_UNITS = [
@@ -34,6 +53,19 @@
     { value: 'days', label: 'Tage', seconds: 86400 }
   ];
   const MIN_SAMPLE_INTERVAL_SECONDS = 5;
+
+  function toTimeString(hour, minute) {
+    const h = Math.max(0, Math.min(23, Number(hour) || 0));
+    const m = Math.max(0, Math.min(59, Number(minute) || 0));
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  }
+
+  function parseTimeString(timeValue) {
+    const [rawHour, rawMinute] = String(timeValue || '').split(':');
+    const hour = Math.max(0, Math.min(23, Number(rawHour) || 0));
+    const minute = Math.max(0, Math.min(59, Number(rawMinute) || 0));
+    return { hour, minute };
+  }
 
   function isMaskedPassword(value) {
     return value === '***' || value === PASSWORD_MASK;
@@ -209,6 +241,30 @@
         mqttHasPassword = (c.hasPassword ?? false) || isMaskedPassword(c.password || '');
         mqttDeviceId = c.device_id || '';
       });
+
+    fetch('/api/push', { cache: 'no-store' })
+      .then(r => r.json())
+      .then(c => {
+        pushConfig = {
+          enabled: c.enabled ?? false,
+          smtpServer: c.smtpServer || '',
+          smtpPort: c.smtpPort || 587,
+          useSsl: c.useSsl ?? false,
+          startTls: c.startTls ?? false,
+          authUser: c.authUser || '',
+          authPassword: isMaskedPassword(c.authPassword || '') ? '' : (c.authPassword || ''),
+          senderName: c.senderName || '',
+          senderEmail: c.senderEmail || '',
+          recipientEmail: c.recipientEmail || '',
+          triggerPercent: c.triggerPercent ?? 20,
+          sendHour: c.sendHour ?? 8,
+          sendMinute: c.sendMinute ?? 0,
+          cycleMinutes: c.cycleMinutes ?? 1440,
+          subjectTemplate: c.subjectTemplate || 'Salzstand Warnung: {level_percent}%',
+          bodyTemplate: c.bodyTemplate || 'Der Fuellstand liegt bei {level_percent}% ({level_cm} cm).'
+        };
+        pushHasAuthPassword = (c.hasAuthPassword ?? false) || isMaskedPassword(c.authPassword || '');
+      });
   }
 
   $: if (module === 'sensor' && data.sampleIntervalSeconds) {
@@ -301,6 +357,91 @@
       showNotice('success', 'MQTT-Konfiguration gespeichert. Neustart erforderlich.');
     } catch (_) {
       showNotice('error', 'MQTT-Konfiguration konnte nicht gespeichert werden.');
+    }
+  }
+
+  async function savePushConfig() {
+    const triggerPercent = Math.max(0, Math.min(100, Number(pushConfig.triggerPercent) || 0));
+    const cycleMinutes = Math.max(1, Number(pushConfig.cycleMinutes) || 1);
+    const time = parseTimeString(toTimeString(pushConfig.sendHour, pushConfig.sendMinute));
+    const useSsl = Boolean(pushConfig.useSsl);
+    const startTls = !useSsl && Boolean(pushConfig.startTls);
+    let smtpPort = Math.max(1, Number(pushConfig.smtpPort) || 0);
+    if (useSsl && (!smtpPort || smtpPort === 587)) {
+      smtpPort = 465;
+    }
+    if (startTls && (!smtpPort || smtpPort === 465)) {
+      smtpPort = 587;
+    }
+    if (!useSsl && !startTls && !smtpPort) {
+      smtpPort = 587;
+    }
+
+    try {
+      const response = await fetch('/api/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...pushConfig,
+          smtpPort,
+          useSsl,
+          startTls,
+          triggerPercent,
+          cycleMinutes,
+          sendHour: time.hour,
+          sendMinute: time.minute
+        })
+      });
+
+      if (!response.ok) {
+        showNotice('error', 'Push-Konfiguration konnte nicht gespeichert werden.');
+        return false;
+      }
+
+      pushConfig = {
+        ...pushConfig,
+        smtpPort,
+        useSsl,
+        startTls,
+        triggerPercent,
+        cycleMinutes,
+        sendHour: time.hour,
+        sendMinute: time.minute
+      };
+      showNotice('success', 'Push-Konfiguration gespeichert.');
+      return true;
+    } catch (_) {
+      showNotice('error', 'Push-Konfiguration konnte nicht gespeichert werden.');
+      return false;
+    }
+  }
+
+  async function sendPushTest() {
+    try {
+      const saved = await savePushConfig();
+      if (!saved) {
+        return;
+      }
+      const response = await fetch('/api/push/test', { method: 'POST' });
+      if (!response.ok) {
+        const raw = await response.text().catch(() => '');
+        let detailedError = '';
+        if (raw) {
+          try {
+            const payload = JSON.parse(raw);
+            detailedError = payload?.error || '';
+          } catch (_) {
+            detailedError = raw;
+          }
+        }
+
+        const fallback = `Test-E-Mail konnte nicht gesendet werden (HTTP ${response.status}).`;
+        showNotice('error', detailedError || fallback);
+        return;
+      }
+      showNotice('success', 'Test-E-Mail wurde versendet.');
+    } catch (_) {
+      showNotice('error', 'Test-E-Mail konnte nicht gesendet werden.');
     }
   }
 
@@ -509,6 +650,68 @@
 
     <button class="primary" on:click={saveWifiConfig}>Speichern</button>
   </div>
+{:else if module === 'push'}
+  <div class="config-section">
+    <h2>Push Nachricht</h2>
+    <p>E-Mail Benachrichtigung bei Schwellwert mit Zeitfenster und Versandzyklus.</p>
+
+    <label class="checkbox-row"><input type="checkbox" bind:checked={pushConfig.enabled} /> Push Benachrichtigung aktivieren</label>
+
+    <label class="field-row"><span>SMTP Server:</span><input bind:value={pushConfig.smtpServer} /></label>
+    <label class="field-row"><span>SMTP Port:</span><input type="number" min="1" bind:value={pushConfig.smtpPort} /></label>
+
+    <div class="choice-grid" role="group" aria-label="SMTP Sicherheit">
+      <label class="choice-card"><input type="checkbox" checked={pushConfig.useSsl} on:change={(e) => {
+        const checked = e.currentTarget.checked;
+        pushConfig = {
+          ...pushConfig,
+          useSsl: checked,
+          startTls: checked ? false : pushConfig.startTls,
+          smtpPort: checked && Number(pushConfig.smtpPort) === 587 ? 465 : pushConfig.smtpPort
+        };
+      }} /><span>SSL/TLS (implizit)</span></label>
+      <label class="choice-card"><input type="checkbox" checked={pushConfig.startTls} on:change={(e) => {
+        const checked = e.currentTarget.checked;
+        pushConfig = {
+          ...pushConfig,
+          startTls: checked,
+          useSsl: checked ? false : pushConfig.useSsl,
+          smtpPort: checked && Number(pushConfig.smtpPort) === 465 ? 587 : pushConfig.smtpPort
+        };
+      }} /><span>STARTTLS</span></label>
+    </div>
+
+    <label class="field-row"><span>SMTP Benutzer:</span><input bind:value={pushConfig.authUser} /></label>
+    <div class="field-row">
+      <span>SMTP Passwort:</span>
+      <PasswordInput bind:value={pushConfig.authPassword} hasStoredPassword={pushHasAuthPassword} mask={PASSWORD_MASK} />
+    </div>
+
+    <h3>Absender / Empfaenger</h3>
+    <label class="field-row"><span>Absender Name:</span><input bind:value={pushConfig.senderName} /></label>
+    <label class="field-row"><span>Versenderadresse:</span><input type="email" bind:value={pushConfig.senderEmail} /></label>
+    <label class="field-row"><span>Empfaengeradresse:</span><input type="email" bind:value={pushConfig.recipientEmail} /></label>
+
+    <h3>Ausloeser</h3>
+    <label class="field-row"><span>Schwellwert (%):</span><input type="number" min="0" max="100" step="0.1" bind:value={pushConfig.triggerPercent} /></label>
+
+    <h3>Zeitsteuerung</h3>
+    <label class="field-row"><span>Versand ab Uhrzeit:</span><input type="time" value={toTimeString(pushConfig.sendHour, pushConfig.sendMinute)} on:change={(e) => {
+      const parsed = parseTimeString(e.currentTarget.value);
+      pushConfig = { ...pushConfig, sendHour: parsed.hour, sendMinute: parsed.minute };
+    }} /></label>
+    <label class="field-row"><span>Zyklus (Minuten):</span><input type="number" min="1" step="1" bind:value={pushConfig.cycleMinutes} /></label>
+
+    <h3>Vorlage</h3>
+    <label class="field-row"><span>Betreff:</span><input bind:value={pushConfig.subjectTemplate} /></label>
+    <label class="field-row field-row--top-align"><span>Body:</span><textarea rows="6" bind:value={pushConfig.bodyTemplate}></textarea></label>
+    <p class="helper-text">Platzhalter: <code>{'{level_percent}'}</code>, <code>{'{level_cm}'}</code>, <code>{'{raw_distance_m}'}</code>, <code>{'{timestamp}'}</code>, <code>{'{device_id}'}</code>, <code>{'{ip}'}</code>, <code>{'{ssid}'}</code></p>
+
+    <div class="button-row">
+      <button class="secondary-sm" type="button" on:click={sendPushTest}>Test-E-Mail senden</button>
+      <button class="primary" on:click={savePushConfig}>Speichern</button>
+    </div>
+  </div>
 {:else if module === 'mqtt_ha'}
   <div class="config-section">
     <h2>MQTT & HA</h2>
@@ -658,6 +861,17 @@
     padding: 8px 10px;
     background: rgba(255, 255, 255, 0.14);
     color: var(--text-main);
+  }
+  textarea {
+    margin-left: 0;
+    width: min(360px, 100%);
+    border: 1px solid var(--surface-border);
+    border-radius: 10px;
+    padding: 8px 10px;
+    background: rgba(255, 255, 255, 0.14);
+    color: var(--text-main);
+    resize: vertical;
+    font-family: inherit;
   }
   .field-control input {
     width: 100%;
@@ -876,6 +1090,13 @@
     color: var(--button-active-text);
     font-weight: 600;
     cursor: pointer;
+  }
+  .button-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-top: 10px;
   }
   .sensor-sketch {
     margin-top: 14px;

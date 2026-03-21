@@ -167,6 +167,7 @@
     { id: 'sensor', label: 'Konfiguration', subtitle: 'Behälterparameter und Ultraschall-Abtastrate zentral konfigurieren.' },
     { id: 'wifi', label: 'WiFi', subtitle: 'WLAN-Zugang und optionale statische Netzwerkdaten verwalten.' },
     { id: 'mqtt_ha', label: 'MQTT & HA', subtitle: 'Broker, Discovery und Home-Assistant-Anbindung zentral steuern.' },
+    { id: 'push', label: 'Push Nachricht', subtitle: 'E-Mail Benachrichtigungen bei Schwellwert, Zeit und Zyklus konfigurieren.' },
     { id: 'update', label: 'Update', subtitle: 'OTA aus Releases oder lokales BIN-Upload mit Dateikontrolle durchführen.' },
     { id: 'debug', label: 'Debug', subtitle: 'Live-Logs sowie NVS-Snapshot fuer Diagnose und Fehleranalyse.' }
   ];
@@ -217,6 +218,8 @@
               <svg viewBox="0 0 24 24"><path d="M12 18a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0-4c2.56 0 4.92 1.04 6.62 2.73l1.42-1.41A11.96 11.96 0 0 0 12 12c-3.12 0-5.96 1.19-8.04 3.14l1.42 1.41A9.33 9.33 0 0 1 12 14zm0-4c3.74 0 7.12 1.51 9.56 3.95l1.41-1.41A15.45 15.45 0 0 0 12 8c-4.3 0-8.19 1.75-10.97 4.57l1.41 1.41A13.44 13.44 0 0 1 12 10z"/></svg>
             {:else if tab.id === 'mqtt_ha'}
               <svg viewBox="0 0 24 24"><path d="M12 2l6 6h-4v5h-4V8H6l6-6zm-8 12h4v6h8v-6h4v8H4v-8z"/></svg>
+            {:else if tab.id === 'push'}
+              <svg viewBox="0 0 24 24"><path d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 3-8 5-8-5V6l8 5 8-5v1z"/></svg>
             {:else if tab.id === 'update'}
               <svg viewBox="0 0 24 24"><path d="M12 3a1 1 0 0 1 1 1v8.59l2.3-2.29a1 1 0 1 1 1.4 1.41l-4 3.99a1 1 0 0 1-1.4 0l-4-3.99a1 1 0 1 1 1.4-1.41L11 12.59V4a1 1 0 0 1 1-1zm-7 14a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1z"/></svg>
             {:else}
@@ -239,6 +242,8 @@
       <Config bind:data {loadConfig} module="wifi" />
     {:else if activeTab === 'mqtt_ha'}
       <Config bind:data {loadConfig} module="mqtt_ha" />
+    {:else if activeTab === 'push'}
+      <Config bind:data {loadConfig} module="push" />
     {:else if activeTab === 'update'}
       <Update currentVersion={versionStr} />
     {:else if activeTab === 'debug'}
@@ -532,6 +537,7 @@
   .tab-icon.sensor { color: #7fd996; }
   .tab-icon.wifi { color: #ff8a80; }
   .tab-icon.mqtt_ha { color: #c4a0ff; }
+  .tab-icon.push { color: #ffa96b; }
   .tab-icon.update { color: #74d9d5; }
   .tab-icon.debug { color: #ffd37d; }
 
@@ -539,6 +545,7 @@
   :global(html[data-theme='day']) .tab-icon.sensor { color: #238043; }
   :global(html[data-theme='day']) .tab-icon.wifi { color: #c34b4b; }
   :global(html[data-theme='day']) .tab-icon.mqtt_ha { color: #7b48c9; }
+  :global(html[data-theme='day']) .tab-icon.push { color: #b45b22; }
   :global(html[data-theme='day']) .tab-icon.update { color: #117c78; }
   :global(html[data-theme='day']) .tab-icon.debug { color: #b07a13; }
 

@@ -5,6 +5,7 @@
 #include "WebServerDashboard.h"
 #include "SensorManager.h"
 #include "MqttManager.h"
+#include "PushNotificationManager.h"
 #include "DebugLogger.h"
 #include "EventBus.h"
 #include "ConfigStore.h"
@@ -43,6 +44,7 @@ void setup() {
     }
 
     SensorManager::getInstance().init();
+    PushNotificationManager::getInstance().init();
 
     // Sensor Test beim Start
     Serial.println("[Salzstand] Starting sensor test...");
@@ -74,6 +76,13 @@ void loop() {
         lastMeasurement = now;
         SensorManager::getInstance().measure();
     }
+
+    PushNotificationManager::getInstance().process(
+        SensorManager::getInstance().getDistancePercent(),
+        SensorManager::getInstance().getDistanceCm(),
+        SensorManager::getInstance().getRawDistance(),
+        SensorManager::getInstance().hasValidReading()
+    );
 
     // MQTT Reconnect alle 5 s prüfen
     if (now - lastMqttReconnect > 5000) {

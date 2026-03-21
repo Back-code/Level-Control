@@ -675,6 +675,15 @@ void WebServerDashboard::setupRoutes() {
         request->redirect("/index.html");
     });
 
+    // Explizite Route fuer index.html als robuste Absicherung gegen Static-Fallback-Probleme.
+    server_.on("/index.html", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (!LittleFS.begin()) {
+            request->send(503, "application/json", "{\"error\":\"ui_not_available\"}");
+            return;
+        }
+        request->send(LittleFS, "/index.html", "text/html");
+    });
+
     // Serve static files from LittleFS (nach API-Routen registrieren)
     server_.serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
 

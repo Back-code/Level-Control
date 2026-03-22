@@ -4,6 +4,10 @@
     {
       "label": "Salzstand: Entwicklung",
       "type": "shell",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
       "command": "pwsh",
       "args": [
         "-ExecutionPolicy",

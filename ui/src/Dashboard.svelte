@@ -1,5 +1,153 @@
 <script>
+  import { onMount } from 'svelte';
+
   export let data;
+
+  const HISTORY_KEY = 'salzstand-history-v1';
+  const HISTORY_RETENTION_MS = 366 * 24 * 60 * 60 * 1000;
+  const HISTORY_SAMPLE_INTERVAL_MS = 6 * 60 * 60 * 1000;
+  const PERIOD_OPTIONS = [
+    { id: '1m', label: '1 Monat', months: 1 },
+    { id: '3m', label: '3 Monate', months: 3 },
+    { id: '6m', label: '6 Monate', months: 6 },
+    { id: '12m', label: '12 Monate', months: 12 }
+  ];
+
+  const CHART_WIDTH = 920;
+  const CHART_HEIGHT = 220;
+  const CHART_PADDING = { top: 18, right: 18, bottom: 34, left: 18 };
+
+  let activePeriod = '3m';
+  let history = [];
+  let historyLoaded = false;
+
+  function formatUptime(totalSeconds) {
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    return `${hours}h ${minutes}m`;
+  }
+
+  function formatDateLabel(timestamp) {
+    return new Intl.DateTimeFormat('de-DE', {
+      day: '2-digit',
+      month: '2-digit',
+      year: '2-digit'
+    }).format(timestamp);
+  }
+
+  function getPeriodStart(periodId) {
+    const option = PERIOD_OPTIONS.find((entry) => entry.id === periodId) || PERIOD_OPTIONS[1];
+    const start = new Date();
+    start.setMonth(start.getMonth() - option.months);
+    return start.getTime();
+  }
+
+  function loadHistory() {
+    try {
+      const raw = localStorage.getItem(HISTORY_KEY);
+      if (!raw) {
+        history = [];
+        return;
+      }
+
+      const parsed = JSON.parse(raw);
+      history = Array.isArray(parsed)
+        ? parsed.filter((entry) => Number.isFinite(entry?.ts) && Number.isFinite(entry?.value))
+        : [];
+    } catch (_) {
+      history = [];
+    }
+  }
+
+  function persistHistory() {
+    try {
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+    } catch (_) {
+      // Ignore storage quota problems and keep the UI responsive.
+    }
+  }
+
+  function recordHistorySample(value) {
+    if (!historyLoaded || !Number.isFinite(value)) {
+      return;
+    }
+
+    const now = Date.now();
+    const trimmed = history.filter((entry) => now - entry.ts <= HISTORY_RETENTION_MS);
+    const lastEntry = trimmed[trimmed.length - 1];
+
+    if (!lastEntry) {
+      history = [{ ts: now, value }];
+      persistHistory();
+      return;
+    }
+
+    if (now - lastEntry.ts < HISTORY_SAMPLE_INTERVAL_MS) {
+      history = [
+        ...trimmed.slice(0, -1),
+        { ts: now, value }
+      ];
+      persistHistory();
+      return;
+    }
+
+    history = [...trimmed, { ts: now, value }];
+    persistHistory();
+  }
+
+  function buildPath(points, minValue, maxValue) {
+    if (points.length === 0) {
+      return '';
+    }
+
+    const innerWidth = CHART_WIDTH - CHART_PADDING.left - CHART_PADDING.right;
+    const innerHeight = CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom;
+    const startTs = points[0].ts;
+    const endTs = points[points.length - 1].ts;
+    const timeRange = Math.max(endTs - startTs, 1);
+    const valueRange = Math.max(maxValue - minValue, 1);
+
+    return points.map((point, index) => {
+      const x = CHART_PADDING.left + ((point.ts - startTs) / timeRange) * innerWidth;
+      const y = CHART_PADDING.top + innerHeight - ((point.value - minValue) / valueRange) * innerHeight;
+      return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`;
+    }).join(' ');
+  }
+
+  function buildAreaPath(points, linePath) {
+    if (points.length === 0 || !linePath) {
+      return '';
+    }
+
+    const innerHeight = CHART_HEIGHT - CHART_PADDING.bottom;
+    const firstX = CHART_PADDING.left;
+    const lastX = CHART_WIDTH - CHART_PADDING.right;
+    return `${linePath} L ${lastX.toFixed(2)} ${innerHeight.toFixed(2)} L ${firstX.toFixed(2)} ${innerHeight.toFixed(2)} Z`;
+  }
+
+  onMount(() => {
+    loadHistory();
+    historyLoaded = true;
+    recordHistorySample(Number(data?.salzstandPercent));
+  });
+
+  $: if (historyLoaded) {
+    recordHistorySample(Number(data?.salzstandPercent));
+  }
+
+  $: periodStart = getPeriodStart(activePeriod);
+  $: filteredHistory = history.filter((entry) => entry.ts >= periodStart);
+  $: chartPoints = filteredHistory.length > 0 ? filteredHistory : history.slice(-1);
+  $: currentPercent = Number.isFinite(data?.salzstandPercent) ? data.salzstandPercent : 0;
+  $: chartValues = chartPoints.map((entry) => entry.value);
+  $: valueFloor = chartValues.length > 0 ? Math.min(...chartValues, currentPercent) : currentPercent;
+  $: valueCeil = chartValues.length > 0 ? Math.max(...chartValues, currentPercent) : currentPercent;
+  $: chartMin = Math.max(0, Math.floor((valueFloor - 5) / 5) * 5);
+  $: chartMax = Math.min(100, Math.ceil((valueCeil + 5) / 5) * 5 || 100);
+  $: linePath = buildPath(chartPoints, chartMin, chartMax);
+  $: areaPath = buildAreaPath(chartPoints, linePath);
+  $: latestPoint = chartPoints[chartPoints.length - 1] || null;
+  $: oldestPoint = chartPoints[0] || null;
 </script>
 
 <section class="dashboard-hero">
@@ -8,6 +156,68 @@
 </section>
 
 <div class="grid">
+  <div class="card card-chart">
+    <div class="chart-head">
+      <div>
+        <h2><span class="mini-icon"><svg viewBox="0 0 24 24"><path d="M4 18h16v2H4v-2zm2-3.5 3.5-3.5 2.5 2.5L18 8l1.4 1.4-6.9 6.9-2.5-2.5L7.4 16z"/></svg></span>Salzstand Verlauf</h2>
+        <p class="chart-subtitle">Lokal im Browser gespeicherte Prozentwerte, fortlaufend ab jetzt aufgebaut.</p>
+      </div>
+      <div class="chart-periods" role="group" aria-label="Zeitraum wählen">
+        {#each PERIOD_OPTIONS as option}
+          <button class:active={activePeriod === option.id} on:click={() => activePeriod = option.id}>{option.label}</button>
+        {/each}
+      </div>
+    </div>
+
+    <div class="chart-meta">
+      <div>
+        <span>Aktuell</span>
+        <strong>{currentPercent.toFixed(1)} %</strong>
+      </div>
+      <div>
+        <span>Start</span>
+        <strong>{oldestPoint ? formatDateLabel(oldestPoint.ts) : 'Noch keine Historie'}</strong>
+      </div>
+      <div>
+        <span>Letzte Messung</span>
+        <strong>{latestPoint ? formatDateLabel(latestPoint.ts) : 'Noch keine Historie'}</strong>
+      </div>
+    </div>
+
+    <div class="chart-shell">
+      <svg viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} class="chart" role="img" aria-label="Verlauf des Salzstandes in Prozent">
+        <defs>
+          <linearGradient id="salzstand-area" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.32" />
+            <stop offset="100%" stop-color="var(--accent)" stop-opacity="0.02" />
+          </linearGradient>
+        </defs>
+
+        <line class="chart-grid" x1={CHART_PADDING.left} y1={CHART_PADDING.top} x2={CHART_WIDTH - CHART_PADDING.right} y2={CHART_PADDING.top} />
+        <line class="chart-grid" x1={CHART_PADDING.left} y1={(CHART_HEIGHT - CHART_PADDING.bottom + CHART_PADDING.top) / 2} x2={CHART_WIDTH - CHART_PADDING.right} y2={(CHART_HEIGHT - CHART_PADDING.bottom + CHART_PADDING.top) / 2} />
+        <line class="chart-grid" x1={CHART_PADDING.left} y1={CHART_HEIGHT - CHART_PADDING.bottom} x2={CHART_WIDTH - CHART_PADDING.right} y2={CHART_HEIGHT - CHART_PADDING.bottom} />
+
+        {#if areaPath}
+          <path d={areaPath} class="chart-area" />
+          <path d={linePath} class="chart-line" />
+        {/if}
+
+        {#if latestPoint}
+          <circle
+            class="chart-dot"
+            cx={CHART_WIDTH - CHART_PADDING.right}
+            cy={CHART_PADDING.top + (CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom) - (((latestPoint.value - chartMin) / Math.max(chartMax - chartMin, 1)) * (CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom))}
+            r="5"
+          />
+        {/if}
+      </svg>
+
+      <div class="chart-axis chart-axis-top">{chartMax.toFixed(0)} %</div>
+      <div class="chart-axis chart-axis-middle">{((chartMax + chartMin) / 2).toFixed(0)} %</div>
+      <div class="chart-axis chart-axis-bottom">{chartMin.toFixed(0)} %</div>
+    </div>
+  </div>
+
   <div class="card">
     <h2><span class="mini-icon"><svg viewBox="0 0 24 24"><path d="M3 17h18v2H3v-2zm2-8h14v2H5V9zm3-6h8v2H8V3z"/></svg></span>Aktuelle Distanz</h2>
     <p class="value">{data.rohdistanz.toFixed(2)} m</p>
@@ -17,13 +227,18 @@
     <p class="value">{data.salzstandCm.toFixed(1)} cm</p>
     <p class="value">{data.salzstandPercent.toFixed(1)} %</p>
   </div>
-  <div class="card">
-    <h2><span class="mini-icon"><svg viewBox="0 0 24 24"><path d="M12 18a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0-4c2.56 0 4.92 1.04 6.62 2.73l1.42-1.41A11.96 11.96 0 0 0 12 12c-3.12 0-5.96 1.19-8.04 3.14l1.42 1.41A9.33 9.33 0 0 1 12 14z"/></svg></span>WiFi Signal</h2>
-    <p class="value">{data.wifiSignal} dBm</p>
-  </div>
-  <div class="card">
-    <h2><span class="mini-icon"><svg viewBox="0 0 24 24"><path d="M11 7h2v6l4 2-1 1.73L11 14V7zm1-5a10 10 0 1 0 10 10A10 10 0 0 0 12 2z"/></svg></span>Uptime</h2>
-    <p class="value">{Math.floor(data.uptime / 3600)}h {Math.floor((data.uptime % 3600) / 60)}m</p>
+  <div class="card card-combined">
+    <h2><span class="mini-icon"><svg viewBox="0 0 24 24"><path d="M12 18a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0-4c2.56 0 4.92 1.04 6.62 2.73l1.42-1.41A11.96 11.96 0 0 0 12 12c-3.12 0-5.96 1.19-8.04 3.14l1.42 1.41A9.33 9.33 0 0 1 12 14z"/></svg></span>WLAN & Laufzeit</h2>
+    <div class="combined-stats">
+      <div>
+        <span>WiFi Signal</span>
+        <p class="value">{data.wifiSignal} dBm</p>
+      </div>
+      <div>
+        <span>Uptime</span>
+        <p class="value">{formatUptime(data.uptime)}</p>
+      </div>
+    </div>
   </div>
   <div class="card">
     <h2><span class="mini-icon"><svg viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 8-4v6h2V7L12 2zm-8 9v6l8 4 8-4v-6l-8 4-8-4z"/></svg></span>Netzwerk</h2>
@@ -62,7 +277,7 @@
 
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 14px;
   }
 
@@ -112,5 +327,177 @@
     font-weight: 800;
     letter-spacing: 0.02em;
     line-height: 1.1;
+  }
+
+  .card-chart {
+    grid-column: 1 / -1;
+  }
+
+  .chart-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: flex-start;
+    margin-bottom: 14px;
+  }
+
+  .chart-subtitle {
+    margin: 6px 0 0 0;
+    color: var(--text-muted);
+    font-size: 0.92rem;
+    font-weight: 500;
+  }
+
+  .chart-periods {
+    display: inline-flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .chart-periods button {
+    border: 1px solid var(--surface-border);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-muted);
+    padding: 8px 12px;
+    border-radius: 999px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .chart-periods button.active {
+    background: var(--button-active-bg);
+    color: var(--button-active-text);
+    border-color: transparent;
+  }
+
+  .chart-meta {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .chart-meta div {
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--surface-border);
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .chart-meta span,
+  .combined-stats span {
+    display: block;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 6px;
+  }
+
+  .chart-meta strong {
+    font-size: 1rem;
+  }
+
+  .chart-shell {
+    position: relative;
+    border-radius: 16px;
+    border: 1px solid var(--surface-border);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%);
+    padding: 14px 14px 22px 54px;
+    overflow: hidden;
+  }
+
+  .chart {
+    width: 100%;
+    display: block;
+  }
+
+  .chart-grid {
+    stroke: rgba(255, 255, 255, 0.12);
+    stroke-width: 1;
+  }
+
+  .chart-line {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 4;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .chart-area {
+    fill: url(#salzstand-area);
+  }
+
+  .chart-dot {
+    fill: var(--accent);
+    stroke: rgba(255, 255, 255, 0.78);
+    stroke-width: 2;
+  }
+
+  .chart-axis {
+    position: absolute;
+    left: 16px;
+    color: var(--text-muted);
+    font-size: 0.76rem;
+    font-weight: 700;
+  }
+
+  .chart-axis-top {
+    top: 12px;
+  }
+
+  .chart-axis-middle {
+    top: calc(50% - 10px);
+  }
+
+  .chart-axis-bottom {
+    bottom: 14px;
+  }
+
+  .card-combined .combined-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .card-combined .combined-stats > div {
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--surface-border);
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  @media (max-width: 980px) {
+    .grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .chart-head,
+    .chart-meta {
+      grid-template-columns: 1fr;
+      display: grid;
+    }
+
+    .chart-periods {
+      justify-content: flex-start;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .grid {
+      grid-template-columns: 1fr;
+    }
+
+    .chart-shell {
+      padding: 14px 10px 18px 46px;
+    }
+
+    .card-combined .combined-stats,
+    .chart-meta {
+      grid-template-columns: 1fr;
+    }
   }
 </style>

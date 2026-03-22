@@ -114,7 +114,7 @@ input:focus,select:focus{outline:none;border-color:#62b8dd}
     <span>SSID:</span>
     <div class="input-wrap">
       <input type="text" id="ssid" name="ssid" autocomplete="off">
-      <button class="icon-btn" type="button" onclick="scanWifi()" title="WiFi-Netze suchen">
+      <button class="icon-btn" type="button" onclick="scanWifi(this)" title="WiFi-Netze suchen">
         <svg viewBox="0 0 24 24"><path d="M10 4a6 6 0 1 0 3.87 10.58l4.27 4.28 1.42-1.42-4.28-4.27A6 6 0 0 0 10 4zm0 2a4 4 0 1 1 0 8 4 4 0 0 1 0-8z"/></svg>
       </button>
     </div>
@@ -144,15 +144,16 @@ function togglePw(){
   i.type=i.type==='password'?'text':'password';
 }
 function selectNet(v){if(v)document.getElementById('ssid').value=v;}
-function scanWifi(){
-  var btn=event.target.closest('button');
+function scanWifi(btn){
+  if(!btn){return;}
   btn.disabled=true;
   fetch('/scan',{method:'POST'}).then(r=>r.json()).then(nets=>{
     var sel=document.getElementById('netList');
     sel.innerHTML='<option value="">Bitte auswählen</option>';
     nets.forEach(function(n){var o=document.createElement('option');o.value=n.ssid;o.textContent=n.ssid+' ('+n.rssi+' dBm)';sel.appendChild(o);});
     document.getElementById('scanResult').style.display=nets.length?'block':'none';
-  }).catch(function(){}).finally(function(){btn.disabled=false;});
+    if(!nets.length){showMsg('err','Keine WiFi-Netze gefunden.');}
+  }).catch(function(){showMsg('err','WiFi-Scan fehlgeschlagen.');}).finally(function(){btn.disabled=false;});
 }
 function saveConfig(){
   var ssid=document.getElementById('ssid').value.trim();

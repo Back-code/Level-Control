@@ -1,0 +1,51 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Salzstand: Entwicklung",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/run-development.ps1",
+        "-CommitMessage",
+        "${input:developmentCommitMessage}"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Salzstand: Release",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/run-release.ps1",
+        "-CommitMessage",
+        "${input:releaseCommitMessage}"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "developmentCommitMessage",
+      "type": "promptString",
+      "description": "Commit-Message für Entwicklung"
+    },
+    {
+      "id": "releaseCommitMessage",
+      "type": "promptString",
+      "description": "Commit-Message für Release"
+    }
+  ]
+}

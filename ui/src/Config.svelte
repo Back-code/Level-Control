@@ -600,7 +600,7 @@
         return false;
       }
 
-      showNotice('success', 'MQTT-Konfiguration gespeichert. Neustart erforderlich.');
+      showNotice('success', 'MQTT-Konfiguration gespeichert. Verbindung wird sofort neu aufgebaut.');
       mqttConfigDirty = false;
       return true;
     } catch (_) {

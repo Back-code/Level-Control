@@ -331,7 +331,6 @@ void MqttManager::publishConfig() {
     publish(TOPIC_CFG_SAMPLE_STATE, buf);
 }
 
-// ------------------------------------------------------------------ setWill (legacy)
 // ------------------------------------------------------------------ Publish system state
 void MqttManager::publishSystemState() {
     if (!isConnected()) return;
@@ -386,12 +385,6 @@ void MqttManager::publishUpdateState() {
     std::string payload;
     serializeJson(doc, payload);
     publish(TOPIC_UPDATE_STATE, payload.c_str());
-}
-
-// ------------------------------------------------------------------ setWill (legacy)
-void MqttManager::setWill(const char* topic, const char* payload) {
-    willTopic_   = topic   ? topic   : "";
-    willPayload_ = payload ? payload : "";
 }
 
 // ------------------------------------------------------------------ Home Assistant Discovery

@@ -55,11 +55,6 @@ void WebServerSetup::start() {
     DebugLogger::getInstance().log(LogLevel::INFO, "WebServerSetup started");
 }
 
-void WebServerSetup::stop() {
-    server_.end();
-    DebugLogger::getInstance().log(LogLevel::INFO, "WebServerSetup stopped");
-}
-
 void WebServerSetup::setupRoutes() {
     server_.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
     if (!requireSetupSubnet(request)) {
@@ -172,7 +167,7 @@ function showMsg(cls,txt){
 </script>
 </body></html>
 )HTMLEOF";
-        request->send_P(200, "text/html", HTML);
+  request->send(200, "text/html", HTML);
     });
 
     server_.on("/scan", HTTP_POST, [](AsyncWebServerRequest *request) {

@@ -10,7 +10,6 @@ public:
 
     void init();
     void start();
-    void stop();
 
 private:
     WebServerSetup();

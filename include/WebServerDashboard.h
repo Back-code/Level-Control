@@ -13,7 +13,6 @@ public:
 
     void init();
     void start();
-    void stop();
     void broadcastSensorData();
     void broadcastWifiData();
     void broadcastUptime();

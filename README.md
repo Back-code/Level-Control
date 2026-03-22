@@ -8,9 +8,9 @@ Salzstand ist ein ESP32-C3-Projekt zur kontinuierlichen Füllstandsmessung von S
 
 **Highlights:**
 - Live-Dashboard mit Tag/Nacht-Theme und Modulnavigation
-- MQTT mit Sensor-, System- und Konfigurations-Topics
-- Home Assistant Auto-Discovery (Sensoren + Konfig-Entitäten)
-- Persistente Konfiguration in NVS (WiFi, MQTT, Behälterhöhe, Offset)
+- MQTT mit Sensor-, System-, Update- und Konfigurations-Topics
+- Home Assistant Auto-Discovery inklusive OTA-Update-Entität
+- Persistente Konfiguration in NVS für WiFi, MQTT, Sensor, Push und Update-Workflow
 
 **Tech-Stack:** ESP32-C3, Arduino, PlatformIO, Svelte, PubSubClient, ESPAsyncWebServer, ArduinoJson
 
@@ -55,6 +55,7 @@ Alle Einstellungen werden persistent im NVS-Flash gespeichert (Namespace `config
 |---|---|---|
 | `wifi.ssid` | String | WLAN-Netzwerkname |
 | `wifi.password` | String | WLAN-Passwort |
+| `wifi.deviceName` | String | Gerätename für Hostname und mDNS |
 | `staticIp.ip` | String | Statische IP (leer = DHCP) |
 | `staticIp.gateway` | String | Gateway |
 | `staticIp.subnet` | String | Subnetzmaske |
@@ -64,8 +65,10 @@ Alle Einstellungen werden persistent im NVS-Flash gespeichert (Namespace `config
 | `mqtt.user` | String | MQTT-Benutzername |
 | `mqtt.password` | String | MQTT-Passwort |
 | `mqtt.discovery` | bool | Home Assistant Auto-Discovery aktivieren |
+| `push.*` | Objekt | SMTP-, Trigger- und Vorlagen-Konfiguration für E-Mail-Benachrichtigungen |
 | `behaelterhoehe` | float | Innenhöhe des Behälters in cm |
 | `offset` | float | Korrekturwert in cm (für Sensorposition) |
+| `sampleIntervalSeconds` | uint32 | Abtastrate des Sensors in Sekunden |
 
 ---
 
@@ -84,7 +87,7 @@ Normaler Betrieb
 
 ## Web-UI (Svelte)
 
-Die UI ist als Svelte 4-Anwendung gebaut (Vite 5), wird aus LittleFS ausgeliefert und kommuniziert über WebSocket (Echtzeit) sowie REST-API (Konfiguration).
+Die UI ist als Svelte-Frontend mit Vite gebaut, wird aus LittleFS ausgeliefert und kommuniziert über WebSocket (Echtzeit) sowie REST-API.
 
 ### Tab: Dashboard
 
@@ -106,36 +109,35 @@ Die UI ist als Svelte 4-Anwendung gebaut (Vite 5), wird aus LittleFS ausgeliefer
 - `Neustart`-Button → `POST /api/restart`
 - `Ctrl+D` → öffnet/schließt das Debug-Overlay
 
-### Tab: Konfiguration
-
-Unterteilt in 4 Bereiche:
+### Module
 
 **Sensor:**
 - Behälterhöhe (cm) einstellen
 - Offset (cm) einstellen
+- Abtastrate des Ultraschallsensors konfigurieren
 - Speichern via `POST /api/config`
 
 **WiFi:**
 - SSID und Passwort
+- Gerätename für `name.local`
 - Optionale statische IP-Konfiguration (IP, Gateway, Subnetz, DNS)
 - Speichern via `POST /api/wifi` (Neustart erforderlich)
 
-**MQTT:**
+**MQTT & HA:**
 - Server-Adresse, Port, Benutzer, Passwort
 - Home Assistant Discovery aktivieren/deaktivieren
 - Speichern via `POST /api/mqtt` (löst sofortigen Reconnect aus)
+- Manueller Reconnect und Topic-Übersicht für Home Assistant
 
-**Home Assistant:**
-- Informationsseite mit Hinweis zur Discovery-Konfiguration
-- Auflistung der veröffentlichten Discovery-Topics
+**Push Nachricht:**
+- SMTP-Provider, Verschlüsselung und Ports konfigurieren
+- Test-Mail und SMTP-Diagnose auslösen
+- Erinnerungszyklus, Uhrzeit und Vorlage definieren
 
-### Debug-Overlay (`Ctrl+D`)
-
-- Rechts eingeblendetes Panel (400 px breit, dunkler Hintergrund)
-- Zeigt die letzten 50 Log-Nachrichten in Echtzeit (via WebSocket-Typ `log`)
-- Log-Level-Färbung: `ERROR` rot, `WARN` orange, `INFO` weiß, `DEBUG` grau
-- Format: `Timestamp [LEVEL] Nachricht`
-- Ruft beim Öffnen `GET /api/nvs` ab (NVS-Rohdaten)
+**Update:**
+- Repo-OTA aus dem neuesten GitHub Release starten
+- Lokale BIN-Dateien für App oder Web-UI hochladen
+- Update-Status, Größenlimits und Fortschritt anzeigen
 
 ---
 
@@ -151,6 +153,17 @@ Alle Endpunkte laufen auf Port 80.
 | `POST` | `/api/wifi` | WiFi-Konfiguration speichern |
 | `GET` | `/api/mqtt` | MQTT-Konfiguration lesen (Passwort als `***` maskiert) |
 | `POST` | `/api/mqtt` | MQTT-Konfiguration speichern + sofortiger Reconnect |
+| `GET` | `/api/mqtt/status` | MQTT-Verbindungsstatus und Geräte-ID lesen |
+| `POST` | `/api/mqtt/reconnect` | MQTT-Verbindung manuell neu aufbauen |
+| `GET` | `/api/push` | Push-/SMTP-Konfiguration lesen |
+| `POST` | `/api/push` | Push-/SMTP-Konfiguration speichern |
+| `POST` | `/api/push/test` | Test-E-Mail versenden |
+| `POST` | `/api/push/smtp-check` | SMTP-Diagnose ausführen |
+| `GET` | `/api/update/status` | OTA-Status und aktive Versionsdaten lesen |
+| `GET` | `/api/update/manifest` | OTA-Manifest aus GitHub Releases lesen |
+| `POST` | `/api/update/repo` | Repo-OTA aus GitHub Release starten |
+| `POST` | `/api/update/upload/app` | App-BIN lokal hochladen |
+| `POST` | `/api/update/upload/webui` | Web-UI-BIN lokal hochladen |
 | `GET` | `/api/nvs` | Gesamte NVS-Konfiguration als JSON (Passwörter maskiert) |
 | `POST` | `/api/restart` | ESP32 neu starten |
 | `GET` | `/*` | Statische Dateien aus LittleFS (Svelte-UI) |
@@ -187,7 +200,11 @@ Geräte-ID: `salzstand_` + MAC-Adresse ohne Doppelpunkte (z. B. `salzstand_A4CF1
 | `salzstand/config/behaelterhoehe/set` | **sub** | – | Neue Behälterhöhe setzen (1–1000 cm) |
 | `salzstand/config/offset/state` | pub | ✓ | Aktueller Offset-Wert |
 | `salzstand/config/offset/set` | **sub** | – | Neuen Offset setzen (–500 bis +500 cm) |
+| `salzstand/config/sampleinterval/state` | pub | ✓ | Aktuelle Abtastrate in Sekunden |
+| `salzstand/config/sampleinterval/set` | **sub** | – | Neue Abtastrate setzen (mind. 5 s) |
 | `salzstand/system/state` | pub | ✓ | WiFi, Uptime & ESP32-Systemdaten (alle 30 s) |
+| `salzstand/update/state` | pub | ✓ | OTA-Status und Versionsinformationen |
+| `salzstand/update/install` | **sub** | – | OTA-Installation auslösen |
 
 ### Sensor-State-Payload (`salzstand/sensor/state`)
 
@@ -239,7 +256,7 @@ Geräte-ID: `salzstand_` + MAC-Adresse ohne Doppelpunkte (z. B. `salzstand_A4CF1
 
 ## Home Assistant Auto-Discovery
 
-Wenn `mqtt.discovery = true`, werden beim Connect 6 Entitäten veröffentlicht:
+Wenn `mqtt.discovery = true`, werden beim Connect 14 Entitäten veröffentlicht:
 
 | HA-Entität | Domain | Object-ID | Einheit | Kategorie |
 |---|---|---|---|---|
@@ -249,12 +266,14 @@ Wenn `mqtt.discovery = true`, werden beim Connect 6 Entitäten veröffentlicht:
 | Ultraschall Pingzeit | `sensor` | `ping_us` | µs | diagnostic |
 | Behälterhöhe | `number` | `behaelterhoehe` | cm | config |
 | Sensor Offset | `number` | `offset` | cm | config |
+| Abtastrate Ultraschall | `number` | `sample_interval` | s | config |
 | WiFi Signal | `sensor` | `rssi` | dBm | diagnostic |
 | IP-Adresse | `sensor` | `ip_address` | – | diagnostic |
 | SSID | `sensor` | `ssid` | – | diagnostic |
 | Betriebszeit | `sensor` | `uptime` | s | diagnostic |
 | Freier Heap | `sensor` | `free_heap` | B | diagnostic |
 | CPU-Frequenz | `sensor` | `cpu_freq` | MHz | diagnostic |
+| OTA Update | `update` | `ota` | – | – |
 
 Jede Entität enthält:
 - `unique_id` (Geräte-ID + Feldname) für stabile HA-Identifikation
@@ -272,12 +291,13 @@ homeassistant/{domain}/{deviceId}/{objectId}/config
 
 ```
 main.cpp
- ├── SystemStateManager   → Bestimmt Boot-Modus (SETUP / NORMAL / FALLBACK)
+ ├── SystemStateManager   → Bestimmt Boot-Modus (SETUP / NORMAL)
  ├── WifiManager          → Verbindungsverwaltung, exponentielle Backoff-Wiederverbindung
  ├── WebServerDashboard   → REST-API, WebSocket, LittleFS-Dateiserving
  ├── WebServerSetup       → Captive-Portal-artige WiFi-Erstkonfiguration (AP-Modus)
  ├── SensorManager        → Ultraschall-Messung, Median-Filter, Kalkulation
  ├── MqttManager          → PubSubClient-Wrapper, Discovery, Subscribe/Publish
+ ├── PushNotificationManager → SMTP-Versand, Triggerlogik und SMTP-Diagnose
  ├── ConfigStore          → NVS-Persistenz (ArduinoJson, Preferences)
  ├── EventBus             → Pub/Sub-System für interne Ereignisse
  └── DebugLogger          → Log-Weiterleitung an Serial + WebSocket
@@ -384,7 +404,8 @@ pio device monitor --baud 115200
 6. IP-Adresse aus dem Router-DHCP ermitteln (oder im Serial-Monitor ablesen)
 7. Dashboard unter `http://<IP>/` aufrufen
 8. Unter **Konfiguration → Sensor**: Behälterhöhe eintragen und ggf. Offset anpassen
-9. Unter **Konfiguration → MQTT**: Broker, Port, Zugangsdaten eingeben
+9. Unter **MQTT & HA**: Broker, Port und Zugangsdaten eingeben
+10. Optional unter **Push Nachricht**: SMTP und Schwellwert konfigurieren
 
 ---
 
@@ -394,7 +415,7 @@ pio device monitor --baud 115200
 |---|---|
 | Flash-Nutzung | ~74,8 % (4 MB) |
 | RAM-Nutzung | ~12,3 % (320 KB) |
-| Sensor-Messintervall | kontinuierlich (jeder loop-Durchlauf) |
+| Sensor-Messintervall | konfigurierbar, mindestens 5 Sekunden |
 | MQTT-Publish-Intervall | 30 Sekunden |
 | WebSocket-Broadcast | 5 Sekunden |
 | MQTT-Reconnect-Prüfung | 5 Sekunden |

@@ -185,11 +185,6 @@ void WebServerDashboard::start() {
     DebugLogger::getInstance().log(LogLevel::INFO, "WebServerDashboard started");
 }
 
-void WebServerDashboard::stop() {
-    server_.end();
-    DebugLogger::getInstance().log(LogLevel::INFO, "WebServerDashboard stopped");
-}
-
 void WebServerDashboard::broadcastSensorData() {
     DynamicJsonDocument doc(256);
     doc["type"] = "sensor";

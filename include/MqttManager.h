@@ -42,7 +42,6 @@ public:
     // Generic raw publish
     void publish(const char* topic, const char* payload, bool retain = true);
 
-    void setWill(const char* topic, const char* payload);
     bool isConnected() { return mqttClient_.connected(); }
     MqttConnectionState getState() const { return state_; }
     const std::string& getDeviceId() const { return deviceId_; }
@@ -58,8 +57,6 @@ private:
     uint16_t port_ = 1883;
     std::string username_;
     std::string password_;
-    std::string willTopic_;
-    std::string willPayload_;
     bool connecting_ = false;
     unsigned long lastConnectAttemptMs_ = 0;
     static constexpr unsigned long connectRetryIntervalMs_ = 5000;

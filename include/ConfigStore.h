@@ -7,6 +7,8 @@ struct WifiConfig {
     std::string ssid;
     std::string password;
     std::string deviceName = "Salzstand";
+    std::string ntpServerPrimary = "pool.ntp.org";
+    std::string ntpServerSecondary = "time.cloudflare.com";
 };
 
 struct StaticIpConfig {

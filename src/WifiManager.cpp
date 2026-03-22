@@ -63,6 +63,11 @@ std::string normalizeMdnsHostname(const std::string& deviceName) {
 
     return normalized.empty() ? "salzstand" : normalized;
 }
+
+std::string normalizeNtpServer(const std::string& value, const std::string& fallback) {
+    const std::string trimmed = trimCopy(value);
+    return trimmed.empty() ? fallback : trimmed;
+}
 }
 
 WifiManager& WifiManager::getInstance() {
@@ -92,7 +97,13 @@ void WifiManager::init() {
         DebugLogger::getInstance().log(LogLevel::INFO, std::string("WiFi got IP: ") + ip);
         // NTP synchronisieren (UTC, kein Sommer-/Winterzeit-Offset nötig –
         // das Dashboard rechnet im Browser in Ortszeit um)
-        configTime(0, 0, "pool.ntp.org", "time.cloudflare.com");
+        const std::string ntpPrimary = normalizeNtpServer(config_.ntpServerPrimary, "pool.ntp.org");
+        const std::string ntpSecondary = normalizeNtpServer(config_.ntpServerSecondary, "time.cloudflare.com");
+        configTime(0, 0, ntpPrimary.c_str(), ntpSecondary.c_str());
+        DebugLogger::getInstance().log(
+            LogLevel::INFO,
+            "NTP sync configured with primary=" + ntpPrimary + ", secondary=" + ntpSecondary
+        );
         startMdns();
         // Kein MQTT-Connect im WiFi-Event-Task: wird im main loop verarbeitet.
     }, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_GOT_IP);

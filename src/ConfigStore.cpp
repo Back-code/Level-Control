@@ -53,6 +53,11 @@ std::string normalizeDeviceName(const std::string& value) {
     }
     return trimmed;
 }
+
+std::string normalizeNtpServer(const std::string& value, const std::string& fallback) {
+    const std::string trimmed = trimCopy(value);
+    return trimmed.empty() ? fallback : trimmed;
+}
 }
 
 ConfigStore& ConfigStore::getInstance() {
@@ -78,6 +83,14 @@ bool ConfigStore::load(Config& config) {
     config.wifi.ssid = doc["wifi"]["ssid"] | "";
     config.wifi.password = doc["wifi"]["password"] | "";
     config.wifi.deviceName = normalizeDeviceName(doc["wifi"]["deviceName"] | "Salzstand");
+    config.wifi.ntpServerPrimary = normalizeNtpServer(
+        doc["wifi"]["ntpServerPrimary"] | "pool.ntp.org",
+        "pool.ntp.org"
+    );
+    config.wifi.ntpServerSecondary = normalizeNtpServer(
+        doc["wifi"]["ntpServerSecondary"] | "time.cloudflare.com",
+        "time.cloudflare.com"
+    );
     config.staticIp.ip = doc["staticIp"]["ip"] | "";
     config.staticIp.gateway = doc["staticIp"]["gateway"] | "";
     config.staticIp.subnet = doc["staticIp"]["subnet"] | "";
@@ -158,6 +171,8 @@ bool ConfigStore::save(const Config& config) {
     doc["wifi"]["ssid"] = config.wifi.ssid;
     doc["wifi"]["password"] = config.wifi.password;
     doc["wifi"]["deviceName"] = normalizeDeviceName(config.wifi.deviceName);
+    doc["wifi"]["ntpServerPrimary"] = normalizeNtpServer(config.wifi.ntpServerPrimary, "pool.ntp.org");
+    doc["wifi"]["ntpServerSecondary"] = normalizeNtpServer(config.wifi.ntpServerSecondary, "time.cloudflare.com");
     doc["staticIp"]["ip"] = config.staticIp.ip;
     doc["staticIp"]["gateway"] = config.staticIp.gateway;
     doc["staticIp"]["subnet"] = config.staticIp.subnet;

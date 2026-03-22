@@ -14,6 +14,8 @@
     ssid: '',
     password: '',
     deviceName: 'Salzstand',
+    ntpServerPrimary: 'pool.ntp.org',
+    ntpServerSecondary: 'time.cloudflare.com',
     staticIp: { ip: '', gateway: '', subnet: '', dns: '' }
   };
   let wifiHasPassword = false;
@@ -421,6 +423,8 @@
           ssid: c.ssid || '',
           password: isMaskedPassword(c.password || '') ? '' : (c.password || ''),
           deviceName: c.deviceName || 'Salzstand',
+          ntpServerPrimary: c.ntpServerPrimary || 'pool.ntp.org',
+          ntpServerSecondary: c.ntpServerSecondary || 'time.cloudflare.com',
           staticIp: {
             ip: c.staticIp?.ip || '',
             gateway: c.staticIp?.gateway || '',
@@ -562,6 +566,8 @@
           ssid: wifiConfig.ssid,
           password: wifiConfig.password,
           deviceName: wifiConfig.deviceName,
+          ntpServerPrimary: wifiConfig.ntpServerPrimary,
+          ntpServerSecondary: wifiConfig.ntpServerSecondary,
           useStaticIp: wifiMode === 'static',
           staticIp: {
             ip: wifiMode === 'static' ? wifiConfig.staticIp.ip : '',
@@ -883,6 +889,17 @@
       <input bind:value={wifiConfig.deviceName} placeholder="Salzstand" />
     </label>
     <p class="helper-text">Im Netzwerk erreichbar unter {getWifiLocalUrl()}</p>
+
+    <h3>NTP</h3>
+    <label class="field-row">
+      <span>NTP-Server 1:</span>
+      <input bind:value={wifiConfig.ntpServerPrimary} placeholder="pool.ntp.org" />
+    </label>
+    <label class="field-row">
+      <span>NTP-Server 2:</span>
+      <input bind:value={wifiConfig.ntpServerSecondary} placeholder="time.cloudflare.com" />
+    </label>
+    <p class="helper-text">Zeit wird in UTC synchronisiert; Anzeige im Browser erfolgt automatisch in lokaler Zeit.</p>
 
     <div class="choice-grid" role="radiogroup" aria-label="IP-Konfiguration">
       <label class="choice-card">

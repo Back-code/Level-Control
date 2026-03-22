@@ -360,6 +360,8 @@ void WebServerDashboard::setupRoutes() {
         doc["password"] = wifiHasPassword ? kPasswordMask : "";
         doc["hasPassword"] = wifiHasPassword;
         doc["deviceName"] = loaded ? config.wifi.deviceName : WifiManager::getInstance().getConfig().deviceName;
+        doc["ntpServerPrimary"] = loaded ? config.wifi.ntpServerPrimary : WifiManager::getInstance().getConfig().ntpServerPrimary;
+        doc["ntpServerSecondary"] = loaded ? config.wifi.ntpServerSecondary : WifiManager::getInstance().getConfig().ntpServerSecondary;
         doc["mdnsHostname"] = WifiManager::getInstance().getMdnsHostname();
         doc["localUrl"] = WifiManager::getInstance().getLocalUrl();
         doc["useStaticIp"] = loaded && (!config.staticIp.ip.empty() || !config.staticIp.subnet.empty() || !config.staticIp.dns.empty());
@@ -423,6 +425,8 @@ void WebServerDashboard::setupRoutes() {
             ConfigStore::getInstance().load(config); // Load current
             config.wifi.ssid = doc["ssid"] | "";
             config.wifi.deviceName = doc["deviceName"] | "Salzstand";
+            config.wifi.ntpServerPrimary = doc["ntpServerPrimary"] | "pool.ntp.org";
+            config.wifi.ntpServerSecondary = doc["ntpServerSecondary"] | "time.cloudflare.com";
             std::string newWifiPassword = doc["password"] | "";
             if (!newWifiPassword.empty() && !isMaskedPassword(newWifiPassword)) {
                 config.wifi.password = newWifiPassword;

@@ -9,6 +9,7 @@
 #include "DebugLogger.h"
 #include "EventBus.h"
 #include "ConfigStore.h"
+#include "HistoryManager.h"
 
 void setup() {
     Serial.begin(115200);
@@ -48,6 +49,8 @@ void setup() {
 
     SensorManager::getInstance().init();
     PushNotificationManager::getInstance().init();
+    // HistoryManager nach dem LittleFS-Mount (WebServerDashboard::init) initialisieren
+    HistoryManager::getInstance().init();
 
     // Sensor Test beim Start
     Serial.println("[Salzstand] Starting sensor test...");
@@ -70,6 +73,7 @@ void loop() {
     static unsigned long lastMeasurement     = 0;
     static unsigned long lastMqttReconnect   = 0;
     static unsigned long lastMqttPublish     = 0;
+    static unsigned long lastHistoryCheck    = 0;
 
     WifiManager::getInstance().process();
     MqttManager::getInstance().loop();
@@ -116,6 +120,15 @@ void loop() {
         );
         MqttManager::getInstance().publishSystemState();
         MqttManager::getInstance().publishUpdateState();
+    }
+
+    // Salzstand-Verlauf alle 60 s prüfen; HistoryManager entscheidet intern ob 6h vergangen
+    if (lastHistoryCheck == 0 || now - lastHistoryCheck >= 60000UL) {
+        lastHistoryCheck = now;
+        if (SensorManager::getInstance().hasValidReading()) {
+            HistoryManager::getInstance().addSample(
+                SensorManager::getInstance().getDistancePercent());
+        }
     }
 
     // WebSocket Broadcast alle 5 s

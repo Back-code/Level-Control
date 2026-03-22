@@ -3,9 +3,6 @@
 
   export let data;
 
-  const HISTORY_KEY = 'salzstand-history-v1';
-  const HISTORY_RETENTION_MS = 365 * 24 * 60 * 60 * 1000; // 12 Monate
-  const HISTORY_SAMPLE_INTERVAL_MS = 6 * 60 * 60 * 1000;
   const PERIOD_OPTIONS = [
     { id: '1m', label: '1 Monat', months: 1 },
     { id: '3m', label: '3 Monate', months: 3 },
@@ -19,7 +16,7 @@
 
   let activePeriod = '3m';
   let showResetConfirm = false;
-  let history = [];
+  let history = [];  // { ts: Unix-ms, value: Prozent }
   let historyLoaded = false;
 
   function formatUptime(totalSeconds) {
@@ -43,63 +40,30 @@
     return start.getTime();
   }
 
-  function loadHistory() {
+  async function fetchHistory() {
     try {
-      const raw = localStorage.getItem(HISTORY_KEY);
-      if (!raw) {
-        history = [];
-        return;
-      }
-
-      const parsed = JSON.parse(raw);
-      history = Array.isArray(parsed)
-        ? parsed.filter((entry) => Number.isFinite(entry?.ts) && Number.isFinite(entry?.value))
+      const res = await fetch('/api/history');
+      if (!res.ok) return;
+      const raw = await res.json();
+      // ESP liefert Sekunden (Unix), intern arbeiten wir mit Millisekunden
+      history = Array.isArray(raw)
+        ? raw
+            .filter((e) => Number.isFinite(e?.ts) && Number.isFinite(e?.v))
+            .map((e) => ({ ts: e.ts * 1000, value: e.v }))
         : [];
     } catch (_) {
       history = [];
+    } finally {
+      historyLoaded = true;
     }
   }
 
-  function persistHistory() {
-    try {
-      localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
-    } catch (_) {
-      // Ignore storage quota problems and keep the UI responsive.
-    }
-  }
-
-  function resetHistory() {
+  async function resetHistory() {
     showResetConfirm = false;
-    history = [];
     try {
-      localStorage.removeItem(HISTORY_KEY);
+      await fetch('/api/history', { method: 'DELETE' });
     } catch (_) {}
-  }
-
-  function recordHistorySample(value) {
-    if (!historyLoaded || !Number.isFinite(value)) {
-      return;
-    }
-
-    const now = Date.now();
-    const trimmed = history.filter((entry) => now - entry.ts <= HISTORY_RETENTION_MS);
-    const lastEntry = trimmed[trimmed.length - 1];
-
-    if (!lastEntry) {
-      history = [{ ts: now, value }];
-      persistHistory();
-      return;
-    }
-
-    if (now - lastEntry.ts < HISTORY_SAMPLE_INTERVAL_MS) {
-      // Nur im RAM aktualisieren – kein localStorage-Write innerhalb des Sample-Intervalls
-      history = [...trimmed.slice(0, -1), { ts: now, value }];
-      return;
-    }
-
-    // Neuer Datenpunkt: in localStorage schreiben
-    history = [...trimmed, { ts: now, value }];
-    persistHistory();
+    history = [];
   }
 
   function buildPath(points, minValue, maxValue) {
@@ -133,14 +97,8 @@
   }
 
   onMount(() => {
-    loadHistory();
-    historyLoaded = true;
-    recordHistorySample(Number(data?.salzstandPercent));
+    fetchHistory();
   });
-
-  $: if (historyLoaded) {
-    recordHistorySample(Number(data?.salzstandPercent));
-  }
 
   $: periodStart = getPeriodStart(activePeriod);
   $: filteredHistory = history.filter((entry) => entry.ts >= periodStart);
@@ -167,7 +125,7 @@
     <div class="chart-head">
       <div>
         <h2><span class="mini-icon"><svg viewBox="0 0 24 24"><path d="M4 18h16v2H4v-2zm2-3.5 3.5-3.5 2.5 2.5L18 8l1.4 1.4-6.9 6.9-2.5-2.5L7.4 16z"/></svg></span>Salzstand Verlauf</h2>
-        <p class="chart-subtitle">Lokal im Browser gespeicherte Prozentwerte, fortlaufend ab jetzt aufgebaut.</p>
+        <p class="chart-subtitle">Auf dem ESP dauerhaft gespeicherte Messwerte – auch ohne geöffnetes Browser-Fenster.</p>
       </div>
       <div class="chart-controls">
         <div class="chart-periods" role="group" aria-label="Zeitraum wählen">

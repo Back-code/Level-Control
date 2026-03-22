@@ -1,6 +1,7 @@
 #include "WifiManager.h"
 #include "DebugLogger.h"
 #include <ESPmDNS.h>
+#include <esp_sntp.h>
 #include <algorithm>
 #include <cctype>
 
@@ -89,6 +90,9 @@ void WifiManager::init() {
         resetReconnectBackoff();
         std::string ip = WiFi.localIP().toString().c_str();
         DebugLogger::getInstance().log(LogLevel::INFO, std::string("WiFi got IP: ") + ip);
+        // NTP synchronisieren (UTC, kein Sommer-/Winterzeit-Offset nötig –
+        // das Dashboard rechnet im Browser in Ortszeit um)
+        configTime(0, 0, "pool.ntp.org", "time.cloudflare.com");
         startMdns();
         // Kein MQTT-Connect im WiFi-Event-Task: wird im main loop verarbeitet.
     }, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_GOT_IP);

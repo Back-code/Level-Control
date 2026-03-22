@@ -20,6 +20,7 @@
 #include <mbedtls/sha256.h>
 #include "ConfigStore.h"
 #include "EventBus.h"
+#include "HistoryManager.h"
 #include "MqttManager.h"
 #include "OtaTrustedRoots.h"
 #include "PushNotificationManager.h"
@@ -687,6 +688,30 @@ void WebServerDashboard::setupRoutes() {
         serializeJson(doc, json);
         const int statusCode = diagResult.success ? 200 : 503;
         request->send(statusCode, "application/json", json.c_str());
+    });
+
+    // GET /api/history – liefert alle gespeicherten Salzstand-Verläufe als JSON-Array
+    server_.on("/api/history", HTTP_GET, [](AsyncWebServerRequest *request) {
+        const auto entries = HistoryManager::getInstance().getHistory();
+        AsyncResponseStream* resp = request->beginResponseStream("application/json");
+        resp->print('[');
+        bool first = true;
+        for (const auto& e : entries) {
+            if (!first) resp->print(',');
+            first = false;
+            char buf[40];
+            snprintf(buf, sizeof(buf), "{\"ts\":%lu,\"v\":%.1f}",
+                     static_cast<unsigned long>(e.timestamp), e.value);
+            resp->print(buf);
+        }
+        resp->print(']');
+        request->send(resp);
+    });
+
+    // DELETE /api/history – löscht alle gespeicherten Verlaufsdaten
+    server_.on("/api/history", HTTP_DELETE, [](AsyncWebServerRequest *request) {
+        HistoryManager::getInstance().clear();
+        request->send(204);
     });
 
     server_.on("/api/restart", HTTP_POST, [](AsyncWebServerRequest *request) {

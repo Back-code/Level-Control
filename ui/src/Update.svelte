@@ -4,6 +4,10 @@
 
   export let currentVersion = '0.00.000';
 
+  // Tatsächlich laufende Version – kommt vom Gerät via /api/update/status.
+  // Fällt auf den compile-time Prop zurück bis der erste Fetch abgeschlossen ist.
+  let liveInstalledVersion = '';
+
   let statusCard = null;
   let appFileInput = null;
   let webUiFileInput = null;
@@ -151,6 +155,9 @@
       const response = await fetch('/api/update/status');
       if (response.ok) {
         status = await response.json();
+        if (status.installedVersion) {
+          liveInstalledVersion = status.installedVersion;
+        }
 
         // After a successful OTA the device reboots quickly. Trigger a client reload once.
         if (!otaReloadScheduled && status.success && status.rebootPending && !status.inProgress) {
@@ -368,8 +375,9 @@
     : 0;
   $: uploadAppProgress = localUpload.active && localUpload.target === 'app' ? progressValue(localUpload.received, localUpload.total) : 0;
   $: uploadWebUiProgress = localUpload.active && localUpload.target === 'webui' ? progressValue(localUpload.received, localUpload.total) : 0;
-  $: repoStatus = getRepoUpdateStatus(manifest, currentVersion);
-  $: currentReleaseUrl = `https://github.com/Back-code/Salzstand/releases/tag/v${currentVersion}`;
+  $: displayedVersion = liveInstalledVersion || currentVersion;
+  $: repoStatus = getRepoUpdateStatus(manifest, displayedVersion);
+  $: currentReleaseUrl = `https://github.com/Back-code/Salzstand/releases/tag/v${displayedVersion}`;
   $: anyBusy = status.inProgress || localUpload.active;
 
   onMount(() => {
@@ -394,7 +402,7 @@
       <div class="version-row">
         <div class="version-item installed">
           <span class="version-label">Installierte Version</span>
-          <a href={currentReleaseUrl} target="_blank" rel="noopener noreferrer" class="version-link">v{currentVersion}</a>
+          <a href={currentReleaseUrl} target="_blank" rel="noopener noreferrer" class="version-link">v{displayedVersion}</a>
         </div>
         {#if manifest}
           <span class="version-separator" aria-hidden="true"></span>

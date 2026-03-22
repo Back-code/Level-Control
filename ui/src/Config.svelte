@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { showNotice } from './dialogStore.js';
+  import { SMTP_PROVIDERS, detectProvider } from './smtpProviders.js';
   import FieldLabel from './FieldLabel.svelte';
   import PasswordInput from './PasswordInput.svelte';
 
@@ -44,6 +45,7 @@
     smtpPort: 587,
     useSsl: false,
     startTls: false,
+    smtpSkipCertVerify: false,
     authUser: '',
     authPassword: '',
     senderName: DEFAULT_PUSH_SENDER_NAME,
@@ -59,6 +61,9 @@
   };
   let pushConfigDirty = false;
   let pushHasAuthPassword = false;
+  let selectedProvider = 'custom';
+  let smtpDiagResult = null;
+  let smtpDiagLoading = false;
   let lastReportedDirtyState = null;
 
   const PASSWORD_MASK = '*****';
@@ -440,6 +445,7 @@
           smtpPort: c.smtpPort || 587,
           useSsl: c.useSsl ?? false,
           startTls: c.startTls ?? false,
+          smtpSkipCertVerify: c.smtpSkipCertVerify ?? true,
           authUser: c.authUser || '',
           authPassword: isMaskedPassword(c.authPassword || '') ? '' : (c.authPassword || ''),
           senderName: c.senderName || DEFAULT_PUSH_SENDER_NAME,
@@ -454,6 +460,7 @@
           bodyTemplate: c.bodyTemplate || DEFAULT_PUSH_BODY
         };
         pushHasAuthPassword = (c.hasAuthPassword ?? false) || isMaskedPassword(c.authPassword || '');
+        selectedProvider = detectProvider(c.smtpServer || '', c.smtpPort || 587);
       });
   }
 
@@ -675,6 +682,45 @@
     }
   }
 
+  function selectProvider(id) {
+    const provider = SMTP_PROVIDERS.find((p) => p.id === id);
+    if (!provider) return;
+    selectedProvider = id;
+    if (id !== 'custom') {
+      pushConfig = {
+        ...pushConfig,
+        smtpServer: provider.host,
+        smtpPort: provider.port,
+        useSsl: provider.security === 'ssl',
+        startTls: provider.security === 'starttls'
+      };
+      markPushConfigDirty();
+    }
+  }
+
+  async function runSmtpDiagnostic() {
+    smtpDiagLoading = true;
+    smtpDiagResult = null;
+
+    if (pushConfigDirty) {
+      const saved = await savePushConfig();
+      if (!saved) {
+        smtpDiagLoading = false;
+        return;
+      }
+    }
+
+    try {
+      const response = await fetch('/api/push/smtp-check', { method: 'POST' });
+      const data = await response.json().catch(() => null);
+      smtpDiagResult = data || { success: false, steps: [{ name: 'HTTP', ok: false, detail: `HTTP ${response.status}` }] };
+    } catch (_) {
+      smtpDiagResult = { success: false, steps: [{ name: 'Verbindung', ok: false, detail: 'Keine Antwort vom Gerät.' }] };
+    } finally {
+      smtpDiagLoading = false;
+    }
+  }
+
   function getMqttStateLabel(state) {
     switch (state) {
       case 'connected':     return 'Verbunden';
@@ -885,8 +931,22 @@
 
     <label class="checkbox-row"><input type="checkbox" bind:checked={pushConfig.enabled} /> Push Benachrichtigung aktivieren</label>
 
-    <label class="field-row"><span>SMTP-Server:</span><input bind:value={pushConfig.smtpServer} /></label>
-    <label class="field-row"><span>SMTP Port:</span><input type="number" min="1" bind:value={pushConfig.smtpPort} /></label>
+    <label class="field-row">
+      <span>Provider:</span>
+      <select class="theme-select" value={selectedProvider} on:change={(e) => selectProvider(e.currentTarget.value)}>
+        {#each SMTP_PROVIDERS as provider}
+          <option value={provider.id}>{provider.label}{provider.certOk ? ' ✓' : ''}</option>
+        {/each}
+      </select>
+    </label>
+    {#if selectedProvider !== 'custom'}
+      {#each SMTP_PROVIDERS.filter(p => p.id === selectedProvider && p.certNote) as p}
+        <p class="helper-text error">{p.certNote}</p>
+      {/each}
+    {/if}
+
+    <label class="field-row"><span>SMTP-Server:</span><input bind:value={pushConfig.smtpServer} on:input={() => { selectedProvider = detectProvider(pushConfig.smtpServer, pushConfig.smtpPort); }} /></label>
+    <label class="field-row"><span>SMTP Port:</span><input type="number" min="1" bind:value={pushConfig.smtpPort} on:input={() => { selectedProvider = detectProvider(pushConfig.smtpServer, pushConfig.smtpPort); }} /></label>
 
     <label class="field-row field-row--top-align">
       <span>Verschlüsselung:</span>
@@ -902,10 +962,42 @@
       </div>
     </label>
 
+    {#if getPushEncryptionMode() === 'ssl' || getPushEncryptionMode() === 'starttls'}
+      <label class="checkbox-row checkbox-row--warning">
+        <input type="checkbox" bind:checked={pushConfig.smtpSkipCertVerify} />
+        Zertifikat überspringen (unsicher – nur für Provider ohne hinterlegtes Root-CA)
+      </label>
+      {#if !pushConfig.smtpSkipCertVerify}
+        <p class="helper-text">Zertifikatsprüfung aktiv. Hetzner, IONOS und Strato werden unterstützt. Gmail, GMX, Web.de und Outlook benötigen "Zertifikat überspringen".</p>
+      {:else}
+        <p class="helper-text error">Zertifikatsprüfung deaktiviert – Verbindung ist anfällig für Man-in-the-Middle-Angriffe.</p>
+      {/if}
+    {/if}
+
     <label class="field-row"><span>SMTP-Benutzer:</span><input bind:value={pushConfig.authUser} /></label>
     <div class="field-row">
       <span>SMTP-Passwort:</span>
       <PasswordInput bind:value={pushConfig.authPassword} hasStoredPassword={pushHasAuthPassword} mask={PASSWORD_MASK} />
+    </div>
+
+    <div class="diag-section">
+      <button class="secondary-sm" type="button" on:click={runSmtpDiagnostic} disabled={smtpDiagLoading}>
+        {smtpDiagLoading ? 'Prüfe…' : 'SMTP-Verbindung prüfen'}
+      </button>
+      {#if smtpDiagResult}
+        <div class="diag-result" class:diag-result--ok={smtpDiagResult.success} class:diag-result--fail={!smtpDiagResult.success}>
+          <p class="diag-summary">{smtpDiagResult.success ? '✓ Verbindung erfolgreich' : '✗ Verbindung fehlgeschlagen'}</p>
+          <ul class="diag-steps">
+            {#each smtpDiagResult.steps as step}
+              <li class="diag-step" class:diag-step--fail={!step.ok}>
+                <span class="diag-icon" aria-hidden="true">{step.ok ? '✓' : '✗'}</span>
+                <span class="diag-step-name">{step.name}</span>
+                <span class="diag-step-detail">{step.detail}</span>
+              </li>
+            {/each}
+          </ul>
+        </div>
+      {/if}
     </div>
 
     <h3>Absender / Empfänger</h3>
@@ -1372,6 +1464,59 @@
   .button-row--push {
     gap: 400px;
     flex-wrap: nowrap;
+  }
+  .checkbox-row--warning {
+    color: var(--text-muted);
+    font-weight: normal;
+  }
+  .diag-section {
+    margin: 14px 0 4px;
+  }
+  .diag-result {
+    margin-top: 10px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--surface-border);
+    background: rgba(255, 255, 255, 0.05);
+  }
+  .diag-result--ok {
+    border-color: #4caf7d;
+    background: rgba(76, 175, 80, 0.08);
+  }
+  .diag-result--fail {
+    border-color: #e05252;
+    background: rgba(224, 82, 82, 0.08);
+  }
+  .diag-summary {
+    font-weight: 600;
+    margin: 0 0 6px;
+  }
+  .diag-result--ok .diag-summary { color: #4caf7d; }
+  .diag-result--fail .diag-summary { color: #e05252; }
+  .diag-steps {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .diag-step {
+    display: grid;
+    grid-template-columns: 18px 90px 1fr;
+    gap: 6px;
+    align-items: start;
+    font-size: 0.88em;
+    color: var(--text-muted);
+  }
+  .diag-step--fail .diag-icon { color: #e05252; }
+  .diag-step:not(.diag-step--fail) .diag-icon { color: #4caf7d; }
+  .diag-step-name {
+    font-weight: 600;
+    color: var(--text-main);
+  }
+  .diag-step-detail {
+    word-break: break-word;
   }
   .time-select {
     width: min(180px, 100%);

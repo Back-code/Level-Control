@@ -11,6 +11,7 @@
 #include "DebugLogger.h"
 #include "MqttManager.h"
 #include "SensorManager.h"
+#include "SmtpTrustedRoots.h"
 
 namespace {
 constexpr unsigned long kConfigReloadIntervalMs = 30000UL;
@@ -354,7 +355,11 @@ bool PushNotificationManager::sendEmailInternal(const std::string& subject, cons
     Client* client = nullptr;
 
     if (config.push.useSsl) {
-        secureClient.setInsecure();
+        if (config.push.smtpSkipCertVerify) {
+            secureClient.setInsecure();
+        } else {
+            secureClient.setCACert(kSmtpTrustedRootCAs);
+        }
         secureClient.setTimeout(kSmtpTimeoutMs / 1000);
         client = &secureClient;
     } else {
@@ -488,4 +493,116 @@ bool PushNotificationManager::sendTestEmail(std::string& error) {
     const std::string body = renderTemplate(config.push.bodyTemplate, levelPercent, levelCm, rawDistanceM, nowEpoch);
 
     return sendEmailInternal(subject, body, error, false);
+}
+
+SmtpDiagResult PushNotificationManager::smtpDiagnostic() {
+    SmtpDiagResult result;
+
+    if (WiFi.status() != WL_CONNECTED) {
+        result.steps.push_back({"WiFi", false, "WLAN nicht verbunden"});
+        return result;
+    }
+
+    Config config;
+    if (!ConfigStore::getInstance().load(config)) {
+        result.steps.push_back({"Config", false, "Konfiguration konnte nicht geladen werden"});
+        return result;
+    }
+
+    const std::string smtpServer = trimCopy(config.push.smtpServer);
+    if (smtpServer.empty() || config.push.authUser.empty()) {
+        result.steps.push_back({"Config", false, "SMTP-Server oder Benutzername fehlen"});
+        return result;
+    }
+    if (config.push.startTls && !config.push.useSsl) {
+        result.steps.push_back({"Config", false, "STARTTLS wird nicht unterstuetzt – bitte SSL/TLS aktivieren"});
+        return result;
+    }
+    result.steps.push_back({"Config", true, "Konfiguration vorhanden"});
+
+    IPAddress smtpIp;
+    if (!WiFi.hostByName(smtpServer.c_str(), smtpIp)) {
+        result.steps.push_back({"DNS", false, "DNS-Aufloesung fehlgeschlagen: " + smtpServer});
+        return result;
+    }
+    result.steps.push_back({"DNS", true, smtpServer + " -> " + smtpIp.toString().c_str()});
+
+    WiFiClient plainClient;
+    WiFiClientSecure secureClient;
+    Client* client = nullptr;
+
+    if (config.push.useSsl) {
+        if (config.push.smtpSkipCertVerify) {
+            secureClient.setInsecure();
+        } else {
+            secureClient.setCACert(kSmtpTrustedRootCAs);
+        }
+        secureClient.setTimeout(kSmtpTimeoutMs / 1000);
+        client = &secureClient;
+    } else {
+        plainClient.setTimeout(kSmtpTimeoutMs / 1000);
+        client = &plainClient;
+    }
+
+    if (!client->connect(smtpServer.c_str(), config.push.smtpPort)) {
+        std::string detail = "Verbindung fehlgeschlagen (" + smtpServer + ":" + std::to_string(config.push.smtpPort) + ")";
+        if (config.push.useSsl && !config.push.smtpSkipCertVerify) {
+            detail += " – Tipp: Zertifikatspruefung deaktivieren, falls der Provider kein hinterlegtes Root-CA verwendet.";
+        }
+        const std::string label = config.push.useSsl ? "TLS" : "Verbinden";
+        result.steps.push_back({label, false, detail});
+        return result;
+    }
+
+    {
+        const std::string label = config.push.useSsl ? "TLS" : "Verbinden";
+        const std::string detail = "Verbunden auf Port " + std::to_string(config.push.smtpPort)
+            + (config.push.useSsl
+                ? (config.push.smtpSkipCertVerify ? " (ohne Zertifikatspruefung)" : " (Zertifikat verifiziert)")
+                : " (unverschluesselt)");
+        result.steps.push_back({label, true, detail});
+    }
+
+    std::string error;
+    if (!readSmtpResponse(*client, 220, error)) {
+        result.steps.push_back({"SMTP-Greeting", false, error});
+        client->stop();
+        return result;
+    }
+    result.steps.push_back({"SMTP-Greeting", true, "Server bereit (220)"});
+
+    if (!sendSmtpCommand(*client, "EHLO salzstand.local\r\n", 250, error)) {
+        result.steps.push_back({"EHLO", false, error});
+        client->stop();
+        return result;
+    }
+    result.steps.push_back({"EHLO", true, "Server antwortet korrekt (250)"});
+
+    if (!sendSmtpCommand(*client, "AUTH LOGIN\r\n", 334, error)) {
+        result.steps.push_back({"Auth", false, "AUTH LOGIN nicht akzeptiert: " + error});
+        client->stop();
+        return result;
+    }
+    if (!sendSmtpCommand(*client, toBase64(config.push.authUser) + "\r\n", 334, error)) {
+        result.steps.push_back({"Auth", false, "Benutzername abgelehnt: " + error});
+        client->stop();
+        return result;
+    }
+    if (config.push.authPassword.empty()) {
+        result.steps.push_back({"Auth", false, "Kein SMTP-Passwort hinterlegt"});
+        client->stop();
+        return result;
+    }
+    if (!sendSmtpCommand(*client, toBase64(config.push.authPassword) + "\r\n", 235, error)) {
+        result.steps.push_back({"Auth", false, "Anmeldung fehlgeschlagen: " + error});
+        client->stop();
+        return result;
+    }
+    result.steps.push_back({"Auth", true, "Anmeldung erfolgreich (235)"});
+
+    sendSmtpCommand(*client, "QUIT\r\n", 221, error);
+    client->stop();
+
+    result.success = true;
+    return result;
 }

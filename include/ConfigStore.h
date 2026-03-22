@@ -29,6 +29,7 @@ struct PushConfig {
     int smtpPort = 587;
     bool useSsl = false;
     bool startTls = false;
+    bool smtpSkipCertVerify = false;
     std::string authUser;
     std::string authPassword;
     std::string senderName = "Salzstand Control";

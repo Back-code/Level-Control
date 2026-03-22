@@ -2,6 +2,18 @@
 #define PUSH_NOTIFICATION_MANAGER_H
 
 #include <string>
+#include <vector>
+
+struct SmtpDiagStep {
+    std::string name;
+    bool ok;
+    std::string detail;
+};
+
+struct SmtpDiagResult {
+    bool success = false;
+    std::vector<SmtpDiagStep> steps;
+};
 
 class PushNotificationManager {
 public:
@@ -10,6 +22,7 @@ public:
     void init();
     void process(float levelPercent, float levelCm, float rawDistanceM, bool validReading);
     bool sendTestEmail(std::string& error);
+    SmtpDiagResult smtpDiagnostic();
 
 private:
     PushNotificationManager() = default;

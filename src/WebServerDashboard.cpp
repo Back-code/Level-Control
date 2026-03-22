@@ -541,6 +541,7 @@ void WebServerDashboard::setupRoutes() {
             doc["smtpPort"] = config.push.smtpPort;
             doc["useSsl"] = config.push.useSsl;
             doc["startTls"] = config.push.startTls;
+            doc["smtpSkipCertVerify"] = config.push.smtpSkipCertVerify;
             doc["authUser"] = config.push.authUser;
             doc["authPassword"] = config.push.authPassword.empty() ? "" : kPasswordMask;
             doc["hasAuthPassword"] = !config.push.authPassword.empty();
@@ -580,6 +581,7 @@ void WebServerDashboard::setupRoutes() {
         if (config.push.useSsl && config.push.startTls) {
             config.push.startTls = false;
         }
+        config.push.smtpSkipCertVerify = doc["smtpSkipCertVerify"] | false;
         config.push.authUser = doc["authUser"] | "";
 
         std::string newAuthPassword = doc["authPassword"] | "";
@@ -664,6 +666,28 @@ void WebServerDashboard::setupRoutes() {
         }
 
         request->send(500, "application/json", json.c_str());
+    });
+
+    server_.on("/api/push/smtp-check", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->send(405, "application/json", "{\"error\":\"method_not_allowed_use_post\"}");
+    });
+
+    server_.on("/api/push/smtp-check", HTTP_POST, [](AsyncWebServerRequest *request) {
+        SmtpDiagResult diagResult = PushNotificationManager::getInstance().smtpDiagnostic();
+
+        DynamicJsonDocument doc(3072);
+        doc["success"] = diagResult.success;
+        JsonArray steps = doc.createNestedArray("steps");
+        for (const auto& step : diagResult.steps) {
+            JsonObject s = steps.createNestedObject();
+            s["name"] = step.name;
+            s["ok"] = step.ok;
+            s["detail"] = step.detail;
+        }
+        std::string json;
+        serializeJson(doc, json);
+        const int statusCode = diagResult.success ? 200 : 503;
+        request->send(statusCode, "application/json", json.c_str());
     });
 
     server_.on("/api/restart", HTTP_POST, [](AsyncWebServerRequest *request) {

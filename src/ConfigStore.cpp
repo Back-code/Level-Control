@@ -74,6 +74,9 @@ bool ConfigStore::load(Config& config) {
     config.push.smtpPort = doc["push"]["smtpPort"] | 587;
     config.push.useSsl = doc["push"]["useSsl"] | false;
     config.push.startTls = doc["push"]["startTls"] | false;
+    // Rueckwaertskompatibilitaet: altes NVS ohne das Feld -> Zertifikatspruefung deaktivieren,
+    // damit bestehende SMTP-Konfigurationen nicht sofort brechen.
+    config.push.smtpSkipCertVerify = doc["push"]["smtpSkipCertVerify"] | true;
     config.push.authUser = doc["push"]["authUser"] | "";
     config.push.authPassword = doc["push"]["authPassword"] | "";
     config.push.senderName = doc["push"]["senderName"] | "Salzstand Control";
@@ -150,6 +153,7 @@ bool ConfigStore::save(const Config& config) {
     doc["push"]["smtpPort"] = config.push.smtpPort <= 0 ? 587 : config.push.smtpPort;
     doc["push"]["useSsl"] = config.push.useSsl;
     doc["push"]["startTls"] = config.push.startTls;
+    doc["push"]["smtpSkipCertVerify"] = config.push.smtpSkipCertVerify;
     doc["push"]["authUser"] = config.push.authUser;
     doc["push"]["authPassword"] = config.push.authPassword;
     doc["push"]["senderName"] = config.push.senderName.empty() ? "Salzstand Control" : config.push.senderName;

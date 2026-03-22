@@ -8,7 +8,7 @@
   import { confirmAction, showNotice } from './dialogStore.js';
   import versionData from '../../version.json';
 
-  let versionStr = `${versionData.major}.${String(versionData.minor).padStart(2, '0')}.${String(versionData.commit).padStart(3, '0')}`;  // initial fallback; wird durch API-Wert überschrieben
+  let versionStr = `${Number(versionData.major) || 0}.${Number(versionData.minor) || 0}.${Number(versionData.commit) || 0}`;  // initial fallback; wird durch API-Wert überschrieben
 
   let updateAvailable = false;
   let updateUrl = '';

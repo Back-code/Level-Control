@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { confirmAction, showNotice } from './dialogStore.js';
 
-  export let currentVersion = '0.00.000';
+  export let currentVersion = '0.0.0';
 
   // Tatsächlich laufende Version – kommt vom Gerät via /api/update/status.
   // Fällt auf den compile-time Prop zurück bis der erste Fetch abgeschlossen ist.

@@ -9,7 +9,7 @@ import { fileURLToPath } from 'url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const buildDir = join(root, '.pio', 'build', 'esp32-c3-devkitm-1');
 const version = JSON.parse(readFileSync(join(root, 'version.json'), 'utf8'));
-const versionStr = `${version.major}.${String(version.minor).padStart(2, '0')}.${String(version.commit).padStart(3, '0')}`;
+const versionStr = `${Number(version.major) || 0}.${Number(version.minor) || 0}.${Number(version.commit) || 0}`;
 const releaseDir = join(root, 'release', `v${versionStr}`);
 const privateKeyPath = process.env.RELEASE_SIGNING_PRIVATE_KEY || join(root, 'signing', 'release_private.pem');
 

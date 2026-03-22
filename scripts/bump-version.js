@@ -11,17 +11,24 @@ const versionPath = join(root, 'version.json');
 
 const v = JSON.parse(readFileSync(versionPath, 'utf8'));
 
-v.commit++;
-if (v.commit > 100) {
+v.major = Number(v.major) || 0;
+v.minor = Number(v.minor) || 0;
+v.commit = Number(v.commit) || 0;
+
+v.commit += 1;
+if (v.commit > 99) {
   v.commit = 0;
-  v.minor++;
+  v.minor += 1;
 }
-if (v.minor > 10) {
+if (v.minor > 9) {
   v.minor = 0;
-  // major bleibt – wird vom Nutzer manuell gesetzt
+  v.major += 1;
+}
+if (v.major > 99) {
+  v.major = 0;
 }
 
 writeFileSync(versionPath, JSON.stringify(v, null, 2) + '\n');
 
-const str = `${v.major}.${String(v.minor).padStart(2, '0')}.${String(v.commit).padStart(3, '0')}`;
+const str = `${v.major}.${v.minor}.${v.commit}`;
 process.stdout.write(`Version: ${str}\n`);

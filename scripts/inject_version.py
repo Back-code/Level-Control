@@ -12,7 +12,7 @@ generated_header = generated_dir / "GeneratedVersion.h"
 with version_path.open("r", encoding="utf-8") as handle:
     version = json.load(handle)
 
-version_str = f"{version['major']}.{int(version['minor']):02d}.{int(version['commit']):03d}"
+version_str = f"{int(version['major'])}.{int(version['minor'])}.{int(version['commit'])}"
 generated_dir.mkdir(parents=True, exist_ok=True)
 generated_header.write_text(
     "#ifndef GENERATED_VERSION_H\n"

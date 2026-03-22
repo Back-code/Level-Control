@@ -2,7 +2,6 @@
   import { onMount } from 'svelte';
   import Dashboard from './Dashboard.svelte';
   import Config from './Config.svelte';
-  import DebugOverlay from './DebugOverlay.svelte';
   import GlobalDialogs from './GlobalDialogs.svelte';
   import Update from './Update.svelte';
   import { confirmAction, showNotice } from './dialogStore.js';
@@ -200,8 +199,7 @@
     { id: 'wifi', label: 'WiFi', subtitle: 'WLAN-Zugang und optionale statische Netzwerkdaten verwalten.' },
     { id: 'mqtt_ha', label: 'MQTT & HA', subtitle: 'Broker, Discovery und Home-Assistant-Anbindung zentral steuern.' },
     { id: 'push', label: 'Push Nachricht', subtitle: 'E-Mail Benachrichtigungen bei Schwellwert, Zeit und Zyklus konfigurieren.' },
-    { id: 'update', label: 'Update', subtitle: 'OTA aus Releases oder lokales BIN-Upload mit Dateikontrolle durchführen.' },
-    { id: 'debug', label: 'Debug', subtitle: 'Live-Logs sowie NVS-Snapshot fuer Diagnose und Fehleranalyse.' }
+    { id: 'update', label: 'Update', subtitle: 'OTA aus Releases oder lokales BIN-Upload mit Dateikontrolle durchführen.' }
   ];
 
   $: mobilePrimaryTabs = tabs.filter((tab) => MOBILE_PRIMARY_TAB_IDS.includes(tab.id));
@@ -284,8 +282,6 @@
         <Config bind:data {loadConfig} module="push" />
       {:else if activeTab === 'update'}
         <Update currentVersion={versionStr} />
-      {:else if activeTab === 'debug'}
-        <DebugOverlay embedded={true} />
       {/if}
     </section>
   </div>

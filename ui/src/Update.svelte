@@ -207,14 +207,14 @@
     await loadStatus();
   }
 
-  function getRepoUpdateStatus() {
-    if (!manifest) {
+  function getRepoUpdateStatus(manifestData, installedVersion) {
+    if (!manifestData) {
       return { hasUpdate: false, label: 'Kein Release-Manifest' };
     }
 
-    const hasAppUpdate = manifest.assets?.app || manifest.assets?.firmware;
-    const hasWebUiUpdate = manifest.assets?.webui;
-    const appNewer = compareVersions(manifest.version, currentVersion) > 0;
+    const hasAppUpdate = manifestData.assets?.app || manifestData.assets?.firmware;
+    const hasWebUiUpdate = manifestData.assets?.webui;
+    const appNewer = compareVersions(manifestData.version, installedVersion) > 0;
 
     if (!appNewer) {
       return { hasUpdate: false, label: 'Bereits auf neuester Version' };
@@ -354,12 +354,14 @@
   }
 
   $: progressPercent = progressValue(status.received, status.total);
-  $: repoProgress = isRepoProgress('app') || isRepoProgress('full') || isRepoProgress('webui') ? progressValue(status.received, status.total) : 0;
-  $: uploadAppProgress = isUploadProgress('app') ? progressValue(localUpload.received, localUpload.total) : 0;
-  $: uploadWebUiProgress = isUploadProgress('webui') ? progressValue(localUpload.received, localUpload.total) : 0;
-  $: repoStatus = getRepoUpdateStatus();
+  $: repoProgress = status.inProgress && status.source === 'repo' && (status.target === 'app' || status.target === 'full' || status.target === 'webui')
+    ? progressValue(status.received, status.total)
+    : 0;
+  $: uploadAppProgress = localUpload.active && localUpload.target === 'app' ? progressValue(localUpload.received, localUpload.total) : 0;
+  $: uploadWebUiProgress = localUpload.active && localUpload.target === 'webui' ? progressValue(localUpload.received, localUpload.total) : 0;
+  $: repoStatus = getRepoUpdateStatus(manifest, currentVersion);
   $: currentReleaseUrl = `https://github.com/Back-code/Salzstand/releases/tag/v${currentVersion}`;
-  $: anyBusy = isBusy();
+  $: anyBusy = status.inProgress || localUpload.active;
 
   onMount(() => {
     loadManifest();

@@ -783,10 +783,14 @@ void WebServerDashboard::setupRoutes() {
         const String url = request->url();
         const bool isApiRoute = url.startsWith("/api/");
         const bool isWsRoute = url == "/ws";
+        const int lastSlash = url.lastIndexOf('/');
+        const int lastDot = url.lastIndexOf('.');
+        const bool hasExtension = lastDot > lastSlash;
 
-        // SPA-Fallback: unbekannte GET-Routen auf index.html aufloesen,
-        // damit Bookmarks/Deep-Links nicht als 404 enden.
-        if (request->method() == HTTP_GET && !isApiRoute && !isWsRoute) {
+        // SPA-Fallback nur fuer URL-Pfade ohne Dateiendung (z. B. /dashboard).
+        // Fuer Asset-Dateien (/assets/*.js, /favicon.svg, ...) bleibt 404 korrekt,
+        // damit Browser kein HTML als Script/CSS bekommt.
+        if (request->method() == HTTP_GET && !isApiRoute && !isWsRoute && !hasExtension) {
             if (!ensureLittleFsMounted()) {
                 request->send(503, "application/json", "{\"error\":\"ui_not_available\"}");
                 return;

@@ -287,7 +287,7 @@ bool WebServerDashboard::requestRepoUpdate(const std::string& target, std::strin
         return false;
     }
 
-    if (!refreshManifestCache(true, error)) {
+    if (!refreshManifestCache(false, error)) {
         return false;
     }
 
@@ -906,11 +906,9 @@ void WebServerDashboard::sendUpdateStatus(AsyncWebServerRequest *request) const 
 }
 
 void WebServerDashboard::sendUpdateManifest(AsyncWebServerRequest *request) {
-    ReleaseManifest manifest;
-    std::string rawManifest;
     std::string error;
 
-    if (!fetchLatestManifest(manifest, rawManifest, error)) {
+    if (!refreshManifestCache(false, error)) {
         manifestError_ = error;
         lastManifestCheckMs_ = millis();
         DynamicJsonDocument doc(256);
@@ -922,11 +920,36 @@ void WebServerDashboard::sendUpdateManifest(AsyncWebServerRequest *request) {
         return;
     }
 
-    cachedManifest_ = manifest;
     manifestError_.clear();
     lastManifestCheckMs_ = millis();
 
-    request->send(200, "application/json", rawManifest.c_str());
+    DynamicJsonDocument doc(1024);
+    doc["version"] = cachedManifest_.version;
+    doc["releaseUrl"] = cachedManifest_.releaseUrl;
+
+    JsonObject assets = doc.createNestedObject("assets");
+    if (!cachedManifest_.app.url.empty()) {
+        JsonObject app = assets.createNestedObject("app");
+        app["name"] = cachedManifest_.app.name;
+        app["url"] = cachedManifest_.app.url;
+        app["sha256"] = cachedManifest_.app.sha256;
+        app["size"] = cachedManifest_.app.size;
+    }
+    if (!cachedManifest_.webui.url.empty()) {
+        JsonObject webui = assets.createNestedObject("webui");
+        webui["name"] = cachedManifest_.webui.name;
+        webui["url"] = cachedManifest_.webui.url;
+        webui["sha256"] = cachedManifest_.webui.sha256;
+        webui["size"] = cachedManifest_.webui.size;
+    }
+
+    JsonObject signature = doc.createNestedObject("signature");
+    signature["algorithm"] = cachedManifest_.signatureAlgorithm;
+    signature["value"] = cachedManifest_.signatureValue;
+
+    std::string json;
+    serializeJson(doc, json);
+    request->send(200, "application/json", json.c_str());
 }
 
 bool WebServerDashboard::fetchLatestManifest(ReleaseManifest& manifest, std::string& rawManifest, std::string& error) {

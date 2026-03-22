@@ -3,6 +3,42 @@
 #include "ConfigStore.h"
 #include <ArduinoJson.h>
 
+namespace {
+bool isClientInSetupSubnet(AsyncWebServerRequest* request) {
+  if (request == nullptr || request->client() == nullptr) {
+    return false;
+  }
+
+  const IPAddress remote = request->client()->remoteIP();
+  const IPAddress apIp = WiFi.softAPIP();
+  const IPAddress apMask = WiFi.softAPSubnetMask();
+
+  const uint32_t remoteRaw = static_cast<uint32_t>(remote);
+  const uint32_t apIpRaw = static_cast<uint32_t>(apIp);
+  const uint32_t apMaskRaw = static_cast<uint32_t>(apMask);
+
+  return (remoteRaw & apMaskRaw) == (apIpRaw & apMaskRaw);
+}
+
+bool requireSetupSubnet(AsyncWebServerRequest* request) {
+  if (isClientInSetupSubnet(request)) {
+    return true;
+  }
+
+  const char* remoteIp = "unknown";
+  if (request != nullptr && request->client() != nullptr) {
+    remoteIp = request->client()->remoteIP().toString().c_str();
+  }
+
+  DebugLogger::getInstance().log(
+    LogLevel::WARN,
+    std::string("Blocked setup request from ") + remoteIp
+  );
+  request->send(403, "text/plain", "Forbidden");
+  return false;
+}
+}
+
 WebServerSetup& WebServerSetup::getInstance() {
     static WebServerSetup instance;
     return instance;
@@ -26,6 +62,10 @@ void WebServerSetup::stop() {
 
 void WebServerSetup::setupRoutes() {
     server_.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+    if (!requireSetupSubnet(request)) {
+      return;
+    }
+
         static const char HTML[] PROGMEM = R"HTMLEOF(
 <!DOCTYPE html><html lang="de">
 <head>
@@ -135,6 +175,10 @@ function showMsg(cls,txt){
     });
 
     server_.on("/scan", HTTP_POST, [](AsyncWebServerRequest *request) {
+      if (!requireSetupSubnet(request)) {
+        return;
+      }
+
         auto networks = WifiManager::getInstance().scanNetworks();
         StaticJsonDocument<2048> doc;
         JsonArray arr = doc.to<JsonArray>();
@@ -149,6 +193,10 @@ function showMsg(cls,txt){
     });
 
     server_.on("/save", HTTP_POST, [](AsyncWebServerRequest *request) {
+      if (!requireSetupSubnet(request)) {
+        return;
+      }
+
         std::string ssid = request->arg("ssid").c_str();
         std::string password = request->arg("password").c_str();
         WifiConfig config{ssid, password};

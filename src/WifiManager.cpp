@@ -130,9 +130,16 @@ void WifiManager::resetReconnectBackoff() {
     reconnectBackoffMs_ = reconnectBackoffMinMs_;
 }
 
-void WifiManager::startAP(const std::string& ssid, const std::string& password) {
-    WiFi.softAP(ssid.c_str(), password.c_str());
-    DebugLogger::getInstance().log(LogLevel::INFO, "AP started: " + ssid);
+void WifiManager::startAP(const std::string& ssid, const std::string& password, uint8_t maxConnections) {
+    const bool started = WiFi.softAP(ssid.c_str(), password.c_str(), 1, 0, maxConnections);
+    if (started) {
+        DebugLogger::getInstance().log(
+            LogLevel::INFO,
+            "AP started: " + ssid + " (max clients=" + std::to_string(maxConnections) + ")"
+        );
+    } else {
+        DebugLogger::getInstance().log(LogLevel::ERROR, "Failed to start AP: " + ssid);
+    }
 }
 
 void WifiManager::stopAP() {

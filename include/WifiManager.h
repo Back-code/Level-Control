@@ -19,7 +19,7 @@ public:
     void init();
     void process();
     bool connect();
-    void startAP(const std::string& ssid, const std::string& password);
+    void startAP(const std::string& ssid, const std::string& password, uint8_t maxConnections = 1);
     void stopAP();
     std::vector<WifiNetwork> scanNetworks();
     void setConfig(const WifiConfig& config, const StaticIpConfig& staticConfig = {});

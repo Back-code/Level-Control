@@ -232,4 +232,14 @@ function showMsg(cls,txt){
         });
         request->send(200, "text/plain", "OK");
     });
+
+      // Setup-Modus robust machen: Browser rufen haeufig /index.html oder alte Pfade auf.
+      // Statt "Not found" leiten wir GET-Pfade auf die Setup-Startseite um.
+      server_.onNotFound([](AsyncWebServerRequest *request) {
+        if (request->method() == HTTP_GET) {
+          request->redirect("/");
+          return;
+        }
+        request->send(404, "text/plain", "Not found");
+      });
 }

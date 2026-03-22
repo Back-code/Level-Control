@@ -287,7 +287,7 @@ bool WebServerDashboard::requestRepoUpdate(const std::string& target, std::strin
         return false;
     }
 
-    if (!refreshManifestCache(false, error)) {
+    if (!refreshManifestCache(true, error)) {
         return false;
     }
 
@@ -908,7 +908,7 @@ void WebServerDashboard::sendUpdateStatus(AsyncWebServerRequest *request) const 
 void WebServerDashboard::sendUpdateManifest(AsyncWebServerRequest *request) {
     std::string error;
 
-    if (!refreshManifestCache(false, error)) {
+    if (!refreshManifestCache(true, error)) {
         manifestError_ = error;
         lastManifestCheckMs_ = millis();
         DynamicJsonDocument doc(256);

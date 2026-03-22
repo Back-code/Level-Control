@@ -1,5 +1,8 @@
 #include "WifiManager.h"
 #include "DebugLogger.h"
+#include <ESPmDNS.h>
+#include <algorithm>
+#include <cctype>
 
 namespace {
 bool hasStaticIpConfig(const StaticIpConfig& config) {
@@ -12,6 +15,52 @@ IPAddress parseIpOrDefault(const std::string& value) {
         address.fromString(value.c_str());
     }
     return address;
+}
+
+std::string trimCopy(const std::string& value) {
+    const auto first = value.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos) {
+        return "";
+    }
+    const auto last = value.find_last_not_of(" \t\r\n");
+    return value.substr(first, last - first + 1);
+}
+
+std::string normalizeMdnsHostname(const std::string& deviceName) {
+    std::string normalized;
+    normalized.reserve(deviceName.size());
+
+    bool previousWasHyphen = false;
+    for (unsigned char rawChar : trimCopy(deviceName)) {
+        const char ch = static_cast<char>(std::tolower(rawChar));
+        if ((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) {
+            normalized.push_back(ch);
+            previousWasHyphen = false;
+            continue;
+        }
+
+        if (!previousWasHyphen && !normalized.empty()) {
+            normalized.push_back('-');
+            previousWasHyphen = true;
+        }
+    }
+
+    while (!normalized.empty() && normalized.back() == '-') {
+        normalized.pop_back();
+    }
+
+    if (normalized.empty()) {
+        normalized = "salzstand";
+    }
+
+    if (normalized.size() > 63) {
+        normalized.resize(63);
+        while (!normalized.empty() && normalized.back() == '-') {
+            normalized.pop_back();
+        }
+    }
+
+    return normalized.empty() ? "salzstand" : normalized;
 }
 }
 
@@ -40,12 +89,14 @@ void WifiManager::init() {
         resetReconnectBackoff();
         std::string ip = WiFi.localIP().toString().c_str();
         DebugLogger::getInstance().log(LogLevel::INFO, std::string("WiFi got IP: ") + ip);
+        startMdns();
         // Kein MQTT-Connect im WiFi-Event-Task: wird im main loop verarbeitet.
     }, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_GOT_IP);
 
     WiFi.onEvent([this](WiFiEvent_t event, WiFiEventInfo_t info) {
         int reason = info.wifi_sta_disconnected.reason;
         DebugLogger::getInstance().log(LogLevel::WARN, "WiFi disconnected (reason=" + std::to_string(reason) + ")");
+        stopMdns();
         EventBus::getInstance().publish({EventType::WIFI_DISCONNECTED, ""});
         scheduleReconnect();
     }, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
@@ -68,6 +119,7 @@ void WifiManager::process() {
 
     reconnectPending_ = false;
     DebugLogger::getInstance().log(LogLevel::INFO, "WiFi reconnect attempt...");
+    applyStationIdentity();
     WiFi.begin(config_.ssid.c_str(), config_.password.c_str());
 }
 
@@ -88,6 +140,7 @@ bool WifiManager::connect() {
         WiFi.config(emptyIp, emptyIp, emptyIp, emptyIp);
     }
 
+    applyStationIdentity();
     WiFi.begin(config_.ssid.c_str(), config_.password.c_str());
     int attempts = 0;
     while (WiFi.status() != WL_CONNECTED && attempts < 20) {
@@ -187,4 +240,47 @@ void WifiManager::setConfig(const WifiConfig& config, const StaticIpConfig& stat
 
 WifiConfig WifiManager::getConfig() const {
     return config_;
+}
+
+std::string WifiManager::getMdnsHostname() const {
+    return normalizeMdnsHostname(config_.deviceName);
+}
+
+std::string WifiManager::getLocalUrl() const {
+    return std::string("http://") + getMdnsHostname() + ".local/";
+}
+
+void WifiManager::applyStationIdentity() {
+    const std::string hostname = getMdnsHostname();
+    WiFi.mode(WIFI_STA);
+    WiFi.setHostname(hostname.c_str());
+    DebugLogger::getInstance().log(LogLevel::INFO, "WiFi hostname set to " + hostname);
+}
+
+void WifiManager::startMdns() {
+    const std::string hostname = getMdnsHostname();
+
+    if (mdnsRunning_) {
+        MDNS.end();
+        mdnsRunning_ = false;
+    }
+
+    if (!MDNS.begin(hostname.c_str())) {
+        DebugLogger::getInstance().log(LogLevel::WARN, "mDNS start failed for " + hostname + ".local");
+        return;
+    }
+
+    MDNS.addService("http", "tcp", 80);
+    mdnsRunning_ = true;
+    DebugLogger::getInstance().log(LogLevel::INFO, "mDNS active at http://" + hostname + ".local/");
+}
+
+void WifiManager::stopMdns() {
+    if (!mdnsRunning_) {
+        return;
+    }
+
+    MDNS.end();
+    mdnsRunning_ = false;
+    DebugLogger::getInstance().log(LogLevel::INFO, "mDNS stopped");
 }

@@ -200,7 +200,9 @@ function showMsg(cls,txt){
 
         std::string ssid = request->arg("ssid").c_str();
         std::string password = request->arg("password").c_str();
-        WifiConfig config{ssid, password};
+        WifiConfig config;
+        config.ssid = ssid;
+        config.password = password;
         WifiManager::getInstance().setConfig(config);
         request->onDisconnect([]() {
             delay(500);

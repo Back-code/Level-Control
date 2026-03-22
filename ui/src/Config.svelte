@@ -13,6 +13,7 @@
   let wifiConfig = {
     ssid: '',
     password: '',
+    deviceName: 'Salzstand',
     staticIp: { ip: '', gateway: '', subnet: '', dns: '' }
   };
   let wifiHasPassword = false;
@@ -176,6 +177,21 @@
 
   function isMaskedPassword(value) {
     return value === '***' || value === PASSWORD_MASK;
+  }
+
+  function normalizeMdnsHostname(deviceName) {
+    const normalized = String(deviceName || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 63);
+
+    return normalized || 'salzstand';
+  }
+
+  function getWifiLocalUrl() {
+    return `http://${normalizeMdnsHostname(wifiConfig.deviceName)}.local/`;
   }
 
   function getUnitSeconds(unit) {
@@ -404,6 +420,7 @@
         wifiConfig = {
           ssid: c.ssid || '',
           password: isMaskedPassword(c.password || '') ? '' : (c.password || ''),
+          deviceName: c.deviceName || 'Salzstand',
           staticIp: {
             ip: c.staticIp?.ip || '',
             gateway: c.staticIp?.gateway || '',
@@ -544,6 +561,7 @@
         body: JSON.stringify({
           ssid: wifiConfig.ssid,
           password: wifiConfig.password,
+          deviceName: wifiConfig.deviceName,
           useStaticIp: wifiMode === 'static',
           staticIp: {
             ip: wifiMode === 'static' ? wifiConfig.staticIp.ip : '',
@@ -859,6 +877,12 @@
       <span>Passwort:</span>
       <PasswordInput bind:value={wifiConfig.password} hasStoredPassword={wifiHasPassword} mask={PASSWORD_MASK} />
     </div>
+
+    <label class="field-row">
+      <span>Gerätename:</span>
+      <input bind:value={wifiConfig.deviceName} placeholder="Salzstand" />
+    </label>
+    <p class="helper-text">Im Netzwerk erreichbar unter {getWifiLocalUrl()}</p>
 
     <div class="choice-grid" role="radiogroup" aria-label="IP-Konfiguration">
       <label class="choice-card">

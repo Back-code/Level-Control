@@ -359,10 +359,13 @@ void WebServerDashboard::setupRoutes() {
             wifiHasPassword = true;
         }
 
-        DynamicJsonDocument doc(384);
+        DynamicJsonDocument doc(512);
         doc["ssid"] = !configuredSsid.empty() ? configuredSsid : runtimeSsid;
         doc["password"] = wifiHasPassword ? kPasswordMask : "";
         doc["hasPassword"] = wifiHasPassword;
+        doc["deviceName"] = loaded ? config.wifi.deviceName : WifiManager::getInstance().getConfig().deviceName;
+        doc["mdnsHostname"] = WifiManager::getInstance().getMdnsHostname();
+        doc["localUrl"] = WifiManager::getInstance().getLocalUrl();
         doc["useStaticIp"] = loaded && (!config.staticIp.ip.empty() || !config.staticIp.subnet.empty() || !config.staticIp.dns.empty());
         doc["staticIp"]["ip"] = loaded ? config.staticIp.ip : "";
         doc["staticIp"]["gateway"] = loaded ? config.staticIp.gateway : "";
@@ -423,6 +426,7 @@ void WebServerDashboard::setupRoutes() {
             Config config;
             ConfigStore::getInstance().load(config); // Load current
             config.wifi.ssid = doc["ssid"] | "";
+            config.wifi.deviceName = doc["deviceName"] | "Salzstand";
             std::string newWifiPassword = doc["password"] | "";
             if (!newWifiPassword.empty() && !isMaskedPassword(newWifiPassword)) {
                 config.wifi.password = newWifiPassword;
@@ -443,7 +447,7 @@ void WebServerDashboard::setupRoutes() {
                 config.staticIp = {};
             }
 
-            ConfigStore::getInstance().save(config);
+            WifiManager::getInstance().setConfig(config.wifi, config.staticIp);
             request->send(200, "application/json", "{\"status\":\"ok\"}");
         }
     });

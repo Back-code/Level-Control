@@ -6,6 +6,7 @@
 struct WifiConfig {
     std::string ssid;
     std::string password;
+    std::string deviceName = "Salzstand";
 };
 
 struct StaticIpConfig {

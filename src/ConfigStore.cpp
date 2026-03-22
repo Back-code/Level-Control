@@ -3,6 +3,15 @@
 #include <ArduinoJson.h>
 
 namespace {
+std::string trimCopy(const std::string& value) {
+    const auto first = value.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos) {
+        return "";
+    }
+    const auto last = value.find_last_not_of(" \t\r\n");
+    return value.substr(first, last - first + 1);
+}
+
 std::string normalizeReminderCycle(const std::string& value) {
     if (value == "week" || value == "month") {
         return value;
@@ -36,6 +45,14 @@ unsigned long legacyMinutesFromReminderCycle(const std::string& cycle) {
     }
     return 1440UL;
 }
+
+std::string normalizeDeviceName(const std::string& value) {
+    const std::string trimmed = trimCopy(value);
+    if (trimmed.empty()) {
+        return "Salzstand";
+    }
+    return trimmed;
+}
 }
 
 ConfigStore& ConfigStore::getInstance() {
@@ -60,6 +77,7 @@ bool ConfigStore::load(Config& config) {
     config.version = doc["version"] | 1;
     config.wifi.ssid = doc["wifi"]["ssid"] | "";
     config.wifi.password = doc["wifi"]["password"] | "";
+    config.wifi.deviceName = normalizeDeviceName(doc["wifi"]["deviceName"] | "Salzstand");
     config.staticIp.ip = doc["staticIp"]["ip"] | "";
     config.staticIp.gateway = doc["staticIp"]["gateway"] | "";
     config.staticIp.subnet = doc["staticIp"]["subnet"] | "";
@@ -139,6 +157,7 @@ bool ConfigStore::save(const Config& config) {
     doc["version"] = config.version;
     doc["wifi"]["ssid"] = config.wifi.ssid;
     doc["wifi"]["password"] = config.wifi.password;
+    doc["wifi"]["deviceName"] = normalizeDeviceName(config.wifi.deviceName);
     doc["staticIp"]["ip"] = config.staticIp.ip;
     doc["staticIp"]["gateway"] = config.staticIp.gateway;
     doc["staticIp"]["subnet"] = config.staticIp.subnet;

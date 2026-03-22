@@ -24,6 +24,8 @@ public:
     std::vector<WifiNetwork> scanNetworks();
     void setConfig(const WifiConfig& config, const StaticIpConfig& staticConfig = {});
     WifiConfig getConfig() const;
+    std::string getMdnsHostname() const;
+    std::string getLocalUrl() const;
     bool isConnected() const { return WiFi.status() == WL_CONNECTED; }
     std::string getIP() const { return WiFi.localIP().toString().c_str(); }
     std::string getSSID() const { return WiFi.SSID().c_str(); }
@@ -35,8 +37,12 @@ private:
     void onWifiEvent(WiFiEvent_t event);
     void scheduleReconnect();
     void resetReconnectBackoff();
+    void applyStationIdentity();
+    void startMdns();
+    void stopMdns();
     WifiConfig config_;
     StaticIpConfig staticConfig_;
+    bool mdnsRunning_ = false;
     bool reconnectPending_ = false;
     unsigned long nextReconnectAttemptMs_ = 0;
     unsigned long reconnectBackoffMs_ = 2000;

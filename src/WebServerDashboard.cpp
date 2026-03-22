@@ -1110,6 +1110,13 @@ bool WebServerDashboard::refreshManifestCache(bool forceRefresh, std::string& er
     ReleaseManifest manifest;
     std::string rawManifest;
     if (!fetchLatestManifest(manifest, rawManifest, error)) {
+        // Keep the last valid manifest to survive transient network/release endpoint issues.
+        if (cachedManifest_.valid) {
+            manifestError_ = error;
+            lastManifestCheckMs_ = now;
+            return true;
+        }
+
         cachedManifest_ = {};
         manifestError_ = error;
         lastManifestCheckMs_ = now;

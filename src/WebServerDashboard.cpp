@@ -21,6 +21,7 @@
 #include "ConfigStore.h"
 #include "EventBus.h"
 #include "MqttManager.h"
+#include "OtaTrustedRoots.h"
 #include "PushNotificationManager.h"
 #include "ReleaseSigningPublicKey.h"
 #include "SensorManager.h"
@@ -73,6 +74,10 @@ bool parseVersion(const std::string& version, int& major, int& minor, int& patch
     char separator2 = 0;
     return sscanf(version.c_str(), "%d%c%d%c%d", &major, &separator1, &minor, &separator2, &patch) == 5
         && separator1 == '.' && separator2 == '.';
+}
+
+bool isHttpsUrl(const std::string& url) {
+    return url.rfind("https://", 0) == 0;
 }
 
 std::string bytesToHex(const unsigned char *data, size_t length) {
@@ -901,8 +906,13 @@ void WebServerDashboard::sendUpdateManifest(AsyncWebServerRequest *request) {
 }
 
 bool WebServerDashboard::fetchLatestManifest(ReleaseManifest& manifest, std::string& rawManifest, std::string& error) {
+    if (!isHttpsUrl(kLatestManifestUrl)) {
+        error = "Manifest-URL muss HTTPS verwenden";
+        return false;
+    }
+
     WiFiClientSecure client;
-    client.setInsecure();
+    client.setCACert(kOtaTrustedRootCAs);
 
     HTTPClient http;
     http.setTimeout(15000);
@@ -1179,8 +1189,13 @@ void WebServerDashboard::runRemoteUpdateTask(const std::string& target) {
 }
 
 bool WebServerDashboard::applyRemoteAsset(const ManifestAsset& asset, int command, const std::string& phase, std::string& error) {
+    if (!isHttpsUrl(asset.url)) {
+        error = "Asset-URL muss HTTPS verwenden";
+        return false;
+    }
+
     WiFiClientSecure client;
-    client.setInsecure();
+    client.setCACert(kOtaTrustedRootCAs);
 
     HTTPClient http;
     http.setTimeout(20000);

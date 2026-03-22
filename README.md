@@ -342,6 +342,7 @@ Hinweis zur Speicheraufteilung auf ESP32-C3:
 
 Das OTA-Manifest wird kryptografisch signiert (ECDSA P-256, SHA-256).
 Die Firmware verifiziert diese Signatur vor jedem Repo-OTA-Update mit einem fest eingebetteten Public Key.
+Zusaetzlich werden Manifest- und Asset-Downloads jetzt per TLS-Zertifikatskette (Root-CA-Pruefung) validiert.
 
 Einmalig Schluessel erzeugen:
 

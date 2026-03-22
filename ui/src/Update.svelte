@@ -34,6 +34,7 @@
     received: 0,
     total: 0
   };
+  let otaReloadScheduled = false;
 
   function compareVersions(left, right) {
     const leftParts = left.split('.').map(part => Number(part) || 0);
@@ -150,6 +151,14 @@
       const response = await fetch('/api/update/status');
       if (response.ok) {
         status = await response.json();
+
+        // After a successful OTA the device reboots quickly. Trigger a client reload once.
+        if (!otaReloadScheduled && status.success && status.rebootPending && !status.inProgress) {
+          otaReloadScheduled = true;
+          setTimeout(() => {
+            window.location.reload();
+          }, 3500);
+        }
       }
     } catch (_) {
       // Status-Polling ist optional.

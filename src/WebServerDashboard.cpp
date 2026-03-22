@@ -740,7 +740,12 @@ void WebServerDashboard::setupRoutes() {
             request->send(503, "application/json", "{\"error\":\"ui_not_available\"}");
             return;
         }
-        request->send(LittleFS, "/index.html", "text/html");
+
+        AsyncWebServerResponse *response = request->beginResponse(LittleFS, "/index.html", "text/html");
+        response->addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+        response->addHeader("Pragma", "no-cache");
+        response->addHeader("Expires", "0");
+        request->send(response);
     });
 
     // Serve static files from LittleFS (nach API-Routen registrieren)

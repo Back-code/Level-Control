@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { createHash } from 'crypto';
+import { createHash, createSign } from 'crypto';
 import { spawnSync } from 'child_process';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
@@ -11,6 +11,44 @@ const buildDir = join(root, '.pio', 'build', 'esp32-c3-devkitm-1');
 const version = JSON.parse(readFileSync(join(root, 'version.json'), 'utf8'));
 const versionStr = `${version.major}.${String(version.minor).padStart(2, '0')}.${String(version.commit).padStart(3, '0')}`;
 const releaseDir = join(root, 'release', `v${versionStr}`);
+const privateKeyPath = process.env.RELEASE_SIGNING_PRIVATE_KEY || join(root, 'signing', 'release_private.pem');
+
+function buildManifestSigningPayload(manifest) {
+  const app = manifest.assets.app;
+  const webui = manifest.assets.webui;
+  return [
+    `version=${manifest.version}`,
+    `releaseUrl=${manifest.releaseUrl}`,
+    `app.name=${app.name}`,
+    `app.url=${app.url}`,
+    `app.sha256=${app.sha256}`,
+    `app.size=${app.size}`,
+    `webui.name=${webui.name}`,
+    `webui.url=${webui.url}`,
+    `webui.sha256=${webui.sha256}`,
+    `webui.size=${webui.size}`
+  ].join('\n');
+}
+
+function signManifest(manifest) {
+  if (!existsSync(privateKeyPath)) {
+    throw new Error(
+      `Signatur-Schlüssel fehlt: ${privateKeyPath}\n` +
+      'Bitte zuerst ausführen: node scripts/generate-release-signing-keys.js'
+    );
+  }
+
+  const privateKeyPem = readFileSync(privateKeyPath, 'utf8');
+  const payload = buildManifestSigningPayload(manifest);
+  const signer = createSign('SHA256');
+  signer.update(payload);
+  signer.end();
+
+  return {
+    algorithm: 'ECDSA_P256_SHA256',
+    value: signer.sign(privateKeyPem, 'base64')
+  };
+}
 
 function runGit(args) {
   const result = spawnSync('git', args, {
@@ -103,8 +141,11 @@ const manifest = {
       sha256: webui.sha256,
       size: webui.size
     }
-  }
+  },
+  signature: null
 };
+
+manifest.signature = signManifest(manifest);
 
 writeFileSync(join(releaseDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
 

@@ -38,6 +38,8 @@ private:
         std::string releaseUrl;
         ManifestAsset app;
         ManifestAsset webui;
+        std::string signatureAlgorithm;
+        std::string signatureValue;
         bool valid = false;
     };
 
@@ -82,6 +84,8 @@ private:
     void sendUpdateManifest(AsyncWebServerRequest *request);
     bool fetchLatestManifest(ReleaseManifest& manifest, std::string& rawManifest, std::string& error);
     bool refreshManifestCache(bool forceRefresh, std::string& error);
+    std::string buildManifestSigningPayload(const ReleaseManifest& manifest) const;
+    bool verifyManifestSignature(const ReleaseManifest& manifest, std::string& error) const;
     std::string resolveUpdateTarget(const ReleaseManifest& manifest, const std::string& requestedTarget, std::string& error) const;
     void startRemoteUpdateTask(const std::string& target);
     void runRemoteUpdateTask(const std::string& target);

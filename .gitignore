@@ -11,3 +11,5 @@ release/
 *.log
 ToDo.md
 SECURITY_FINDINGS.md
+signing/release_private.pem
+signing/release_public.pem

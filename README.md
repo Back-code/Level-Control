@@ -338,6 +338,33 @@ Hinweis zur Speicheraufteilung auf ESP32-C3:
 - Das Projekt nutzt eine benutzerdefinierte Partitionstabelle in `partitions.csv`.
 - Ergebnis: deutlich größere OTA-App-Slots (je `0x1A0000`) und weiterhin ausreichend LittleFS (`0x0B0000`).
 
+### Signierte OTA-Releases
+
+Das OTA-Manifest wird kryptografisch signiert (ECDSA P-256, SHA-256).
+Die Firmware verifiziert diese Signatur vor jedem Repo-OTA-Update mit einem fest eingebetteten Public Key.
+
+Einmalig Schluessel erzeugen:
+
+```bash
+node scripts/generate-release-signing-keys.js
+```
+
+Ergebnis:
+- Privater Schluessel: `signing/release_private.pem` (bleibt lokal, ist per `.gitignore` ausgeschlossen)
+- Oeffentlicher Schluessel: `signing/release_public.pem`
+- Eingebetteter Firmware-Key: `include/ReleaseSigningPublicKey.h`
+
+Signiertes Release erzeugen:
+
+```bash
+# optional: eigener Pfad zum privaten Schluessel
+set RELEASE_SIGNING_PRIVATE_KEY=C:\path\to\release_private.pem
+
+node scripts/prepare-release.js
+```
+
+`prepare-release.js` bricht ab, wenn kein privater Signatur-Schluessel vorhanden ist.
+
 ### Seriell-Monitor
 
 ```bash

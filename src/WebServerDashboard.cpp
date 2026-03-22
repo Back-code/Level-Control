@@ -10,13 +10,19 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
+#include <cstring>
+#include <vector>
 #include <esp_ota_ops.h>
 #include <esp_partition.h>
+#include <mbedtls/base64.h>
+#include <mbedtls/md.h>
+#include <mbedtls/pk.h>
 #include <mbedtls/sha256.h>
 #include "ConfigStore.h"
 #include "EventBus.h"
 #include "MqttManager.h"
 #include "PushNotificationManager.h"
+#include "ReleaseSigningPublicKey.h"
 #include "SensorManager.h"
 #include "WifiManager.h"
 
@@ -29,6 +35,7 @@ constexpr unsigned long kMinSampleIntervalSeconds = 5UL;
 constexpr uint32_t kRestartDelayMs = 1500;
 constexpr size_t kUploadBufferSize = 4096;
 constexpr unsigned long kManifestCacheTtlMs = 300000;
+constexpr char kManifestSignatureAlgorithm[] = "ECDSA_P256_SHA256";
 
 bool mountLittleFsWithKnownLabels() {
     // Custom partitions often use label "littlefs"; Arduino default is "spiffs".
@@ -940,10 +947,95 @@ bool WebServerDashboard::fetchLatestManifest(ReleaseManifest& manifest, std::str
     manifest.webui.url = doc["assets"]["webui"]["url"] | "";
     manifest.webui.sha256 = toLowerCopy(doc["assets"]["webui"]["sha256"] | "");
     manifest.webui.size = doc["assets"]["webui"]["size"] | 0;
+    manifest.signatureAlgorithm = doc["signature"]["algorithm"] | "";
+    manifest.signatureValue = doc["signature"]["value"] | "";
     manifest.valid = !manifest.version.empty() && (!manifest.app.url.empty() || !manifest.webui.url.empty());
 
     if (!manifest.valid) {
         error = "Manifest enthält keine Update-Assets";
+        return false;
+    }
+
+    if (!verifyManifestSignature(manifest, error)) {
+        return false;
+    }
+
+    return true;
+}
+
+std::string WebServerDashboard::buildManifestSigningPayload(const ReleaseManifest& manifest) const {
+    return
+        "version=" + manifest.version + "\n" +
+        "releaseUrl=" + manifest.releaseUrl + "\n" +
+        "app.name=" + manifest.app.name + "\n" +
+        "app.url=" + manifest.app.url + "\n" +
+        "app.sha256=" + manifest.app.sha256 + "\n" +
+        "app.size=" + std::to_string(manifest.app.size) + "\n" +
+        "webui.name=" + manifest.webui.name + "\n" +
+        "webui.url=" + manifest.webui.url + "\n" +
+        "webui.sha256=" + manifest.webui.sha256 + "\n" +
+        "webui.size=" + std::to_string(manifest.webui.size);
+}
+
+bool WebServerDashboard::verifyManifestSignature(const ReleaseManifest& manifest, std::string& error) const {
+    if (manifest.signatureAlgorithm != kManifestSignatureAlgorithm) {
+        error = "Manifest-Signaturalgorithmus wird nicht unterstützt";
+        return false;
+    }
+    if (manifest.signatureValue.empty()) {
+        error = "Manifest enthält keine Signatur";
+        return false;
+    }
+
+    const std::string payload = buildManifestSigningPayload(manifest);
+
+    unsigned char hash[32];
+    if (mbedtls_sha256_ret(
+            reinterpret_cast<const unsigned char*>(payload.data()),
+            payload.size(),
+            hash,
+            0) != 0) {
+        error = "SHA256 für Manifest-Signatur fehlgeschlagen";
+        return false;
+    }
+
+    const size_t maxSigLen = (manifest.signatureValue.size() * 3) / 4 + 4;
+    std::vector<unsigned char> signature(maxSigLen);
+    size_t signatureLen = 0;
+    if (mbedtls_base64_decode(
+            signature.data(),
+            signature.size(),
+            &signatureLen,
+            reinterpret_cast<const unsigned char*>(manifest.signatureValue.data()),
+            manifest.signatureValue.size()) != 0) {
+        error = "Manifest-Signatur ist kein gültiges Base64";
+        return false;
+    }
+
+    mbedtls_pk_context publicKey;
+    mbedtls_pk_init(&publicKey);
+
+    const int parseResult = mbedtls_pk_parse_public_key(
+        &publicKey,
+        reinterpret_cast<const unsigned char*>(kReleaseSigningPublicKeyPem),
+        strlen(kReleaseSigningPublicKeyPem) + 1);
+    if (parseResult != 0) {
+        mbedtls_pk_free(&publicKey);
+        error = "Öffentlicher Release-Schlüssel konnte nicht geladen werden";
+        return false;
+    }
+
+    const int verifyResult = mbedtls_pk_verify(
+        &publicKey,
+        MBEDTLS_MD_SHA256,
+        hash,
+        sizeof(hash),
+        signature.data(),
+        signatureLen);
+    mbedtls_pk_free(&publicKey);
+
+    if (verifyResult != 0) {
+        error = "Manifest-Signatur ungültig";
         return false;
     }
 

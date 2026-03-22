@@ -131,6 +131,8 @@ void WifiManager::resetReconnectBackoff() {
 }
 
 void WifiManager::startAP(const std::string& ssid, const std::string& password, uint8_t maxConnections) {
+    // AP+STA erlaubt Netzwerkscan ohne wiederholte Mode-Wechsel waehrend des Setups.
+    WiFi.mode(WIFI_AP_STA);
     const bool started = WiFi.softAP(ssid.c_str(), password.c_str(), 1, 0, maxConnections);
     if (started) {
         DebugLogger::getInstance().log(
@@ -148,19 +150,13 @@ void WifiManager::stopAP() {
 }
 
 std::vector<WifiNetwork> WifiManager::scanNetworks() {
-    wifi_mode_t mode = WiFi.getMode();
-    if (mode == WIFI_MODE_AP) {
-        WiFi.mode(WIFI_AP_STA);
-    } else if (mode == WIFI_MODE_NULL) {
-        WiFi.mode(WIFI_STA);
-    }
-
     WiFi.scanDelete();
-    int n = WiFi.scanNetworks(false, true);
+    // Passiver Scan reduziert Unterbrechungen von AP-Clients waehrend der Suche.
+    int n = WiFi.scanNetworks(false, true, true, 120);
     if (n < 0) {
         delay(250);
         WiFi.scanDelete();
-        n = WiFi.scanNetworks(false, true);
+        n = WiFi.scanNetworks(false, true, true, 120);
     }
 
     std::vector<WifiNetwork> networks;

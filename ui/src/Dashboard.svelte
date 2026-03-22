@@ -4,7 +4,7 @@
   export let data;
 
   const HISTORY_KEY = 'salzstand-history-v1';
-  const HISTORY_RETENTION_MS = 366 * 24 * 60 * 60 * 1000;
+  const HISTORY_RETENTION_MS = 365 * 24 * 60 * 60 * 1000; // 12 Monate
   const HISTORY_SAMPLE_INTERVAL_MS = 6 * 60 * 60 * 1000;
   const PERIOD_OPTIONS = [
     { id: '1m', label: '1 Monat', months: 1 },
@@ -18,6 +18,7 @@
   const CHART_PADDING = { top: 18, right: 18, bottom: 34, left: 18 };
 
   let activePeriod = '3m';
+  let showResetConfirm = false;
   let history = [];
   let historyLoaded = false;
 
@@ -67,6 +68,14 @@
     }
   }
 
+  function resetHistory() {
+    showResetConfirm = false;
+    history = [];
+    try {
+      localStorage.removeItem(HISTORY_KEY);
+    } catch (_) {}
+  }
+
   function recordHistorySample(value) {
     if (!historyLoaded || !Number.isFinite(value)) {
       return;
@@ -83,14 +92,12 @@
     }
 
     if (now - lastEntry.ts < HISTORY_SAMPLE_INTERVAL_MS) {
-      history = [
-        ...trimmed.slice(0, -1),
-        { ts: now, value }
-      ];
-      persistHistory();
+      // Nur im RAM aktualisieren – kein localStorage-Write innerhalb des Sample-Intervalls
+      history = [...trimmed.slice(0, -1), { ts: now, value }];
       return;
     }
 
+    // Neuer Datenpunkt: in localStorage schreiben
     history = [...trimmed, { ts: now, value }];
     persistHistory();
   }
@@ -162,12 +169,28 @@
         <h2><span class="mini-icon"><svg viewBox="0 0 24 24"><path d="M4 18h16v2H4v-2zm2-3.5 3.5-3.5 2.5 2.5L18 8l1.4 1.4-6.9 6.9-2.5-2.5L7.4 16z"/></svg></span>Salzstand Verlauf</h2>
         <p class="chart-subtitle">Lokal im Browser gespeicherte Prozentwerte, fortlaufend ab jetzt aufgebaut.</p>
       </div>
-      <div class="chart-periods" role="group" aria-label="Zeitraum wählen">
-        {#each PERIOD_OPTIONS as option}
-          <button class:active={activePeriod === option.id} on:click={() => activePeriod = option.id}>{option.label}</button>
-        {/each}
+      <div class="chart-controls">
+        <div class="chart-periods" role="group" aria-label="Zeitraum wählen">
+          {#each PERIOD_OPTIONS as option}
+            <button class:active={activePeriod === option.id} on:click={() => activePeriod = option.id}>{option.label}</button>
+          {/each}
+        </div>
+        <button class="btn-reset" on:click={() => (showResetConfirm = true)} title="Verlaufsdaten löschen">
+          <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+          Verlauf löschen
+        </button>
       </div>
     </div>
+
+    {#if showResetConfirm}
+      <div class="reset-confirm" role="alert">
+        <p>Verlaufsdaten wirklich unwiderruflich löschen?<br><small>Eine Wiederherstellung ist nicht möglich.</small></p>
+        <div class="reset-confirm-actions">
+          <button class="btn-cancel" on:click={() => (showResetConfirm = false)}>Abbrechen</button>
+          <button class="btn-danger" on:click={resetHistory}>Ja, löschen</button>
+        </div>
+      </div>
+    {/if}
 
     <div class="chart-meta">
       <div>
@@ -348,11 +371,94 @@
     font-weight: 500;
   }
 
+  .chart-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+  }
+
   .chart-periods {
     display: inline-flex;
     flex-wrap: wrap;
     justify-content: flex-end;
     gap: 8px;
+  }
+
+  .btn-reset {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid rgba(255, 90, 90, 0.3);
+    background: transparent;
+    color: rgba(255, 100, 100, 0.7);
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .btn-reset:hover {
+    background: rgba(255, 80, 80, 0.15);
+    color: rgb(255, 110, 110);
+  }
+
+  .btn-reset svg {
+    width: 13px;
+    height: 13px;
+    fill: currentColor;
+  }
+
+  .reset-confirm {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 14px;
+    padding: 12px 16px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 80, 80, 0.4);
+    background: rgba(255, 60, 60, 0.08);
+  }
+
+  .reset-confirm p {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--text-main);
+    font-weight: 600;
+  }
+
+  .reset-confirm small {
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+
+  .reset-confirm-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .btn-danger {
+    border: none;
+    background: rgba(210, 45, 45, 0.85);
+    color: #fff;
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .btn-cancel {
+    border: 1px solid var(--surface-border);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-muted);
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-weight: 700;
+    cursor: pointer;
   }
 
   .chart-periods button {

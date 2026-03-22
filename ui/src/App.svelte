@@ -8,7 +8,7 @@
   import { confirmAction, showNotice } from './dialogStore.js';
   import versionData from '../../version.json';
 
-  const versionStr = `${versionData.major}.${String(versionData.minor).padStart(2, '0')}.${String(versionData.commit).padStart(3, '0')}`;
+  let versionStr = `${versionData.major}.${String(versionData.minor).padStart(2, '0')}.${String(versionData.commit).padStart(3, '0')}`;  // initial fallback; wird durch API-Wert überschrieben
 
   let updateAvailable = false;
   let updateUrl = '';
@@ -119,7 +119,13 @@
 
     // Load initial config
     loadConfig();
-    checkForUpdate();
+
+    // Zuerst die live installierte Version vom Gerät holen, danach Update-Check
+    fetch('/api/update/status', { cache: 'no-store' })
+      .then(r => r.json())
+      .then(s => { if (s.installedVersion) versionStr = s.installedVersion; })
+      .catch(() => {})
+      .finally(() => checkForUpdate());
 
     // Load initial MQTT connection state
     fetch('/api/mqtt/status', { cache: 'no-store' })

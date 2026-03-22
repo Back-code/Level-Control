@@ -7,7 +7,7 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const buildDir = join(root, '.pio', 'build', 'esp32-c3-devkitm-1');
+const buildDir = join(root, '.pio', 'build_alt', 'esp32-c3-devkitm-1');
 const version = JSON.parse(readFileSync(join(root, 'version.json'), 'utf8'));
 const versionStr = `${version.major}.${String(version.minor).padStart(2, '0')}.${String(version.commit).padStart(3, '0')}`;
 const releaseDir = join(root, 'release', `v${versionStr}`);
@@ -61,6 +61,10 @@ function runGit(args) {
   return (result.stdout || '').trim();
 }
 
+function fetchTags() {
+  spawnSync('git', ['fetch', '--tags'], { cwd: root, encoding: 'utf8' });
+}
+
 function getPreviousTag(currentTag) {
   const tagOutput = runGit(['tag', '--sort=v:refname']);
   if (!tagOutput) {
@@ -87,6 +91,8 @@ function getChangelogLines(previousTag) {
     .filter(Boolean)
     .map((line) => `- ${line}`);
 }
+
+fetchTags();
 
 const assets = [
   { source: 'bootloader.bin', target: `salzstand-v${versionStr}-bootloader.bin`, kind: 'bootloader' },

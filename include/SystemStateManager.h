@@ -5,8 +5,7 @@
 
 enum class SystemState {
     SETUP_MODE,
-    NORMAL_MODE,
-    FALLBACK_AP
+    NORMAL_MODE
 };
 
 class SystemStateManager {

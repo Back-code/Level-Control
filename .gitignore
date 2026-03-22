@@ -7,5 +7,7 @@
 ui/node_modules/
 ui/dist/
 ui/.vite/
+release/
 *.log
 ToDo.md
+SECURITY_FINDINGS.md

@@ -36,8 +36,9 @@ void setup() {
                 MqttManager::getInstance().connect();
             }
         } else {
-            ssm.setState(SystemState::FALLBACK_AP);
-            WifiManager::getInstance().startAP("Salzstand-Fallback", "password");
+            // Verbindung fehlgeschlagen -> Setup-AP starten (gleicher Modus wie Erstkonfiguration)
+            ssm.setState(SystemState::SETUP_MODE);
+            WifiManager::getInstance().startAP("Salzstand-Setup", "");
             WebServerSetup::getInstance().init();
             WebServerSetup::getInstance().start();
         }

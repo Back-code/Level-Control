@@ -72,12 +72,8 @@ Alle Einstellungen werden persistent im NVS-Flash gespeichert (Namespace `config
 ## Boot-Verhalten
 
 ```
-Erster Start / keine SSID konfiguriert
+Erster Start / keine SSID konfiguriert  ODER  WLAN-Verbindung schlägt fehl
   → SETUP_MODE: Access Point "Salzstand-Setup" (kein Passwort)
-  → Webseite auf 192.168.4.1: WiFi-Konfigurationsformular
-
-WLAN-Verbindung schlägt fehl
-  → FALLBACK_AP: Access Point "Salzstand-Fallback" (Passwort: "password")
   → Webseite auf 192.168.4.1: WiFi-Konfigurationsformular
 
 Normaler Betrieb

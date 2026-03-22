@@ -1,9 +1,7 @@
 .pio
-.vscode/.browse.c_cpp.db*
-.vscode/c_cpp_properties.json
-.vscode/launch.json
-.vscode/settings.json
-.vscode/ipch
+.vscode/*
+!.vscode/tasks.json
+!.vscode/extensions.json
 ui/node_modules/
 ui/dist/
 ui/.vite/

@@ -7,6 +7,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
+$releaseRoot = Join-Path $repoRoot 'release'
 Push-Location $repoRoot
 
 try {
@@ -40,6 +41,10 @@ try {
         '--notes-file', "release/v$versionStr/release-notes.txt"
     )
     & gh @releaseArgs
+
+    if (Test-Path $releaseRoot) {
+        Remove-Item -Path $releaseRoot -Recurse -Force
+    }
 }
 finally {
     Pop-Location

@@ -775,7 +775,27 @@ void WebServerDashboard::setupRoutes() {
     // Serve static files from LittleFS (nach API-Routen registrieren)
     server_.serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
 
-    server_.onNotFound([](AsyncWebServerRequest *request) {
+    server_.onNotFound([this](AsyncWebServerRequest *request) {
+        const String url = request->url();
+        const bool isApiRoute = url.startsWith("/api/");
+        const bool isWsRoute = url == "/ws";
+
+        // SPA-Fallback: unbekannte GET-Routen auf index.html aufloesen,
+        // damit Bookmarks/Deep-Links nicht als 404 enden.
+        if (request->method() == HTTP_GET && !isApiRoute && !isWsRoute) {
+            if (!ensureLittleFsMounted()) {
+                request->send(503, "application/json", "{\"error\":\"ui_not_available\"}");
+                return;
+            }
+
+            AsyncWebServerResponse *response = request->beginResponse(LittleFS, "/index.html", "text/html");
+            response->addHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+            response->addHeader("Pragma", "no-cache");
+            response->addHeader("Expires", "0");
+            request->send(response);
+            return;
+        }
+
         DynamicJsonDocument doc(256);
         doc["error"] = "route_not_found";
         doc["url"] = request->url();

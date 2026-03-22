@@ -36,7 +36,9 @@ void setup() {
                 MqttManager::getInstance().connect();
             }
         } else {
-            // Verbindung fehlgeschlagen -> Setup-AP starten (gleicher Modus wie Erstkonfiguration)
+            // Nach 20 fehlgeschlagenen Versuchen -> Setup-AP starten
+            DebugLogger::getInstance().log(LogLevel::WARN,
+                "WiFi connect failed, switching to SETUP_MODE");
             ssm.setState(SystemState::SETUP_MODE);
             WifiManager::getInstance().startAP("Salzstand-Setup", "");
             WebServerSetup::getInstance().init();

@@ -20,8 +20,28 @@ bool isClientInSetupSubnet(AsyncWebServerRequest* request) {
   return (remoteRaw & apMaskRaw) == (apIpRaw & apMaskRaw);
 }
 
+bool isClientInStationSubnet(AsyncWebServerRequest* request) {
+  if (request == nullptr || request->client() == nullptr) {
+    return false;
+  }
+
+  if (WiFi.status() != WL_CONNECTED) {
+    return false;
+  }
+
+  const IPAddress remote = request->client()->remoteIP();
+  const IPAddress staIp = WiFi.localIP();
+  const IPAddress staMask = WiFi.subnetMask();
+
+  const uint32_t remoteRaw = static_cast<uint32_t>(remote);
+  const uint32_t staIpRaw = static_cast<uint32_t>(staIp);
+  const uint32_t staMaskRaw = static_cast<uint32_t>(staMask);
+
+  return (remoteRaw & staMaskRaw) == (staIpRaw & staMaskRaw);
+}
+
 bool requireSetupSubnet(AsyncWebServerRequest* request) {
-  if (isClientInSetupSubnet(request)) {
+  if (isClientInSetupSubnet(request) || isClientInStationSubnet(request)) {
     return true;
   }
 
@@ -34,7 +54,14 @@ bool requireSetupSubnet(AsyncWebServerRequest* request) {
     LogLevel::WARN,
     std::string("Blocked setup request from ") + remoteIp
   );
-  request->send(403, "text/plain", "Forbidden");
+
+  const String apIp = WiFi.softAPIP().toString();
+  const String staIp = WiFi.localIP().toString();
+  String message = "Forbidden\n";
+  message += "Verbinde dich mit dem Setup-AP 'Salzstand-Setup' oder nutze die STA-IP im selben Subnetz.\n";
+  message += "AP-IP: " + apIp + "\n";
+  message += "STA-IP: " + staIp + "\n";
+  request->send(403, "text/plain", message);
   return false;
 }
 }

@@ -47,7 +47,15 @@ Salzstand ist ein ESP32-C3-Projekt zur kontinuierlichen Füllstandsmessung von S
 
 ---
 
-## Konfiguration (NVS)
+## Persistenz
+
+Die persistente Ablage ist auf drei Flash-Bereiche aufgeteilt:
+
+| Bereich | Partition | Inhalt |
+|---|---|---|
+| Konfiguration | `nvs` | WiFi-, MQTT-, Sensor- und Push-Einstellungen |
+| Messverlauf | `histnvs` | Historienpunkte im Namespace `history` |
+| Web-UI | `littlefs` | Gebaute Svelte-Dateien aus `data/` |
 
 Alle Einstellungen werden persistent im NVS-Flash gespeichert (Namespace `config`, JSON-Format).
 
@@ -69,6 +77,8 @@ Alle Einstellungen werden persistent im NVS-Flash gespeichert (Namespace `config
 | `behaelterhoehe` | float | Innenhöhe des Behälters in cm |
 | `offset` | float | Korrekturwert in cm (für Sensorposition) |
 | `sampleIntervalSeconds` | uint32 | Abtastrate des Sensors in Sekunden |
+
+Der Messverlauf wird getrennt davon in der dedizierten Partition `histnvs` gespeichert. Dadurch bleiben Konfiguration und Historie auch bei `upload`, `uploadfs` und OTA-Updates erhalten, ohne die kleine Default-NVS für Konfigurationsdaten zu überladen.
 
 ---
 
@@ -164,6 +174,11 @@ Alle Endpunkte laufen auf Port 80.
 | `POST` | `/api/update/repo` | Repo-OTA aus GitHub Release starten |
 | `POST` | `/api/update/upload/app` | App-BIN lokal hochladen |
 | `POST` | `/api/update/upload/webui` | Web-UI-BIN lokal hochladen |
+| `GET` | `/api/history` | Gespeicherte Historienpunkte lesen |
+| `DELETE` | `/api/history` | Gespeicherten Messverlauf löschen |
+| `GET` | `/api/export` | Konfiguration und Historie als Backup exportieren |
+| `POST` | `/api/import` | Konfiguration und Historie aus Backup importieren |
+| `POST` | `/api/factory-reset` | Konfiguration, Historie und WiFi-Credentials löschen; Neustart auslösen |
 | `GET` | `/api/nvs` | Gesamte NVS-Konfiguration als JSON (Passwörter maskiert) |
 | `POST` | `/api/restart` | ESP32 neu starten |
 | `GET` | `/*` | Statische Dateien aus LittleFS (Svelte-UI) |
@@ -356,7 +371,12 @@ pio run --target upload
 
 Hinweis zur Speicheraufteilung auf ESP32-C3:
 - Das Projekt nutzt eine benutzerdefinierte Partitionstabelle in `partitions.csv`.
-- Ergebnis: deutlich größere OTA-App-Slots (je `0x1A0000`) und weiterhin ausreichend LittleFS (`0x0B0000`).
+- Aktuelle Aufteilung:
+  - `nvs`: `0x5000` für Konfiguration
+  - `app0` / `app1`: jeweils `0x180000`
+  - `histnvs`: `0x050000` für Historie
+  - `littlefs`: `0x0A0000` ab Adresse `0x360000`
+- Bei Änderungen an der Partitionstabelle ist ein einmaliger Full-Erase vor dem nächsten Flash sinnvoll, damit keine Alt-Daten aus dem vorherigen Layout übrig bleiben.
 
 ### Signierte OTA-Releases
 
@@ -385,6 +405,10 @@ node scripts/prepare-release.js
 ```
 
 `prepare-release.js` bricht ab, wenn kein privater Signatur-Schluessel vorhanden ist.
+
+Wichtiger Workflow-Hinweis:
+- `scripts/run-release.ps1` baut Firmware und Web-UI nicht neu, sondern verpackt die vorhandenen Artefakte aus `.pio/build`.
+- Nach `scripts/run-push.ps1` sollte deshalb immer `scripts/run-deploy.ps1` oder mindestens ein frischer Build des gepushten Stands erfolgt sein, bevor das GitHub-Release erstellt wird.
 
 ### Seriell-Monitor
 

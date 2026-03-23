@@ -123,12 +123,14 @@ Terminal → Run Task → Salzstand: Release
 
 Oder im Chat: `*release`
 
-**Voraussetzung:** `*deploy` wurde bereits erfolgreich durchgeführt (Firmware gebaut).
+**Voraussetzung:** `*deploy` wurde bereits erfolgreich durchgeführt oder der gepushte Stand wurde direkt danach frisch gebaut.
 
 **Was passiert:**
 - Release-Artefakte packen (`node scripts/prepare-release.js`)
 - GitHub Release erstellen mit allen Binaries (`gh release create vX.Y.Z`)
 - Lokalen `release/`-Ordner wieder aufräumen
+
+**Wichtig:** `*release` baut nicht selbst neu. Es verpackt nur die vorhandenen Artefakte aus `.pio/build`. Nach `*push` muss daher vor `*release` mindestens einmal `*deploy` oder ein gleichwertiger frischer Build des gepushten Stands gelaufen sein.
 
 **Artefakte im Release:**
 - `salzstand-vX.Y.Z-app.bin` — Firmware
@@ -156,11 +158,13 @@ Oder im Chat: `*release`
 
 ## Datenpersistenz
 
-- **Konfiguration** (WiFi, MQTT, Sensor, Push) → NVS (`config`-Namespace)
-- **Messverlauf** (Historie) → NVS (`history`-Namespace)
-- **Web-UI** → LittleFS (`data/`-Partition, `0x350000`)
+- **Konfiguration** (WiFi, MQTT, Sensor, Push) → Default-NVS (`nvs`, Namespace `config`)
+- **Messverlauf** (Historie) → separate NVS-Partition `histnvs` (Namespace `history`)
+- **Web-UI** → LittleFS (`littlefs`, Start `0x360000`)
 
-Da Konfiguration und Historie in NVS liegen, bleiben sie bei `*test`, `*deploy` und auch bei OTA-Updates erhalten. Nur ein bewusstes „Daten löschen" (Löschen-Button im Dashboard) oder `nvs_flash_erase` leert den NVS.
+Dadurch bleiben Konfiguration und Historie bei `*test`, `*deploy` und OTA-Updates erhalten, ohne dass die kleine Default-NVS durch den Ringpuffer der Historie gefüllt wird. Nur ein bewusstes Löschen über die API/UI oder ein Full-Erase entfernt diese Daten.
+
+Wenn sich die Partitionstabelle ändert, ist vor dem nächsten Flash ein einmaliger Full-Erase erforderlich.
 
 ---
 
@@ -187,5 +191,5 @@ scripts/
   inject_version.py ← wird von PlatformIO beim Build aufgerufen
 .vscode/
   tasks.json        ← 5 VS Code Tasks (Commit/Test/Push/Deploy/Release)
-version.json        ← { "major": 1, "minor": 1, "commit": 28 }
+version.json        ← { "major": 1, "minor": 1, "commit": 35 }
 ```

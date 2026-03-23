@@ -4,6 +4,7 @@
 #include "GeneratedVersion.h"
 #include <HTTPClient.h>
 #include <LittleFS.h>
+#include <Preferences.h>
 #include <Update.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
@@ -892,6 +893,30 @@ void WebServerDashboard::setupRoutes() {
             configRestored ? "true" : "false",
             historyRestored ? "true" : "false");
         request->send(200, "application/json", respBuf);
+    });
+
+    // POST /api/factory-reset – setzt Konfiguration und Historie auf Werkseinstellungen zurueck
+    server_.on("/api/factory-reset", HTTP_POST, [](AsyncWebServerRequest *request) {
+        Preferences configPrefs;
+        if (configPrefs.begin("config", false)) {
+            configPrefs.clear();
+            configPrefs.end();
+        }
+
+        Config defaultConfig;
+        if (!ConfigStore::getInstance().save(defaultConfig)) {
+            request->send(500, "application/json", "{\"error\":\"factory_reset_failed\"}");
+            return;
+        }
+
+        HistoryManager::getInstance().clear();
+
+        // Gespeicherte WLAN-Credentials aus der WiFi-Stack-NVS loeschen.
+        WiFi.disconnect(true, true);
+
+        request->send(200, "application/json", "{\"status\":\"ok\",\"message\":\"factory_reset_started\"}");
+        delay(kRestartDelayMs);
+        ESP.restart();
     });
 
     server_.on("/api/restart", HTTP_POST, [](AsyncWebServerRequest *request) {

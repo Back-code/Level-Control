@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte';
-  import { showNotice } from './dialogStore.js';
+  import { confirmAction, showNotice } from './dialogStore.js';
   import { SMTP_PROVIDERS, detectProvider } from './smtpProviders.js';
   import FieldLabel from './FieldLabel.svelte';
   import PasswordInput from './PasswordInput.svelte';
@@ -73,6 +73,7 @@
   let importFile = null;
   let importLoading = false;
   let importResult = null;
+  let factoryResetLoading = false;
 
   async function doImport() {
     if (!importFile) return;
@@ -99,6 +100,34 @@
       importResult = { ok: false, msg: 'Netzwerkfehler: ' + e.message };
     } finally {
       importLoading = false;
+    }
+  }
+
+  async function doFactoryReset() {
+    if (factoryResetLoading) return;
+
+    const confirmed = await confirmAction({
+      title: 'Werksreset bestaetigen',
+      message: 'Alle Einstellungen und Messdaten werden geloescht. Das Geraet startet danach automatisch neu. Fortfahren?',
+      confirmLabel: 'Ja, alles loeschen',
+      cancelLabel: 'Abbrechen',
+      tone: 'danger'
+    });
+
+    if (!confirmed) return;
+
+    factoryResetLoading = true;
+    try {
+      const res = await fetch('/api/factory-reset', { method: 'POST' });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok || payload.status !== 'ok') {
+        throw new Error(payload.error || 'Werksreset fehlgeschlagen.');
+      }
+      showNotice('success', 'Werksreset gestartet. Das Geraet startet neu.');
+    } catch (e) {
+      showNotice('error', e?.message || 'Werksreset fehlgeschlagen.');
+    } finally {
+      factoryResetLoading = false;
     }
   }
 
@@ -1193,6 +1222,12 @@
         {importResult.msg}
       </p>
     {/if}
+
+    <h3 class="backup-group-title">Werkszustand</h3>
+    <p class="backup-hint">Loescht alle Einstellungen und den kompletten Messverlauf. Anschliessend startet das Geraet automatisch neu.</p>
+    <button class="backup-factory-btn" disabled={factoryResetLoading} on:click={doFactoryReset}>
+      {factoryResetLoading ? 'Werksreset laeuft…' : 'Geraet auf Werkszustand zuruecksetzen'}
+    </button>
   </div>
 {/if}
 
@@ -1753,5 +1788,22 @@
     background: rgba(248, 113, 113, 0.15);
     color: #f87171;
     border: 1px solid rgba(248, 113, 113, 0.35);
+  }
+  .backup-factory-btn {
+    margin-top: 0.2rem;
+    border: 1px solid rgba(248, 113, 113, 0.5);
+    background: rgba(248, 113, 113, 0.2);
+    color: #ffd9d9;
+    border-radius: 8px;
+    padding: 0.55rem 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .backup-factory-btn:hover:enabled {
+    background: rgba(248, 113, 113, 0.3);
+  }
+  .backup-factory-btn:disabled {
+    opacity: 0.7;
+    cursor: wait;
   }
 </style>

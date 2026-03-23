@@ -40,8 +40,11 @@ public:
     /** Gibt alle gespeicherten Einträge in chronologischer Reihenfolge zurück. */
     std::vector<HistoryEntry> getHistory() const;
 
-    /** Löscht alle Daten (RAM + Datei). */
+    /** Löscht alle Daten (RAM + NVS). */
     void clear();
+
+    /** Ersetzt alle gespeicherten Einträge durch die übergebenen (für Import). */
+    void restore(const std::vector<HistoryEntry>& entries);
 
     /** Gibt true zurück, wenn die Systemzeit gültig (NTP synchronisiert) ist. */
     static bool isTimeValid();

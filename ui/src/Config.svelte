@@ -69,6 +69,39 @@
   let smtpDiagLoading = false;
   let lastReportedDirtyState = null;
 
+  // Backup-Modul
+  let importFile = null;
+  let importLoading = false;
+  let importResult = null;
+
+  async function doImport() {
+    if (!importFile) return;
+    importLoading = true;
+    importResult = null;
+    try {
+      const body = await importFile.arrayBuffer();
+      const res = await fetch('/api/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body
+      });
+      const json = await res.json();
+      if (res.ok && json.status === 'ok') {
+        const parts = [];
+        if (json.configRestored)  parts.push('Konfiguration');
+        if (json.historyRestored) parts.push('Messverlauf');
+        importResult = { ok: true, msg: (parts.length ? parts.join(' und ') : 'Nichts') + ' wiederhergestellt.' };
+        if (json.configRestored) await loadConfig();
+      } else {
+        importResult = { ok: false, msg: 'Fehler: ' + (json.error || 'Unbekannter Fehler.') };
+      }
+    } catch (e) {
+      importResult = { ok: false, msg: 'Netzwerkfehler: ' + e.message };
+    } finally {
+      importLoading = false;
+    }
+  }
+
   const PASSWORD_MASK = '*****';
   const SAMPLE_UNITS = [
     { value: 'seconds', label: 'Sekunden', seconds: 1 },
@@ -1138,6 +1171,29 @@
       </div>
     </details>
   </div>
+{:else if module === 'backup'}
+  <div class="config-section">
+    <h2>Datensicherung</h2>
+
+    <h3 class="backup-group-title">Exportieren</h3>
+    <p class="backup-hint">Lädt alle Einstellungen und den Messverlauf als JSON-Datei herunter. Die Datei enthält auch Passwörter im Klartext – sicher aufbewahren.</p>
+    <a class="primary backup-download-btn" href="/api/export" download>Backup herunterladen</a>
+
+    <h3 class="backup-group-title">Importieren</h3>
+    <p class="backup-hint">Stellt Einstellungen und Messverlauf aus einer exportierten Backup-Datei wieder her.</p>
+    <label class="backup-file-label">
+      <input type="file" accept=".json" class="backup-file-input"
+        on:change={e => { importFile = e.target.files[0]; importResult = null; }} />
+    </label>
+    <button class="primary" disabled={!importFile || importLoading} on:click={doImport}>
+      {importLoading ? 'Wird importiert…' : 'Importieren'}
+    </button>
+    {#if importResult}
+      <p class="backup-result" class:backup-result--ok={importResult.ok} class:backup-result--error={!importResult.ok}>
+        {importResult.msg}
+      </p>
+    {/if}
+  </div>
 {/if}
 
 <style>
@@ -1654,5 +1710,48 @@
   }
   .secondary-sm:hover {
     background: rgba(255,255,255,0.12);
+  }
+
+  /* Backup-Modul */
+  .backup-group-title {
+    margin: 1.2rem 0 0.3rem;
+    font-size: 0.95rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .backup-hint {
+    margin: 0 0 0.7rem;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+  .backup-download-btn {
+    display: inline-block;
+    text-decoration: none;
+    margin-bottom: 1rem;
+  }
+  .backup-file-label {
+    display: block;
+    margin-bottom: 0.6rem;
+  }
+  .backup-file-input {
+    font-size: 0.9rem;
+  }
+  .backup-result {
+    margin-top: 0.7rem;
+    font-size: 0.9rem;
+    padding: 0.4rem 0.7rem;
+    border-radius: 6px;
+  }
+  .backup-result--ok {
+    background: rgba(74, 222, 128, 0.15);
+    color: #4ade80;
+    border: 1px solid rgba(74, 222, 128, 0.35);
+  }
+  .backup-result--error {
+    background: rgba(248, 113, 113, 0.15);
+    color: #f87171;
+    border: 1px solid rgba(248, 113, 113, 0.35);
   }
 </style>

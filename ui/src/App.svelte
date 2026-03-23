@@ -199,7 +199,8 @@
     { id: 'wifi', label: 'WiFi', subtitle: 'WLAN-Zugang und optionale statische Netzwerkdaten verwalten.' },
     { id: 'mqtt_ha', label: 'MQTT & HA', subtitle: 'Broker, Discovery und Home-Assistant-Anbindung zentral steuern.' },
     { id: 'push', label: 'Push Nachricht', subtitle: 'E-Mail Benachrichtigungen bei Schwellwert, Zeit und Zyklus konfigurieren.' },
-    { id: 'update', label: 'Update', subtitle: 'OTA aus Releases oder lokales BIN-Upload mit Dateikontrolle durchführen.' }
+    { id: 'update', label: 'Update', subtitle: 'OTA aus Releases oder lokales BIN-Upload mit Dateikontrolle durchführen.' },
+    { id: 'backup', label: 'Sicherung', subtitle: 'Konfiguration und Messverlauf exportieren und importieren.' }
   ];
 
   $: mobilePrimaryTabs = tabs.filter((tab) => MOBILE_PRIMARY_TAB_IDS.includes(tab.id));
@@ -282,6 +283,8 @@
         <Config bind:data {loadConfig} module="push" />
       {:else if activeTab === 'update'}
         <Update currentVersion={versionStr} />
+      {:else if activeTab === 'backup'}
+        <Config bind:data {loadConfig} module="backup" />
       {/if}
     </section>
   </div>

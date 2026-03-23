@@ -204,3 +204,17 @@ void HistoryManager::clear() {
     LittleFS.remove(kLegacyPath);
     DebugLogger::getInstance().log(LogLevel::INFO, "HistoryManager: Verlaufsdaten gelöscht");
 }
+
+void HistoryManager::restore(const std::vector<HistoryEntry>& entries) {
+    head_  = 0;
+    count_ = 0;
+    const uint16_t n = static_cast<uint16_t>(
+        std::min(entries.size(), static_cast<size_t>(kCapacity)));
+    for (uint16_t i = 0; i < n; i++) {
+        records_[i] = {entries[i].timestamp, entries[i].value};
+    }
+    count_ = n;
+    saveToNvs();
+    DebugLogger::getInstance().log(LogLevel::INFO,
+        "HistoryManager: " + std::to_string(count_) + " Eintraege importiert");
+}

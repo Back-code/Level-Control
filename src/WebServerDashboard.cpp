@@ -718,6 +718,182 @@ void WebServerDashboard::setupRoutes() {
         request->send(204);
     });
 
+    // GET /api/export – Konfiguration und Verlaufsdaten als JSON-Backup herunterladen
+    server_.on("/api/export", HTTP_GET, [](AsyncWebServerRequest *request) {
+        Config config;
+        if (!ConfigStore::getInstance().load(config)) {
+            request->send(500, "application/json", "{\"error\":\"config_load_failed\"}");
+            return;
+        }
+
+        const auto entries = HistoryManager::getInstance().getHistory();
+        const time_t t = time(nullptr);
+        struct tm* tmInfo = localtime(&t);
+        char filename[64];
+        strftime(filename, sizeof(filename), "salzstand-backup-%Y-%m-%d.json", tmInfo);
+
+        DynamicJsonDocument cfgDoc(3072);
+        cfgDoc["behaelterhoehe"] = config.behaelterhoehe;
+        cfgDoc["offset"] = config.offset;
+        cfgDoc["sampleIntervalSeconds"] = config.sampleIntervalSeconds;
+        JsonObject wifiJ = cfgDoc.createNestedObject("wifi");
+        wifiJ["ssid"] = config.wifi.ssid;
+        wifiJ["password"] = config.wifi.password;
+        wifiJ["deviceName"] = config.wifi.deviceName;
+        wifiJ["ntpServerPrimary"] = config.wifi.ntpServerPrimary;
+        wifiJ["ntpServerSecondary"] = config.wifi.ntpServerSecondary;
+        JsonObject sipJ = cfgDoc.createNestedObject("staticIp");
+        sipJ["ip"] = config.staticIp.ip;
+        sipJ["gateway"] = config.staticIp.gateway;
+        sipJ["subnet"] = config.staticIp.subnet;
+        sipJ["dns"] = config.staticIp.dns;
+        JsonObject mqttJ = cfgDoc.createNestedObject("mqtt");
+        mqttJ["server"] = config.mqtt.server;
+        mqttJ["port"] = config.mqtt.port;
+        mqttJ["user"] = config.mqtt.user;
+        mqttJ["password"] = config.mqtt.password;
+        mqttJ["discovery"] = config.mqtt.discovery;
+        JsonObject pushJ = cfgDoc.createNestedObject("push");
+        pushJ["enabled"] = config.push.enabled;
+        pushJ["smtpServer"] = config.push.smtpServer;
+        pushJ["smtpPort"] = config.push.smtpPort;
+        pushJ["useSsl"] = config.push.useSsl;
+        pushJ["startTls"] = config.push.startTls;
+        pushJ["smtpSkipCertVerify"] = config.push.smtpSkipCertVerify;
+        pushJ["authUser"] = config.push.authUser;
+        pushJ["authPassword"] = config.push.authPassword;
+        pushJ["senderName"] = config.push.senderName;
+        pushJ["senderEmail"] = config.push.senderEmail;
+        pushJ["recipientEmail"] = config.push.recipientEmail;
+        pushJ["triggerPercent"] = config.push.triggerPercent;
+        pushJ["sendHour"] = config.push.sendHour;
+        pushJ["sendMinute"] = config.push.sendMinute;
+        pushJ["reminderCycle"] = config.push.reminderCycle;
+        pushJ["reminderWeekday"] = config.push.reminderWeekday;
+        pushJ["subjectTemplate"] = config.push.subjectTemplate;
+        pushJ["bodyTemplate"] = config.push.bodyTemplate;
+        std::string cfgJson;
+        serializeJson(cfgDoc, cfgJson);
+
+        AsyncResponseStream* resp = request->beginResponseStream("application/json");
+        resp->addHeader("Content-Disposition",
+            String("attachment; filename=\"") + filename + "\"");
+        resp->printf("{\"exportVersion\":1,\"exportedAt\":%lu,\"config\":",
+            static_cast<unsigned long>(t));
+        resp->print(cfgJson.c_str());
+        resp->print(",\"history\":[");
+        bool firstEntry = true;
+        for (const auto& e : entries) {
+            if (!firstEntry) resp->print(',');
+            firstEntry = false;
+            char buf[40];
+            snprintf(buf, sizeof(buf), "{\"ts\":%lu,\"v\":%.1f}",
+                static_cast<unsigned long>(e.timestamp), e.value);
+            resp->print(buf);
+        }
+        resp->print("]}");
+        request->send(resp);
+    });
+
+    // POST /api/import – Konfiguration und Verlaufsdaten aus JSON-Backup wiederherstellen
+    server_.on("/api/import", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL,
+        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+        static std::string body;
+        if (index == 0) { body = ""; body.reserve(total); }
+        body += std::string(reinterpret_cast<char*>(data), len);
+        if (index + len < total) return;
+
+        DynamicJsonDocument doc(48 * 1024);
+        if (deserializeJson(doc, body) != DeserializationError::Ok) {
+            request->send(400, "application/json", "{\"error\":\"invalid_json\"}");
+            return;
+        }
+        if ((doc["exportVersion"] | 0) != 1) {
+            request->send(400, "application/json", "{\"error\":\"unsupported_export_version\"}");
+            return;
+        }
+
+        bool configRestored = false;
+        bool historyRestored = false;
+
+        if (doc.containsKey("config")) {
+            Config config;
+            ConfigStore::getInstance().load(config);
+            const JsonObjectConst cfg = doc["config"];
+            config.behaelterhoehe = cfg["behaelterhoehe"] | config.behaelterhoehe;
+            config.offset = cfg["offset"] | config.offset;
+            config.sampleIntervalSeconds = cfg["sampleIntervalSeconds"] | config.sampleIntervalSeconds;
+
+            if (cfg.containsKey("wifi")) {
+                const JsonObjectConst w = cfg["wifi"];
+                if (w.containsKey("ssid"))             config.wifi.ssid = w["ssid"].as<std::string>();
+                if (w.containsKey("password") && !isMaskedPassword(w["password"] | std::string()))
+                    config.wifi.password = w["password"].as<std::string>();
+                if (w.containsKey("deviceName"))       config.wifi.deviceName = w["deviceName"].as<std::string>();
+                if (w.containsKey("ntpServerPrimary")) config.wifi.ntpServerPrimary = w["ntpServerPrimary"].as<std::string>();
+                if (w.containsKey("ntpServerSecondary")) config.wifi.ntpServerSecondary = w["ntpServerSecondary"].as<std::string>();
+            }
+            if (cfg.containsKey("staticIp")) {
+                const JsonObjectConst sip = cfg["staticIp"];
+                if (sip.containsKey("ip"))      config.staticIp.ip = sip["ip"].as<std::string>();
+                if (sip.containsKey("gateway")) config.staticIp.gateway = sip["gateway"].as<std::string>();
+                if (sip.containsKey("subnet"))  config.staticIp.subnet = sip["subnet"].as<std::string>();
+                if (sip.containsKey("dns"))     config.staticIp.dns = sip["dns"].as<std::string>();
+            }
+            if (cfg.containsKey("mqtt")) {
+                const JsonObjectConst m = cfg["mqtt"];
+                if (m.containsKey("server"))    config.mqtt.server = m["server"].as<std::string>();
+                if (m.containsKey("port"))      config.mqtt.port = m["port"] | config.mqtt.port;
+                if (m.containsKey("user"))      config.mqtt.user = m["user"].as<std::string>();
+                if (m.containsKey("password") && !isMaskedPassword(m["password"] | std::string()))
+                    config.mqtt.password = m["password"].as<std::string>();
+                if (m.containsKey("discovery")) config.mqtt.discovery = m["discovery"] | config.mqtt.discovery;
+            }
+            if (cfg.containsKey("push")) {
+                const JsonObjectConst p = cfg["push"];
+                if (p.containsKey("enabled"))            config.push.enabled = p["enabled"] | config.push.enabled;
+                if (p.containsKey("smtpServer"))         config.push.smtpServer = p["smtpServer"].as<std::string>();
+                if (p.containsKey("smtpPort"))           config.push.smtpPort = p["smtpPort"] | config.push.smtpPort;
+                if (p.containsKey("useSsl"))             config.push.useSsl = p["useSsl"] | config.push.useSsl;
+                if (p.containsKey("startTls"))           config.push.startTls = p["startTls"] | config.push.startTls;
+                if (p.containsKey("smtpSkipCertVerify")) config.push.smtpSkipCertVerify = p["smtpSkipCertVerify"] | config.push.smtpSkipCertVerify;
+                if (p.containsKey("authUser"))           config.push.authUser = p["authUser"].as<std::string>();
+                if (p.containsKey("authPassword") && !isMaskedPassword(p["authPassword"] | std::string()))
+                    config.push.authPassword = p["authPassword"].as<std::string>();
+                if (p.containsKey("senderName"))         config.push.senderName = p["senderName"].as<std::string>();
+                if (p.containsKey("senderEmail"))        config.push.senderEmail = p["senderEmail"].as<std::string>();
+                if (p.containsKey("recipientEmail"))     config.push.recipientEmail = p["recipientEmail"].as<std::string>();
+                if (p.containsKey("triggerPercent"))     config.push.triggerPercent = p["triggerPercent"] | config.push.triggerPercent;
+                if (p.containsKey("sendHour"))           config.push.sendHour = p["sendHour"] | config.push.sendHour;
+                if (p.containsKey("sendMinute"))         config.push.sendMinute = p["sendMinute"] | config.push.sendMinute;
+                if (p.containsKey("reminderCycle"))      config.push.reminderCycle = p["reminderCycle"].as<std::string>();
+                if (p.containsKey("reminderWeekday"))    config.push.reminderWeekday = p["reminderWeekday"] | config.push.reminderWeekday;
+                if (p.containsKey("subjectTemplate"))    config.push.subjectTemplate = p["subjectTemplate"].as<std::string>();
+                if (p.containsKey("bodyTemplate"))       config.push.bodyTemplate = p["bodyTemplate"].as<std::string>();
+            }
+            configRestored = ConfigStore::getInstance().save(config);
+        }
+
+        if (doc["history"].is<JsonArrayConst>()) {
+            const JsonArrayConst arr = doc["history"];
+            std::vector<HistoryEntry> entries;
+            entries.reserve(std::min(arr.size(), static_cast<size_t>(HistoryManager::kCapacity)));
+            for (JsonVariantConst item : arr) {
+                const uint32_t ts = item["ts"] | 0U;
+                if (ts > 0) entries.push_back({ts, item["v"] | 0.0f});
+            }
+            HistoryManager::getInstance().restore(entries);
+            historyRestored = true;
+        }
+
+        char respBuf[80];
+        snprintf(respBuf, sizeof(respBuf),
+            "{\"status\":\"ok\",\"configRestored\":%s,\"historyRestored\":%s}",
+            configRestored ? "true" : "false",
+            historyRestored ? "true" : "false");
+        request->send(200, "application/json", respBuf);
+    });
+
     server_.on("/api/restart", HTTP_POST, [](AsyncWebServerRequest *request) {
         request->send(200, "application/json", "{\"status\":\"restarting\"}");
         delay(1000);

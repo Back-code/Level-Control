@@ -1,8 +1,3 @@
-param(
-    [Parameter(Mandatory = $true)]
-    [string]$CommitMessage
-)
-
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
@@ -11,27 +6,15 @@ $releaseRoot = Join-Path $repoRoot 'release'
 Push-Location $repoRoot
 
 try {
-    # Versionsnummer explizit erhoehen (pre-push-Hook wird spaeter mit --no-verify uebersprungen)
-    node scripts/bump-version.js
-
-    npm --prefix ui run build
-    .\.venv\Scripts\pio.exe run
-    .\.venv\Scripts\pio.exe run -t upload
-    .\.venv\Scripts\pio.exe run -t uploadfs
-
-    git add -A
-    git commit --no-verify -m $CommitMessage
-
-    .\.venv\Scripts\pio.exe run
-    .\.venv\Scripts\pio.exe run -t upload
-    .\.venv\Scripts\pio.exe run -t uploadfs
-
-    # --no-verify: Version wurde oben bereits explizit erhoehen; pre-push-Hook nicht nochmals ausfuehren
-    git push --no-verify origin main
-    node scripts/prepare-release.js
-
+    # Salzstand: Release
+    # Erstellt Release-Artefakte aus den zuletzt gebauten Binaries und veröffentlicht ein GitHub-Release.
+    # Voraussetzung: Schritt "Deploy" wurde bereits erfolgreich ausgeführt (Firmware gebaut und geflasht).
     $version = Get-Content version.json | ConvertFrom-Json
     $versionStr = "$($version.major).$($version.minor).$($version.commit)"
+    Write-Host "Erstelle GitHub-Release v$versionStr..." -ForegroundColor Cyan
+
+    node scripts/prepare-release.js
+
     $releaseArgs = @(
         'release', 'create', "v$versionStr",
         "release/v$versionStr/salzstand-v$versionStr-app.bin",
@@ -49,6 +32,8 @@ try {
     if (Test-Path $releaseRoot) {
         Remove-Item -Path $releaseRoot -Recurse -Force
     }
+
+    Write-Host "Release v$versionStr erfolgreich veröffentlicht." -ForegroundColor Green
 }
 finally {
     Pop-Location

@@ -2,7 +2,7 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Salzstand: Entwicklung",
+      "label": "Salzstand: Commit",
       "type": "shell",
       "group": {
         "kind": "build",
@@ -13,9 +13,54 @@
         "-ExecutionPolicy",
         "Bypass",
         "-File",
-        "${workspaceFolder}/scripts/run-development.ps1",
+        "${workspaceFolder}/scripts/run-commit.ps1",
         "-CommitMessage",
-        "${input:developmentCommitMessage}"
+        "${input:commitMessage}"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Salzstand: Test",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/run-test.ps1"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Salzstand: Push",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/run-push.ps1"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Salzstand: Deploy",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/run-deploy.ps1"
       ],
       "options": {
         "cwd": "${workspaceFolder}"
@@ -30,9 +75,7 @@
         "-ExecutionPolicy",
         "Bypass",
         "-File",
-        "${workspaceFolder}/scripts/run-release.ps1",
-        "-CommitMessage",
-        "${input:releaseCommitMessage}"
+        "${workspaceFolder}/scripts/run-release.ps1"
       ],
       "options": {
         "cwd": "${workspaceFolder}"
@@ -42,14 +85,9 @@
   ],
   "inputs": [
     {
-      "id": "developmentCommitMessage",
+      "id": "commitMessage",
       "type": "promptString",
-      "description": "Commit-Message für Entwicklung"
-    },
-    {
-      "id": "releaseCommitMessage",
-      "type": "promptString",
-      "description": "Commit-Message für Release"
+      "description": "Commit-Message"
     }
   ]
 }

@@ -45,7 +45,7 @@ void HistoryManager::init() {
 
 bool HistoryManager::loadFromNvs() {
     Preferences prefs;
-    if (!prefs.begin(kNvsNamespace, true)) {
+    if (!prefs.begin(kNvsNamespace, true, kNvsPartitionLabel)) {
         DebugLogger::getInstance().log(LogLevel::WARN,
             "HistoryManager: NVS konnte nicht gelesen werden");
         return false;
@@ -133,7 +133,7 @@ bool HistoryManager::loadLegacyFile() {
 
 void HistoryManager::saveToNvs() const {
     Preferences prefs;
-    if (!prefs.begin(kNvsNamespace, false)) {
+    if (!prefs.begin(kNvsNamespace, false, kNvsPartitionLabel)) {
         DebugLogger::getInstance().log(LogLevel::ERROR,
             "HistoryManager: NVS konnte nicht geoeffnet werden");
         return;
@@ -215,7 +215,7 @@ void HistoryManager::clear() {
     head_  = 0;
     count_ = 0;
     Preferences prefs;
-    if (prefs.begin(kNvsNamespace, false)) {
+    if (prefs.begin(kNvsNamespace, false, kNvsPartitionLabel)) {
         prefs.remove(kNvsKey);
         prefs.end();
     }

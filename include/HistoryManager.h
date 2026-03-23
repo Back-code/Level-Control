@@ -77,6 +77,7 @@ private:
     static constexpr uint32_t kMagic    = 0x53414C54UL; // 'SALT'
     static constexpr const char* kLegacyPath = "/history.bin";
     static constexpr const char* kNvsNamespace = "history";
+    static constexpr const char* kNvsPartitionLabel = "histnvs";
     static constexpr const char* kNvsKey = "ring";
 
     bool   initialized_ = false;

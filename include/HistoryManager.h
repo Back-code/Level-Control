@@ -10,11 +10,11 @@ struct HistoryEntry {
 };
 
 /**
- * HistoryManager – speichert Salzstand-Messwerte dauerhaft in LittleFS.
+ * HistoryManager – speichert Salzstand-Messwerte dauerhaft in NVS.
  *
- * Binäres Ringpuffer-Format (/history.bin):
- *   Header   8 Byte :  magic(4) | head(2) | count(2)
- *   Daten    n×8 B  :  timestamp(4) + value(4) pro Eintrag
+ * Historie liegt in einem separaten NVS-Namespace und bleibt damit bei
+ * Firmware- und LittleFS-Uploads erhalten. Falls alte Daten noch als
+ * /history.bin in LittleFS liegen, werden diese beim Start einmalig migriert.
  *
  * Kapazität : 1460 Einträge (4/Tag × 365 Tage = 12 Monate)
  * Intervall : mindestens 6 Stunden zwischen zwei Datenpunkten
@@ -24,7 +24,10 @@ class HistoryManager {
 public:
     static HistoryManager& getInstance();
 
-    /** LittleFS muss vor init() gemountet sein (wird von WebServerDashboard gemacht). */
+    /**
+     * LittleFS ist nur noch für Legacy-Migration relevant.
+     * Für neue Daten wird ausschließlich NVS genutzt.
+     */
     void init();
 
     /**
@@ -61,16 +64,26 @@ private:
         uint16_t count;
     };
 
+    struct PersistedData {
+        uint32_t magic;
+        uint16_t head;
+        uint16_t count;
+        Record records[kCapacity];
+    };
+
     static constexpr uint32_t kMagic    = 0x53414C54UL; // 'SALT'
-    static constexpr const char* kPath  = "/history.bin";
+    static constexpr const char* kLegacyPath = "/history.bin";
+    static constexpr const char* kNvsNamespace = "history";
+    static constexpr const char* kNvsKey = "ring";
 
     bool   initialized_ = false;
     uint16_t head_  = 0; ///< Index des ältesten Eintrags
     uint16_t count_ = 0; ///< Anzahl gültiger Einträge
     Record   records_[kCapacity];
 
-    void loadFile();
-    void saveFile() const;
+    bool loadFromNvs();
+    void saveToNvs() const;
+    bool loadLegacyFile();
     void pruneOld(uint32_t now);
 };
 

@@ -1,5 +1,6 @@
 #include "HistoryManager.h"
 #include "DebugLogger.h"
+#include <Preferences.h>
 #include <LittleFS.h>
 #include <ctime>
 #include <cstring>
@@ -19,54 +20,121 @@ void HistoryManager::init() {
     initialized_ = true;
     head_  = 0;
     count_ = 0;
-    loadFile();
+
+    if (loadFromNvs()) {
+        return;
+    }
+
+    if (loadLegacyFile()) {
+        saveToNvs();
+        LittleFS.remove(kLegacyPath);
+        DebugLogger::getInstance().log(LogLevel::INFO,
+            "HistoryManager: Legacy-Historie aus LittleFS nach NVS migriert");
+    }
 }
 
-void HistoryManager::loadFile() {
-    File f = LittleFS.open(kPath, "r");
+bool HistoryManager::loadFromNvs() {
+    Preferences prefs;
+    if (!prefs.begin(kNvsNamespace, true)) {
+        DebugLogger::getInstance().log(LogLevel::WARN,
+            "HistoryManager: NVS konnte nicht gelesen werden");
+        return false;
+    }
+
+    const size_t len = prefs.getBytesLength(kNvsKey);
+    if (len == 0) {
+        prefs.end();
+        DebugLogger::getInstance().log(LogLevel::INFO,
+            "HistoryManager: keine NVS-Historie vorhanden, pruefe Legacy-Datei");
+        return false;
+    }
+
+    if (len != sizeof(PersistedData)) {
+        prefs.end();
+        DebugLogger::getInstance().log(LogLevel::WARN,
+            "HistoryManager: NVS-Format ungueltig, ignoriere Historie");
+        return false;
+    }
+
+    PersistedData data{};
+    const size_t read = prefs.getBytes(kNvsKey, &data, sizeof(data));
+    prefs.end();
+
+    if (read != sizeof(data) || data.magic != kMagic || data.count > kCapacity || data.head >= kCapacity) {
+        DebugLogger::getInstance().log(LogLevel::WARN,
+            "HistoryManager: NVS-Inhalt ungueltig, ignoriere Historie");
+        return false;
+    }
+
+    head_ = data.head;
+    count_ = data.count;
+    std::memcpy(records_, data.records, sizeof(records_));
+
+    DebugLogger::getInstance().log(LogLevel::INFO,
+        "HistoryManager: " + std::to_string(count_) + " Eintraege aus NVS geladen");
+    return true;
+}
+
+bool HistoryManager::loadLegacyFile() {
+    File f = LittleFS.open(kLegacyPath, "r");
     if (!f) {
-        DebugLogger::getInstance().log(LogLevel::INFO, "HistoryManager: keine Datei vorhanden, starte leer");
-        return;
+        DebugLogger::getInstance().log(LogLevel::INFO,
+            "HistoryManager: keine Legacy-Datei vorhanden, starte leer");
+        return false;
     }
 
     FileHeader hdr;
     if (f.read(reinterpret_cast<uint8_t*>(&hdr), sizeof(hdr)) != sizeof(hdr)) {
         f.close();
-        DebugLogger::getInstance().log(LogLevel::WARN, "HistoryManager: Header unlesbar, starte leer");
-        return;
+        DebugLogger::getInstance().log(LogLevel::WARN,
+            "HistoryManager: Legacy-Header unlesbar, starte leer");
+        return false;
     }
 
     if (hdr.magic != kMagic || hdr.count > kCapacity || hdr.head >= kCapacity) {
         f.close();
-        DebugLogger::getInstance().log(LogLevel::WARN, "HistoryManager: ungültige Datei, starte leer");
-        return;
+        DebugLogger::getInstance().log(LogLevel::WARN,
+            "HistoryManager: ungueltige Legacy-Datei, starte leer");
+        return false;
     }
 
     const size_t dataBytes = hdr.count * sizeof(Record);
     if (f.read(reinterpret_cast<uint8_t*>(records_), dataBytes) != dataBytes) {
         f.close();
-        DebugLogger::getInstance().log(LogLevel::WARN, "HistoryManager: Daten unlesbar, starte leer");
-        return;
+        DebugLogger::getInstance().log(LogLevel::WARN,
+            "HistoryManager: Legacy-Daten unlesbar, starte leer");
+        return false;
     }
 
     head_  = hdr.head;
     count_ = hdr.count;
     f.close();
     DebugLogger::getInstance().log(LogLevel::INFO,
-        "HistoryManager: " + std::to_string(count_) + " Einträge geladen");
+        "HistoryManager: " + std::to_string(count_) + " Legacy-Eintraege geladen");
+    return true;
 }
 
-void HistoryManager::saveFile() const {
-    File f = LittleFS.open(kPath, "w");
-    if (!f) {
-        DebugLogger::getInstance().log(LogLevel::ERROR, "HistoryManager: Datei konnte nicht geschrieben werden");
+void HistoryManager::saveToNvs() const {
+    Preferences prefs;
+    if (!prefs.begin(kNvsNamespace, false)) {
+        DebugLogger::getInstance().log(LogLevel::ERROR,
+            "HistoryManager: NVS konnte nicht geoeffnet werden");
         return;
     }
 
-    FileHeader hdr{kMagic, head_, count_};
-    f.write(reinterpret_cast<const uint8_t*>(&hdr), sizeof(hdr));
-    f.write(reinterpret_cast<const uint8_t*>(records_), count_ * sizeof(Record));
-    f.close();
+    PersistedData data{};
+    data.magic = kMagic;
+    data.head = head_;
+    data.count = count_;
+    std::memcpy(data.records, records_, sizeof(records_));
+
+    const size_t written = prefs.putBytes(kNvsKey, &data, sizeof(data));
+    prefs.end();
+
+    if (written != sizeof(data)) {
+        DebugLogger::getInstance().log(LogLevel::ERROR,
+            "HistoryManager: NVS-Schreiben unvollstaendig");
+    }
 }
 
 void HistoryManager::pruneOld(uint32_t now) {
@@ -109,7 +177,7 @@ void HistoryManager::addSample(float value) {
         head_ = static_cast<uint16_t>((head_ + 1) % kCapacity);
     }
 
-    saveFile();
+    saveToNvs();
     DebugLogger::getInstance().log(LogLevel::INFO,
         "HistoryManager: Datenpunkt gespeichert, total=" + std::to_string(count_) +
         " pct=" + std::to_string(static_cast<int>(value)));
@@ -128,6 +196,11 @@ std::vector<HistoryEntry> HistoryManager::getHistory() const {
 void HistoryManager::clear() {
     head_  = 0;
     count_ = 0;
-    LittleFS.remove(kPath);
+    Preferences prefs;
+    if (prefs.begin(kNvsNamespace, false)) {
+        prefs.remove(kNvsKey);
+        prefs.end();
+    }
+    LittleFS.remove(kLegacyPath);
     DebugLogger::getInstance().log(LogLevel::INFO, "HistoryManager: Verlaufsdaten gelöscht");
 }

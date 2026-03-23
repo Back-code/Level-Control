@@ -11,19 +11,23 @@ $releaseRoot = Join-Path $repoRoot 'release'
 Push-Location $repoRoot
 
 try {
+    # Versionsnummer explizit erhoehen (pre-push-Hook wird spaeter mit --no-verify uebersprungen)
+    node scripts/bump-version.js
+
     npm --prefix ui run build
     .\.venv\Scripts\pio.exe run
     .\.venv\Scripts\pio.exe run -t upload
     .\.venv\Scripts\pio.exe run -t uploadfs
 
     git add -A
-    git commit -m $CommitMessage
+    git commit --no-verify -m $CommitMessage
 
     .\.venv\Scripts\pio.exe run
     .\.venv\Scripts\pio.exe run -t upload
     .\.venv\Scripts\pio.exe run -t uploadfs
 
-    git push origin main
+    # --no-verify: Version wurde oben bereits explizit erhoehen; pre-push-Hook nicht nochmals ausfuehren
+    git push --no-verify origin main
     node scripts/prepare-release.js
 
     $version = Get-Content version.json | ConvertFrom-Json

@@ -72,7 +72,7 @@ Oder im Chat: `*test`
 
 ---
 
-### 3. *push — Version erhöhen und pushen
+### 3. *push — Bedingt Version erhöhen und pushen
 
 Wenn die Tests erfolgreich waren:
 
@@ -83,13 +83,18 @@ Terminal → Run Task → Salzstand: Push
 Oder im Chat: `*push`
 
 **Was passiert:**
-- Version in `version.json` um 1 erhöhen (`commit`-Zähler)
-- UI neu bauen (`npm run build`)
-- Versions-Commit erstellen: `git commit --no-verify -m "v1.1.X"`
-- Alle Commits nach GitHub pushen (`git push --no-verify origin main`)
+- Wenn Firmware/UI-relevante Dateien geändert wurden (`src/`, `include/`, `ui/`, `data/`, `lib/`, `platformio.ini`, `partitions.csv`):
+  - Version in `version.json` um 1 erhöhen (`commit`-Zähler)
+  - UI neu bauen (`npm run build`)
+  - Versions-Commit erstellen: `git commit --no-verify -m "v1.1.X"`
+  - Alle Commits nach GitHub pushen (`git push --no-verify origin main`)
+- Wenn nur Doku-/Repo-Änderungen vorliegen:
+  - **kein** Versionsbump
+  - **kein** zusätzlicher Build
+  - bestehende lokale Commits werden einfach nach GitHub gepusht
 
 **Versionsschema:** `Major.Minor.Commit` (z. B. `1.1.28`)
-- `commit` wird bei jedem Push um 1 erhöht
+- `commit` wird bei Pushes mit Firmware/UI-relevanten Änderungen um 1 erhöht
 - `minor` wird bei `commit == 99` um 1 erhöht (commit reset auf 0)
 - `major` wird bei `minor == 9` um 1 erhöht (minor reset auf 0)
 
@@ -148,7 +153,7 @@ Oder im Chat: `*release`
 |----------------|-------------|--------|
 | *(Copilot committet automatisch)* | `Salzstand: Commit` | Änderungen committen |
 | `*test` | `Salzstand: Test` | Aktuellen Stand auf ESP flashen (kein Bump) |
-| `*push` | `Salzstand: Push` | Version bumpen + nach GitHub pushen |
+| `*push` | `Salzstand: Push` | Bei Firmware/UI-Änderungen bumpen, sonst ohne Bump pushen |
 | `*deploy` | `Salzstand: Deploy` | Gepushte Version auf ESP flashen |
 | `*release` | `Salzstand: Release` | GitHub Release erstellen |
 

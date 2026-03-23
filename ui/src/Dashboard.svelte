@@ -123,6 +123,7 @@
   $: areaPath = buildAreaPath(chartPoints, linePath);
   $: latestPoint = chartPoints[chartPoints.length - 1] || null;
   $: oldestPoint = chartPoints[0] || null;
+  $: wifiQuality = data.wifiSignal >= -65 ? 'good' : data.wifiSignal >= -80 ? 'medium' : 'bad';
 </script>
 
 <div class="grid">
@@ -134,11 +135,6 @@
           <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
           Verlauf löschen
         </button>
-      </div>
-      <div class="chart-periods" role="group" aria-label="Zeitraum wählen">
-        {#each PERIOD_OPTIONS as option}
-          <button class:active={activePeriod === option.id} on:click={() => activePeriod = option.id}>{option.label}</button>
-        {/each}
       </div>
     </div>
 
@@ -159,18 +155,21 @@
       </div>
       <div class="top-stat-card">
         <h3><span class="mini-icon"><svg viewBox="0 0 24 24"><path d="M5 20h14V4H5v16zm2-2v-4h10v4H7zm0-6V6h10v6H7z"/></svg></span>Salzstand</h3>
-        <p class="value">{data.salzstandCm.toFixed(1)} cm</p>
-        <p class="value">{data.salzstandPercent.toFixed(1)} %</p>
+        <p class="value">{data.salzstandCm.toFixed(1)} cm <span class="value-equiv">≙</span> {data.salzstandPercent.toFixed(1)} %</p>
       </div>
     </div>
 
     <div class="chart-meta">
       <div>
-        <span>Aktuell</span>
-        <strong>{currentPercent.toFixed(1)} %</strong>
+        <span>Zeitraum</span>
+        <div class="chart-periods" role="group" aria-label="Zeitraum wählen">
+          {#each PERIOD_OPTIONS as option}
+            <button class:active={activePeriod === option.id} on:click={() => activePeriod = option.id}>{option.label}</button>
+          {/each}
+        </div>
       </div>
       <div>
-        <span>Start</span>
+        <span>Start der Aufzeichnung</span>
         <strong>{oldestPoint ? formatDateLabel(oldestPoint.ts) : 'Noch keine Historie'}</strong>
       </div>
       <div>
@@ -214,11 +213,14 @@
   </div>
 
   <div class="card card-combined card-under-chart">
-    <h2><span class="mini-icon"><svg viewBox="0 0 24 24"><path d="M12 18a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0-4c2.56 0 4.92 1.04 6.62 2.73l1.42-1.41A11.96 11.96 0 0 0 12 12c-3.12 0-5.96 1.19-8.04 3.14l1.42 1.41A9.33 9.33 0 0 1 12 14z"/></svg></span>WLAN & Laufzeit</h2>
+    <h2><span class="mini-icon"><svg viewBox="0 0 24 24"><path d="M12 18a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0-4c2.56 0 4.92 1.04 6.62 2.73l1.42-1.41A11.96 11.96 0 0 0 12 12c-3.12 0-5.96 1.19-8.04 3.14l1.42 1.41A9.33 9.33 0 0 1 12 14z"/></svg></span>System</h2>
     <div class="combined-stats">
       <div>
         <span>WiFi Signal</span>
-        <p class="value">{data.wifiSignal} dBm</p>
+        <div class="wifi-signal-row">
+          <p class="value">{data.wifiSignal} dBm</p>
+          <span class="wifi-dot wifi-dot--{wifiQuality}" title="{wifiQuality === 'good' ? 'Gut' : wifiQuality === 'medium' ? 'Mittel' : 'Schlecht'}"></span>
+        </div>
       </div>
       <div>
         <span>Uptime</span>
@@ -228,8 +230,16 @@
   </div>
   <div class="card card-under-chart">
     <h2><span class="mini-icon"><svg viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 8-4v6h2V7L12 2zm-8 9v6l8 4 8-4v-6l-8 4-8-4z"/></svg></span>Netzwerk</h2>
-    <p>IP: {data.ip}</p>
-    <p>SSID: {data.ssid}</p>
+    <div class="combined-stats">
+      <div>
+        <span>IP</span>
+        <p class="value value-sm">{data.ip}</p>
+      </div>
+      <div>
+        <span>SSID</span>
+        <p class="value value-sm">{data.ssid}</p>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -539,17 +549,58 @@
     bottom: 14px;
   }
 
-  .card-combined .combined-stats {
+  .combined-stats {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 14px;
   }
 
-  .card-combined .combined-stats > div {
+  .combined-stats > div {
     padding: 12px 14px;
     border-radius: 12px;
     border: 1px solid var(--surface-border);
     background: rgba(255, 255, 255, 0.03);
+  }
+
+  .wifi-signal-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .wifi-dot {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-bottom: 2px;
+  }
+
+  .wifi-dot--good  { background: #4caf50; box-shadow: 0 0 6px rgba(76,175,80,0.55); }
+  .wifi-dot--medium { background: #ff9800; box-shadow: 0 0 6px rgba(255,152,0,0.55); }
+  .wifi-dot--bad   { background: #f44336; box-shadow: 0 0 6px rgba(244,67,54,0.55); }
+
+  .value-equiv {
+    font-size: 0.65em;
+    opacity: 0.6;
+    margin: 0 3px;
+    font-weight: 600;
+  }
+
+  .value-sm {
+    font-size: 1rem !important;
+    font-weight: 700 !important;
+    letter-spacing: 0 !important;
+  }
+
+  .chart-meta .chart-periods {
+    margin-top: 4px;
+    flex-wrap: wrap;
+  }
+
+  .chart-meta .chart-periods button {
+    padding: 5px 9px;
+    font-size: 0.75rem;
   }
 
   .card-under-chart {

@@ -5,6 +5,7 @@
 #include <ctime>
 #include <cstring>
 #include <algorithm>
+#include <memory>
 
 HistoryManager& HistoryManager::getInstance() {
     static HistoryManager instance;
@@ -56,19 +57,20 @@ bool HistoryManager::loadFromNvs() {
         return false;
     }
 
-    PersistedData data{};
-    const size_t read = prefs.getBytes(kNvsKey, &data, sizeof(data));
+    // Heap statt Stack: PersistedData ist 11 KB – zu gross fuer den Stack
+    std::unique_ptr<PersistedData> data(new PersistedData());
+    const size_t read = prefs.getBytes(kNvsKey, data.get(), sizeof(PersistedData));
     prefs.end();
 
-    if (read != sizeof(data) || data.magic != kMagic || data.count > kCapacity || data.head >= kCapacity) {
+    if (read != sizeof(PersistedData) || data->magic != kMagic || data->count > kCapacity || data->head >= kCapacity) {
         DebugLogger::getInstance().log(LogLevel::WARN,
             "HistoryManager: NVS-Inhalt ungueltig, ignoriere Historie");
         return false;
     }
 
-    head_ = data.head;
-    count_ = data.count;
-    std::memcpy(records_, data.records, sizeof(records_));
+    head_ = data->head;
+    count_ = data->count;
+    std::memcpy(records_, data->records, sizeof(records_));
 
     DebugLogger::getInstance().log(LogLevel::INFO,
         "HistoryManager: " + std::to_string(count_) + " Eintraege aus NVS geladen");
@@ -122,16 +124,17 @@ void HistoryManager::saveToNvs() const {
         return;
     }
 
-    PersistedData data{};
-    data.magic = kMagic;
-    data.head = head_;
-    data.count = count_;
-    std::memcpy(data.records, records_, sizeof(records_));
+    // Heap statt Stack: PersistedData ist 11 KB – zu gross fuer den Stack
+    std::unique_ptr<PersistedData> data(new PersistedData());
+    data->magic = kMagic;
+    data->head = head_;
+    data->count = count_;
+    std::memcpy(data->records, records_, sizeof(records_));
 
-    const size_t written = prefs.putBytes(kNvsKey, &data, sizeof(data));
+    const size_t written = prefs.putBytes(kNvsKey, data.get(), sizeof(PersistedData));
     prefs.end();
 
-    if (written != sizeof(data)) {
+    if (written != sizeof(PersistedData)) {
         DebugLogger::getInstance().log(LogLevel::ERROR,
             "HistoryManager: NVS-Schreiben unvollstaendig");
     }

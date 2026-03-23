@@ -7,6 +7,15 @@
 #include <algorithm>
 #include <memory>
 
+namespace {
+bool mountLittleFsForLegacyMigration() {
+    if (LittleFS.begin(false, "/littlefs", 10, "littlefs")) {
+        return true;
+    }
+    return LittleFS.begin(false, "/littlefs", 10, "spiffs");
+}
+}
+
 HistoryManager& HistoryManager::getInstance() {
     static HistoryManager instance;
     return instance;
@@ -78,6 +87,12 @@ bool HistoryManager::loadFromNvs() {
 }
 
 bool HistoryManager::loadLegacyFile() {
+    if (!mountLittleFsForLegacyMigration()) {
+        DebugLogger::getInstance().log(LogLevel::INFO,
+            "HistoryManager: LittleFS fuer Legacy-Migration nicht verfuegbar, starte leer");
+        return false;
+    }
+
     File f = LittleFS.open(kLegacyPath, "r");
     if (!f) {
         DebugLogger::getInstance().log(LogLevel::INFO,

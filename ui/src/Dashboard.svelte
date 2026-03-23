@@ -33,6 +33,16 @@
     }).format(timestamp);
   }
 
+  function formatDateTimeLabel(timestamp) {
+    return new Intl.DateTimeFormat('de-DE', {
+      day: '2-digit',
+      month: '2-digit',
+      year: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(timestamp);
+  }
+
   function getPeriodStart(periodId) {
     const option = PERIOD_OPTIONS.find((entry) => entry.id === periodId) || PERIOD_OPTIONS[1];
     const start = new Date();
@@ -115,28 +125,20 @@
   $: oldestPoint = chartPoints[0] || null;
 </script>
 
-<section class="dashboard-hero">
-  <p class="eyebrow">Monitoring</p>
-  <h2>Live Dashboard</h2>
-</section>
-
 <div class="grid">
   <div class="card card-chart">
     <div class="chart-head">
-      <div>
+      <div class="chart-head-main">
         <h2><span class="mini-icon"><svg viewBox="0 0 24 24"><path d="M4 18h16v2H4v-2zm2-3.5 3.5-3.5 2.5 2.5L18 8l1.4 1.4-6.9 6.9-2.5-2.5L7.4 16z"/></svg></span>Salzstand Verlauf</h2>
-        <p class="chart-subtitle">Auf dem ESP dauerhaft gespeicherte Messwerte – auch ohne geöffnetes Browser-Fenster.</p>
-      </div>
-      <div class="chart-controls">
-        <div class="chart-periods" role="group" aria-label="Zeitraum wählen">
-          {#each PERIOD_OPTIONS as option}
-            <button class:active={activePeriod === option.id} on:click={() => activePeriod = option.id}>{option.label}</button>
-          {/each}
-        </div>
         <button class="btn-reset" on:click={() => (showResetConfirm = true)} title="Verlaufsdaten löschen">
           <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
           Verlauf löschen
         </button>
+      </div>
+      <div class="chart-periods" role="group" aria-label="Zeitraum wählen">
+        {#each PERIOD_OPTIONS as option}
+          <button class:active={activePeriod === option.id} on:click={() => activePeriod = option.id}>{option.label}</button>
+        {/each}
       </div>
     </div>
 
@@ -150,6 +152,18 @@
       </div>
     {/if}
 
+    <div class="top-stats">
+      <div class="top-stat-card">
+        <h3><span class="mini-icon"><svg viewBox="0 0 24 24"><path d="M3 17h18v2H3v-2zm2-8h14v2H5V9zm3-6h8v2H8V3z"/></svg></span>Aktuelle Distanz</h3>
+        <p class="value">{data.rohdistanz.toFixed(2)} m</p>
+      </div>
+      <div class="top-stat-card">
+        <h3><span class="mini-icon"><svg viewBox="0 0 24 24"><path d="M5 20h14V4H5v16zm2-2v-4h10v4H7zm0-6V6h10v6H7z"/></svg></span>Salzstand</h3>
+        <p class="value">{data.salzstandCm.toFixed(1)} cm</p>
+        <p class="value">{data.salzstandPercent.toFixed(1)} %</p>
+      </div>
+    </div>
+
     <div class="chart-meta">
       <div>
         <span>Aktuell</span>
@@ -161,7 +175,7 @@
       </div>
       <div>
         <span>Letzte Messung</span>
-        <strong>{latestPoint ? formatDateLabel(latestPoint.ts) : 'Noch keine Historie'}</strong>
+        <strong>{latestPoint ? formatDateTimeLabel(latestPoint.ts) : 'Noch keine Historie'}</strong>
       </div>
     </div>
 
@@ -199,16 +213,7 @@
     </div>
   </div>
 
-  <div class="card">
-    <h2><span class="mini-icon"><svg viewBox="0 0 24 24"><path d="M3 17h18v2H3v-2zm2-8h14v2H5V9zm3-6h8v2H8V3z"/></svg></span>Aktuelle Distanz</h2>
-    <p class="value">{data.rohdistanz.toFixed(2)} m</p>
-  </div>
-  <div class="card">
-    <h2><span class="mini-icon"><svg viewBox="0 0 24 24"><path d="M5 20h14V4H5v16zm2-2v-4h10v4H7zm0-6V6h10v6H7z"/></svg></span>Salzstand</h2>
-    <p class="value">{data.salzstandCm.toFixed(1)} cm</p>
-    <p class="value">{data.salzstandPercent.toFixed(1)} %</p>
-  </div>
-  <div class="card card-combined">
+  <div class="card card-combined card-under-chart">
     <h2><span class="mini-icon"><svg viewBox="0 0 24 24"><path d="M12 18a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0-4c2.56 0 4.92 1.04 6.62 2.73l1.42-1.41A11.96 11.96 0 0 0 12 12c-3.12 0-5.96 1.19-8.04 3.14l1.42 1.41A9.33 9.33 0 0 1 12 14z"/></svg></span>WLAN & Laufzeit</h2>
     <div class="combined-stats">
       <div>
@@ -221,32 +226,14 @@
       </div>
     </div>
   </div>
-  <div class="card">
+  <div class="card card-under-chart">
     <h2><span class="mini-icon"><svg viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 8-4v6h2V7L12 2zm-8 9v6l8 4 8-4v-6l-8 4-8-4z"/></svg></span>Netzwerk</h2>
     <p>IP: {data.ip}</p>
     <p>SSID: {data.ssid}</p>
-    <p>BSSID: {data.bssid}</p>
   </div>
 </div>
 
 <style>
-  .dashboard-hero {
-    margin-bottom: 14px;
-    padding: 12px 14px;
-    border-radius: 12px;
-    border: 1px solid var(--surface-border);
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
-  }
-
-  .eyebrow {
-    margin: 0;
-    color: var(--accent);
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    font-size: 0.74rem;
-    font-weight: 700;
-  }
-
   h2 {
     margin: 4px 0;
     font-size: clamp(1.2rem, 2.6vw, 1.8rem);
@@ -315,32 +302,63 @@
   }
 
   .chart-head {
-    display: flex;
-    justify-content: space-between;
-    gap: 16px;
-    align-items: flex-start;
+    display: grid;
+    gap: 10px;
     margin-bottom: 14px;
   }
 
-  .chart-subtitle {
-    margin: 6px 0 0 0;
-    color: var(--text-muted);
-    font-size: 0.92rem;
-    font-weight: 500;
+  .chart-head-main {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
   }
 
-  .chart-controls {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 8px;
+  .chart-head-main h2 {
+    margin: 0;
   }
 
   .chart-periods {
     display: inline-flex;
     flex-wrap: wrap;
-    justify-content: flex-end;
+    justify-content: flex-start;
     gap: 8px;
+  }
+
+  .top-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .top-stat-card {
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--surface-border);
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .top-stat-card h3 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 8px 0;
+    font-size: 1rem;
+    color: var(--text-muted);
+  }
+
+  .top-stat-card p {
+    margin: 4px 0;
+    font-weight: 600;
+    color: var(--text-main);
+  }
+
+  .top-stat-card p.value {
+    font-size: clamp(1.35rem, 3.2vw, 2.05rem);
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    line-height: 1.1;
   }
 
   .btn-reset {
@@ -534,19 +552,29 @@
     background: rgba(255, 255, 255, 0.03);
   }
 
+  .card-under-chart {
+    grid-column: span 2;
+  }
+
   @media (max-width: 980px) {
     .grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .chart-head,
     .chart-meta {
       grid-template-columns: 1fr;
-      display: grid;
     }
 
     .chart-periods {
       justify-content: flex-start;
+    }
+
+    .top-stats {
+      grid-template-columns: 1fr;
+    }
+
+    .card-under-chart {
+      grid-column: span 1;
     }
   }
 

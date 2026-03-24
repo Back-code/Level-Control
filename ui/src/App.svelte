@@ -194,7 +194,7 @@
   }
 
   const tabs = [
-    { id: 'dashboard', label: 'Dashboard', subtitle: 'Live-Messwerte und Netzwerkstatus in einer kompakten Uebersicht.' },
+    { id: 'dashboard', label: 'Dashboard', subtitle: 'Live-Messwerte und Netzwerkstatus in einer kompakten Übersicht.' },
     { id: 'sensor', label: 'Konfiguration', subtitle: 'Behälterparameter und Ultraschall-Abtastrate zentral konfigurieren.' },
     { id: 'wifi', label: 'WiFi', subtitle: 'WLAN-Zugang und optionale statische Netzwerkdaten verwalten.' },
     { id: 'mqtt_ha', label: 'MQTT & HA', subtitle: 'Broker, Discovery und Home-Assistant-Anbindung zentral steuern.' },

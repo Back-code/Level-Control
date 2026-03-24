@@ -107,9 +107,9 @@
     if (factoryResetLoading) return;
 
     const confirmed = await confirmAction({
-      title: 'Werksreset bestaetigen',
-      message: 'Alle Einstellungen und Messdaten werden geloescht. Das Geraet startet danach automatisch neu. Fortfahren?',
-      confirmLabel: 'Ja, alles loeschen',
+      title: 'Werksreset bestätigen',
+      message: 'Alle Einstellungen und Messdaten werden gelöscht. Das Gerät startet danach automatisch neu. Fortfahren?',
+      confirmLabel: 'Ja, alles löschen',
       cancelLabel: 'Abbrechen',
       tone: 'danger'
     });
@@ -123,7 +123,7 @@
       if (!res.ok || payload.status !== 'ok') {
         throw new Error(payload.error || 'Werksreset fehlgeschlagen.');
       }
-      showNotice('success', 'Werksreset gestartet. Das Geraet startet neu.');
+      showNotice('success', 'Werksreset gestartet. Das Gerät startet neu.');
     } catch (e) {
       showNotice('error', e?.message || 'Werksreset fehlgeschlagen.');
     } finally {
@@ -1224,9 +1224,9 @@
     {/if}
 
     <h3 class="backup-group-title">Werkszustand</h3>
-    <p class="backup-hint">Loescht alle Einstellungen und den kompletten Messverlauf. Anschliessend startet das Geraet automatisch neu.</p>
+    <p class="backup-hint">Löscht alle Einstellungen und den kompletten Messverlauf. Anschließend startet das Gerät automatisch neu.</p>
     <button class="backup-factory-btn" disabled={factoryResetLoading} on:click={doFactoryReset}>
-      {factoryResetLoading ? 'Werksreset laeuft…' : 'Geraet auf Werkszustand zuruecksetzen'}
+      {factoryResetLoading ? 'Werksreset läuft…' : 'Gerät auf Werkszustand zurücksetzen'}
     </button>
   </div>
 {/if}

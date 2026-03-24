@@ -1633,6 +1633,33 @@ bool WebServerDashboard::applyRemoteAsset(const ManifestAsset& asset, int comman
         return false;
     }
 
+    if (command == U_FLASH) {
+        // Nach erfolgreichem Flashen die neue Partition als Boot-Partition setzen
+        const esp_partition_t* partition = Update.bootPartition();
+        if (partition) {
+            esp_err_t err = esp_ota_set_boot_partition(partition);
+            if (err != ESP_OK) {
+                error = std::string("Boot-Partition konnte nicht gesetzt werden: ") + esp_err_to_name(err);
+                http.end();
+                return false;
+            }
+        }
+        // Firmware-Version im NVS aktualisieren
+        Config config;
+        if (ConfigStore::getInstance().load(config)) {
+            // Die Version aus dem Manifest holen, falls vorhanden
+            if (!asset.version.empty()) {
+                // asset.version ist ein String, Config erwartet int
+                try {
+                    config.version = std::stoi(asset.version);
+                } catch (...) {
+                    // Falls Umwandlung fehlschlägt, Version nicht ändern
+                }
+            }
+            ConfigStore::getInstance().save(config);
+        }
+    }
+
     if (command == U_SPIFFS) {
         ensureLittleFsMounted();
     }

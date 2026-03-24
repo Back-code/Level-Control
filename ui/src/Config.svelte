@@ -952,17 +952,6 @@
     </label>
     <p class="helper-text">Im Netzwerk erreichbar unter {getWifiLocalUrl()}</p>
 
-    <h3>NTP</h3>
-    <label class="field-row">
-      <span>NTP-Server 1:</span>
-      <input bind:value={wifiConfig.ntpServerPrimary} placeholder="pool.ntp.org" />
-    </label>
-    <label class="field-row">
-      <span>NTP-Server 2:</span>
-      <input bind:value={wifiConfig.ntpServerSecondary} placeholder="time.cloudflare.com" />
-    </label>
-    <p class="helper-text">Zeit wird in UTC synchronisiert; Anzeige im Browser erfolgt automatisch in lokaler Zeit.</p>
-
     <div class="choice-grid" role="radiogroup" aria-label="IP-Konfiguration">
       <label class="choice-card">
         <input type="radio" name="wifi-ip-mode" checked={wifiMode === 'dhcp'} on:change={enableDhcp} />
@@ -973,6 +962,17 @@
         <span>Statische IP einstellen</span>
       </label>
     </div>
+
+    <h3>NTP</h3>
+    <label class="field-row">
+      <span>NTP-Server 1:</span>
+      <input bind:value={wifiConfig.ntpServerPrimary} placeholder="pool.ntp.org" />
+    </label>
+    <label class="field-row">
+      <span>NTP-Server 2:</span>
+      <input bind:value={wifiConfig.ntpServerSecondary} placeholder="time.cloudflare.com" />
+    </label>
+    <p class="helper-text">Zeit wird in UTC synchronisiert; Anzeige im Browser erfolgt automatisch in lokaler Zeit.</p>
 
     {#if wifiMode === 'static'}
       <label class="field-row field-row--top-align">

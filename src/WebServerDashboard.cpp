@@ -1095,6 +1095,7 @@ void WebServerDashboard::resetUpdateState(const std::string& source, const std::
     updateState_.source = source;
     updateState_.target = target;
     updateState_.phase = "idle";
+    restartScheduled_ = false;
 }
 
 void WebServerDashboard::setUpdatePhase(const std::string& phase, const std::string& message, size_t received, size_t total) {
@@ -1108,6 +1109,7 @@ void WebServerDashboard::markUpdateFailed(const std::string& message) {
     updateState_.inProgress = false;
     updateState_.success = false;
     updateState_.rebootPending = false;
+    restartScheduled_ = false;
     setUpdatePhase("failed", message, updateState_.received, updateState_.total);
     EventBus::getInstance().publish({ EventType::OTA_FAILED, message });
     DebugLogger::getInstance().log(LogLevel::ERROR, std::string("OTA failed: ") + message);
@@ -1133,12 +1135,19 @@ void WebServerDashboard::scheduleRestart(uint32_t delayMs) {
     };
 
     auto *context = new RestartContext{ delayMs };
-    xTaskCreate([](void *param) {
+    const BaseType_t created = xTaskCreate([](void *param) {
         auto *ctx = static_cast<RestartContext*>(param);
         vTaskDelay(pdMS_TO_TICKS(ctx->delayMs));
         delete ctx;
         ESP.restart();
     }, "salzstand-restart", 4096, context, 1, nullptr);
+
+    if (created != pdPASS) {
+        delete context;
+        restartScheduled_ = false;
+        DebugLogger::getInstance().log(LogLevel::ERROR, "Restart-Task konnte nicht erstellt werden, starte sofort neu");
+        ESP.restart();
+    }
 }
 
 void WebServerDashboard::sendUpdateStatus(AsyncWebServerRequest *request) const {
@@ -1624,6 +1633,10 @@ bool WebServerDashboard::applyRemoteAsset(const ManifestAsset& asset, int comman
         return false;
     }
 
+    if (command == U_SPIFFS) {
+        ensureLittleFsMounted();
+    }
+
     http.end();
     return true;
 }
@@ -1776,6 +1789,10 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
         markUpdateFailed(Update.errorString());
         request->send(500, "application/json", (std::string("{\"error\":\"") + Update.errorString() + "\"}").c_str());
         return;
+    }
+
+    if (target == "webui") {
+        ensureLittleFsMounted();
     }
 
     const std::string successMessage = target == "app"

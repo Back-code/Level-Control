@@ -152,7 +152,7 @@
 
   async function loadStatus() {
     try {
-      const response = await fetch('/api/update/status');
+      const response = await fetch('/api/update/status', { cache: 'no-store' });
       if (response.ok) {
         status = await response.json();
         if (status.installedVersion) {

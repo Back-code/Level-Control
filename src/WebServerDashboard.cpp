@@ -978,7 +978,9 @@ void WebServerDashboard::setupRoutes() {
     });
 
     // Serve static files from LittleFS (nach API-Routen registrieren)
-    server_.serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
+    // no-store: verhindert, dass der Browser JS/CSS nach einem OTA-Update aus dem Cache laed
+    // und so die alte UI anzeigt obwohl neue Dateien geflasht wurden.
+    server_.serveStatic("/", LittleFS, "/").setDefaultFile("index.html").setCacheControl("no-store");
 
     server_.onNotFound([this](AsyncWebServerRequest *request) {
         const String url = request->url();

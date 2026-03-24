@@ -159,12 +159,25 @@
           liveInstalledVersion = status.installedVersion;
         }
 
-        // After a successful OTA the device reboots quickly. Trigger a client reload once.
+        // After a successful OTA the device reboots. Wait until device is back up, then reload.
         if (!otaReloadScheduled && status.success && status.rebootPending && !status.inProgress) {
           otaReloadScheduled = true;
-          setTimeout(() => {
-            window.location.reload();
-          }, 3500);
+          // Give the ESP32 time to start rebooting, then poll until it responds.
+          setTimeout(async () => {
+            let attempts = 0;
+            while (attempts < 24) {
+              try {
+                const r = await fetch('/api/update/status', { cache: 'no-store' });
+                if (r.ok) {
+                  window.location.reload();
+                  return;
+                }
+              } catch (_) { /* Gerät startet noch neu */ }
+              await new Promise(res => setTimeout(res, 500));
+              attempts++;
+            }
+            window.location.reload(); // Fallback nach ~12 s
+          }, 3000);
         }
       }
     } catch (_) {

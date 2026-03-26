@@ -1,7 +1,5 @@
 #include <string>
 
-// Globale Variable für die aktuelle Manifest-Version (für OTA/NVS-Update)
-std::string g_latestManifestVersion;
 #include "WebServerDashboard.h"
 #include <AsyncJson.h>
 #include <ArduinoJson.h>
@@ -1485,14 +1483,10 @@ void WebServerDashboard::runRemoteUpdateTask(const std::string& target) {
         return;
     }
 
-
     cachedManifest_ = manifest;
     manifestError_.clear();
     lastManifestCheckMs_ = millis();
     updateState_.availableVersion = manifest.version;
-
-    // Globale Variable für die aktuelle Version setzen
-    g_latestManifestVersion = manifest.version;
 
     if ((target == "webui" || target == "full") && !manifest.webui.url.empty()) {
         if (!applyRemoteAsset(manifest.webui, U_SPIFFS, "webui", error)) {
@@ -1502,7 +1496,6 @@ void WebServerDashboard::runRemoteUpdateTask(const std::string& target) {
     }
 
     if ((target == "app" || target == "full") && !manifest.app.url.empty()) {
-        g_latestManifestVersion = manifest.version;
         if (!applyRemoteAsset(manifest.app, U_FLASH, "app", error)) {
             markUpdateFailed(error);
             return;
@@ -1640,32 +1633,6 @@ bool WebServerDashboard::applyRemoteAsset(const ManifestAsset& asset, int comman
         http.end();
         error = Update.errorString();
         return false;
-    }
-
-    if (command == U_FLASH) {
-        // Nach erfolgreichem Flashen die neue Partition als Boot-Partition setzen
-        const esp_partition_t* partition = esp_ota_get_next_update_partition(nullptr);
-        if (partition) {
-            esp_err_t err = esp_ota_set_boot_partition(partition);
-            if (err != ESP_OK) {
-                error = std::string("Boot-Partition konnte nicht gesetzt werden: ") + esp_err_to_name(err);
-                http.end();
-                return false;
-            }
-        }
-        // Firmware-Version im NVS aktualisieren
-        // Die Version muss von außen (aus dem ReleaseManifest) übergeben werden!
-        // Daher: Funktion um Version als Argument erweitern oder globalen Wert nutzen.
-        extern std::string g_latestManifestVersion;
-        Config config;
-        if (ConfigStore::getInstance().load(config)) {
-            try {
-                config.version = std::stoi(g_latestManifestVersion);
-            } catch (...) {
-                // Falls Umwandlung fehlschlägt, Version nicht ändern
-            }
-            ConfigStore::getInstance().save(config);
-        }
     }
 
     if (command == U_SPIFFS) {

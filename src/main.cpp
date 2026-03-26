@@ -18,28 +18,60 @@ void setup() {
     Serial.println("[Salzstand] Starting...");
     DebugLogger::getInstance().log(LogLevel::INFO, "Starting Salzstand Sensor");
 
+    // OTA-Rollback-Validierung so frueh wie moeglich ausfuehren.
+    // Darf nicht vom WLAN-Status abhaengen, sonst kann ein frischer OTA-Boot
+    // bei fehlendem WLAN unbestaetigt bleiben.
+    esp_err_t otaMarkRes = esp_ota_mark_app_valid_cancel_rollback();
+    if (otaMarkRes == ESP_OK) {
+        DebugLogger::getInstance().log(LogLevel::INFO, "Aktuelles Image als gueltig markiert");
+    } else if (otaMarkRes == ESP_ERR_NOT_FOUND || otaMarkRes == ESP_ERR_INVALID_STATE) {
+        DebugLogger::getInstance().log(LogLevel::INFO, std::string("OTA-Validierung nicht noetig: ") + esp_err_to_name(otaMarkRes));
+    } else {
+        DebugLogger::getInstance().log(LogLevel::WARN, std::string("esp_ota_mark_app_valid_cancel_rollback(): ") + esp_err_to_name(otaMarkRes));
+    }
+
     SystemStateManager& ssm = SystemStateManager::getInstance();
     SystemState state = ssm.determineState();
 
     WifiManager::getInstance().init();
 
+    {
+        // #region agent log boot decision + config existence
+        Config bootConfig;
+        const bool bootCfgLoaded = ConfigStore::getInstance().load(bootConfig);
+        DebugLogger::getInstance().log(
+            LogLevel::INFO,
+            std::string("DEBUG_BOOT H1/H2: determineState=") + (state == SystemState::SETUP_MODE ? "SETUP" : "NORMAL")
+                + ", ConfigStore.load=" + (bootCfgLoaded ? "true" : "false")
+                + ", ssid_len=" + std::to_string(bootConfig.wifi.ssid.size())
+        );
+        // #endregion
+    }
+
     if (state == SystemState::SETUP_MODE) {
+        // #region agent log boot setup-mode wifi config
+        const WifiConfig wifiCfg = WifiManager::getInstance().getConfig();
+        DebugLogger::getInstance().log(
+            LogLevel::WARN,
+            std::string("DEBUG_BOOT H1/H3: entering SETUP_MODE, wifiCfg.ssid_len=") + std::to_string(wifiCfg.ssid.size())
+        );
+        // #endregion
         WifiManager::getInstance().startAP("Salzstand-Setup", "");
         WebServerSetup::getInstance().init();
         WebServerSetup::getInstance().start();
     } else {
-        if (WifiManager::getInstance().connect()) {
+        const bool connected = WifiManager::getInstance().connect();
+        // #region agent log boot wifi connect result
+        DebugLogger::getInstance().log(
+            LogLevel::INFO,
+            std::string("DEBUG_BOOT H2: WiFi connect returned=") + (connected ? "true" : "false")
+                + ", wifiCfg.ssid_len=" + std::to_string(WifiManager::getInstance().getConfig().ssid.size())
+        );
+        // #endregion
+
+        if (connected) {
             WebServerDashboard::getInstance().init();
             WebServerDashboard::getInstance().start();
-            // Wenn wir erfolgreich gebootet sind, markieren wir das aktuell laufende
-            // Image als gültig, damit der Bootloader kein Rollback auf die
-            // vorherige Partition durchführt.
-            esp_err_t otaMarkRes = esp_ota_mark_app_valid_cancel_rollback();
-            if (otaMarkRes == ESP_OK) {
-                DebugLogger::getInstance().log(LogLevel::INFO, "Aktuelles Image als gültig markiert");
-            } else {
-                DebugLogger::getInstance().log(LogLevel::WARN, std::string("esp_ota_mark_app_valid_cancel_rollback(): ") + esp_err_to_name(otaMarkRes));
-            }
             // Initialize MQTT with config
             Config config;
             if (ConfigStore::getInstance().load(config) && !config.mqtt.server.empty()) {

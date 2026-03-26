@@ -19,6 +19,7 @@ std::string g_latestManifestVersion;
 #include <vector>
 #include <esp_ota_ops.h>
 #include <esp_partition.h>
+#include <esp_system.h>
 #include <mbedtls/base64.h>
 #include <mbedtls/md.h>
 #include <mbedtls/pk.h>
@@ -145,6 +146,23 @@ int normalizeReminderWeekday(int value) {
         return 1;
     }
     return value;
+}
+
+const char* resetReasonToString(esp_reset_reason_t reason) {
+    switch (reason) {
+        case ESP_RST_UNKNOWN:   return "unknown";
+        case ESP_RST_POWERON:   return "poweron";
+        case ESP_RST_EXT:       return "external";
+        case ESP_RST_SW:        return "software";
+        case ESP_RST_PANIC:     return "panic";
+        case ESP_RST_INT_WDT:   return "int_wdt";
+        case ESP_RST_TASK_WDT:  return "task_wdt";
+        case ESP_RST_WDT:       return "wdt";
+        case ESP_RST_DEEPSLEEP: return "deepsleep";
+        case ESP_RST_BROWNOUT:  return "brownout";
+        case ESP_RST_SDIO:      return "sdio";
+        default:                return "other";
+    }
 }
 }
 
@@ -320,13 +338,26 @@ void WebServerDashboard::setupRoutes() {
 
     server_.on("/api/config", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL,
         [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-        static std::string body;
-        if (index == 0) body = "";
-        body += std::string((char*)data, len);
+        auto *body = static_cast<std::string*>(request->_tempObject);
+        if (index == 0) {
+            delete body;
+            body = new std::string();
+            body->reserve(total);
+            request->_tempObject = body;
+        }
+        if (body == nullptr) {
+            // Defensive fallback; should not happen if index==0 was called.
+            body = new std::string();
+            request->_tempObject = body;
+        }
+        body->append(reinterpret_cast<const char*>(data), len);
+
         if (index + len == total) {
             DynamicJsonDocument doc(384);
-            if (deserializeJson(doc, body) != DeserializationError::Ok) {
+            if (deserializeJson(doc, *body) != DeserializationError::Ok) {
                 request->send(400, "application/json", "{\"error\":\"invalid_config_payload\"}");
+                delete body;
+                request->_tempObject = nullptr;
                 return;
             }
             Config config;
@@ -336,6 +367,8 @@ void WebServerDashboard::setupRoutes() {
             config.sampleIntervalSeconds = doc["sampleIntervalSeconds"] | 5UL;
             if (config.sampleIntervalSeconds < kMinSampleIntervalSeconds) {
                 request->send(400, "application/json", "{\"error\":\"sample_interval_too_small\"}");
+                delete body;
+                request->_tempObject = nullptr;
                 return;
             }
             ConfigStore::getInstance().save(config);
@@ -343,6 +376,8 @@ void WebServerDashboard::setupRoutes() {
             SensorManager::getInstance().setOffset(config.offset);
             SensorManager::getInstance().setSampleIntervalSeconds(config.sampleIntervalSeconds);
             request->send(200, "application/json", "{\"status\":\"ok\"}");
+            delete body;
+            request->_tempObject = nullptr;
         }
     });
 
@@ -416,14 +451,27 @@ void WebServerDashboard::setupRoutes() {
 
     server_.on("/api/wifi", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL,
         [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-        static std::string body;
-        if (index == 0) body = "";
-        body += std::string((char*)data, len);
+        auto *body = static_cast<std::string*>(request->_tempObject);
+        if (index == 0) {
+            delete body;
+            body = new std::string();
+            body->reserve(total);
+            request->_tempObject = body;
+        }
+        if (body == nullptr) {
+            // Defensive fallback; should not happen if index==0 was called.
+            body = new std::string();
+            request->_tempObject = body;
+        }
+        body->append(reinterpret_cast<const char*>(data), len);
+
         if (index + len == total) {
             DynamicJsonDocument doc(1024);
-            DeserializationError jsonError = deserializeJson(doc, body);
+            DeserializationError jsonError = deserializeJson(doc, *body);
             if (jsonError) {
                 request->send(400, "application/json", "{\"error\":\"invalid_wifi_payload\"}");
+                delete body;
+                request->_tempObject = nullptr;
                 return;
             }
             Config config;
@@ -446,6 +494,8 @@ void WebServerDashboard::setupRoutes() {
 
                 if (config.staticIp.ip.empty() || config.staticIp.subnet.empty() || config.staticIp.dns.empty()) {
                     request->send(400, "application/json", "{\"error\":\"static_ip_requires_ip_subnet_dns\"}");
+                    delete body;
+                    request->_tempObject = nullptr;
                     return;
                 }
             } else {
@@ -454,6 +504,8 @@ void WebServerDashboard::setupRoutes() {
 
             WifiManager::getInstance().setConfig(config.wifi, config.staticIp);
             request->send(200, "application/json", "{\"status\":\"ok\"}");
+            delete body;
+            request->_tempObject = nullptr;
         }
     });
 
@@ -478,14 +530,27 @@ void WebServerDashboard::setupRoutes() {
 
     server_.on("/api/mqtt", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL,
         [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-        static std::string body;
-        if (index == 0) body = "";
-        body += std::string((char*)data, len);
+        auto *body = static_cast<std::string*>(request->_tempObject);
+        if (index == 0) {
+            delete body;
+            body = new std::string();
+            body->reserve(total);
+            request->_tempObject = body;
+        }
+        if (body == nullptr) {
+            // Defensive fallback; should not happen if index==0 was called.
+            body = new std::string();
+            request->_tempObject = body;
+        }
+        body->append(reinterpret_cast<const char*>(data), len);
+
         if (index + len == total) {
             DynamicJsonDocument doc(768);
-            DeserializationError jsonError = deserializeJson(doc, body);
+            DeserializationError jsonError = deserializeJson(doc, *body);
             if (jsonError) {
                 request->send(400, "application/json", "{\"error\":\"invalid_mqtt_payload\"}");
+                delete body;
+                request->_tempObject = nullptr;
                 return;
             }
             Config config;
@@ -507,6 +572,8 @@ void WebServerDashboard::setupRoutes() {
             }
 
             request->send(200, "application/json", "{\"status\":\"ok\"}");
+            delete body;
+            request->_tempObject = nullptr;
         }
     });
 
@@ -803,18 +870,33 @@ void WebServerDashboard::setupRoutes() {
     // POST /api/import – Konfiguration und Verlaufsdaten aus JSON-Backup wiederherstellen
     server_.on("/api/import", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL,
         [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-        static std::string body;
-        if (index == 0) { body = ""; body.reserve(total); }
-        body += std::string(reinterpret_cast<char*>(data), len);
+        auto *body = static_cast<std::string*>(request->_tempObject);
+        if (index == 0) {
+            delete body;
+            body = new std::string();
+            body->reserve(total);
+            request->_tempObject = body;
+        }
+        if (body == nullptr) {
+            // Defensive fallback; should not happen if index==0 was called.
+            body = new std::string();
+            request->_tempObject = body;
+        }
+
+        body->append(reinterpret_cast<const char*>(data), len);
         if (index + len < total) return;
 
         DynamicJsonDocument doc(48 * 1024);
-        if (deserializeJson(doc, body) != DeserializationError::Ok) {
+        if (deserializeJson(doc, *body) != DeserializationError::Ok) {
             request->send(400, "application/json", "{\"error\":\"invalid_json\"}");
+            delete body;
+            request->_tempObject = nullptr;
             return;
         }
         if ((doc["exportVersion"] | 0) != 1) {
             request->send(400, "application/json", "{\"error\":\"unsupported_export_version\"}");
+            delete body;
+            request->_tempObject = nullptr;
             return;
         }
 
@@ -897,6 +979,8 @@ void WebServerDashboard::setupRoutes() {
             configRestored ? "true" : "false",
             historyRestored ? "true" : "false");
         request->send(200, "application/json", respBuf);
+        delete body;
+        request->_tempObject = nullptr;
     });
 
     // POST /api/factory-reset – setzt Konfiguration und Historie auf Werkseinstellungen zurueck
@@ -1032,11 +1116,19 @@ void WebServerDashboard::setupUpdateRoutes() {
 
     server_.on("/api/update/repo", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL,
         [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-        static std::string body;
+        auto *body = static_cast<std::string*>(request->_tempObject);
         if (index == 0) {
-            body.clear();
+            delete body;
+            body = new std::string();
+            body->reserve(total);
+            request->_tempObject = body;
         }
-        body.append(reinterpret_cast<char*>(data), len);
+        if (body == nullptr) {
+            // Defensive fallback; should not happen if index==0 was called.
+            body = new std::string();
+            request->_tempObject = body;
+        }
+        body->append(reinterpret_cast<const char*>(data), len);
 
         if (index + len != total) {
             return;
@@ -1044,12 +1136,16 @@ void WebServerDashboard::setupUpdateRoutes() {
 
         if (updateState_.inProgress || uploadActive_) {
             request->send(409, "application/json", "{\"error\":\"Update läuft bereits\"}");
+            delete body;
+            request->_tempObject = nullptr;
             return;
         }
 
         DynamicJsonDocument doc(256);
-        if (deserializeJson(doc, body) != DeserializationError::Ok) {
+        if (deserializeJson(doc, *body) != DeserializationError::Ok) {
             request->send(400, "application/json", "{\"error\":\"Ungültiger Request-Body\"}");
+            delete body;
+            request->_tempObject = nullptr;
             return;
         }
 
@@ -1068,10 +1164,14 @@ void WebServerDashboard::setupUpdateRoutes() {
         std::string error;
         if (!requestRepoUpdate(target, error)) {
             request->send(WiFi.status() == WL_CONNECTED ? 409 : 503, "application/json", (std::string("{\"error\":\"") + error + "\"}").c_str());
+            delete body;
+            request->_tempObject = nullptr;
             return;
         }
 
         request->send(202, "application/json", "{\"status\":\"started\"}");
+        delete body;
+        request->_tempObject = nullptr;
     });
 
     server_.on("/api/update/upload/app", HTTP_POST,
@@ -1155,7 +1255,7 @@ void WebServerDashboard::scheduleRestart(uint32_t delayMs) {
 }
 
 void WebServerDashboard::sendUpdateStatus(AsyncWebServerRequest *request) const {
-    DynamicJsonDocument doc(512);
+    DynamicJsonDocument doc(1024);
     doc["inProgress"] = updateState_.inProgress;
     doc["success"] = updateState_.success;
     doc["rebootPending"] = updateState_.rebootPending;
@@ -1172,6 +1272,32 @@ void WebServerDashboard::sendUpdateStatus(AsyncWebServerRequest *request) const 
     doc["firmwareMaxSize"] = getAppPartitionSize();
     doc["webuiMaxSize"] = getFilesystemPartitionSize();
     doc["manifestUrl"] = kLatestManifestUrl;
+
+    const esp_partition_t* runningPartition = esp_ota_get_running_partition();
+    const esp_partition_t* bootPartition = esp_ota_get_boot_partition();
+    if (runningPartition) {
+        doc["runningPartitionLabel"] = runningPartition->label;
+        doc["runningPartitionAddress"] = runningPartition->address;
+        doc["runningPartitionSize"] = runningPartition->size;
+    } else {
+        doc["runningPartitionLabel"] = "";
+        doc["runningPartitionAddress"] = 0;
+        doc["runningPartitionSize"] = 0;
+    }
+
+    if (bootPartition) {
+        doc["configuredBootPartitionLabel"] = bootPartition->label;
+        doc["configuredBootPartitionAddress"] = bootPartition->address;
+        doc["configuredBootPartitionSize"] = bootPartition->size;
+    } else {
+        doc["configuredBootPartitionLabel"] = "";
+        doc["configuredBootPartitionAddress"] = 0;
+        doc["configuredBootPartitionSize"] = 0;
+    }
+
+    const esp_reset_reason_t resetReason = esp_reset_reason();
+    doc["lastResetReason"] = resetReasonToString(resetReason);
+    doc["lastResetReasonCode"] = static_cast<int>(resetReason);
 
     std::string json;
     serializeJson(doc, json);

@@ -17,7 +17,13 @@ SystemState SystemStateManager::determineState() {
         // Assume NORMAL_MODE, but could check WiFi connection later
         currentState_ = SystemState::NORMAL_MODE;
     }
-    DebugLogger::getInstance().log(LogLevel::INFO, "System state determined: " + std::to_string((int)currentState_));
+    // #region agent log boot determineState evidence
+    DebugLogger::getInstance().log(
+        LogLevel::INFO,
+        std::string("DEBUG_BOOT H1/H2/H3: determineState ssid_len=") + std::to_string(config_.wifi.ssid.size())
+            + ", chosen=" + (currentState_ == SystemState::SETUP_MODE ? "SETUP" : "NORMAL")
+    );
+    // #endregion
     return currentState_;
 }
 

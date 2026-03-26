@@ -4,6 +4,7 @@
 #include <ESPAsyncWebServer.h>
 #include <AsyncWebSocket.h>
 #include <string>
+#include <esp_partition.h>
 #include "SensorManager.h"
 #include "DebugLogger.h"
 
@@ -68,6 +69,7 @@ private:
     bool littleFsMounted_ = false;
     String uploadTarget_;
     String uploadFilename_;
+    const esp_partition_t* uploadTargetPartition_ = nullptr;
 
     void setupRoutes();
     void setupUpdateRoutes();

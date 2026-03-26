@@ -1557,6 +1557,11 @@ bool WebServerDashboard::applyRemoteAsset(const ManifestAsset& asset, int comman
         LittleFS.end();
     }
 
+    const esp_partition_t* targetPartition = nullptr;
+    if (command == U_FLASH) {
+        targetPartition = esp_ota_get_next_update_partition(nullptr);
+    }
+
     if (!Update.begin(expectedSize, command)) {
         error = Update.errorString();
         if (command == U_SPIFFS) {
@@ -1644,9 +1649,8 @@ bool WebServerDashboard::applyRemoteAsset(const ManifestAsset& asset, int comman
 
     if (command == U_FLASH) {
         // Nach erfolgreichem Flashen die neue Partition als Boot-Partition setzen
-        const esp_partition_t* partition = esp_ota_get_next_update_partition(nullptr);
-        if (partition) {
-            esp_err_t err = esp_ota_set_boot_partition(partition);
+        if (targetPartition) {
+            esp_err_t err = esp_ota_set_boot_partition(targetPartition);
             if (err != ESP_OK) {
                 error = std::string("Boot-Partition konnte nicht gesetzt werden: ") + esp_err_to_name(err);
                 http.end();
@@ -1738,6 +1742,12 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
             LittleFS.end();
         }
 
+        // Für App-Uploads die Ziel-OTA-Partition bereits vor Beginn ermitteln
+        uploadTargetPartition_ = nullptr;
+        if (target == "app") {
+            uploadTargetPartition_ = esp_ota_get_next_update_partition(nullptr);
+        }
+
         if (!Update.begin(UPDATE_SIZE_UNKNOWN, target == "app" ? U_FLASH : U_SPIFFS)) {
             uploadFailed_ = true;
             uploadActive_ = false;
@@ -1758,6 +1768,7 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
     if (!uploadFailed_ && !validateUploadChunk(target, data, len, index, error)) {
         uploadFailed_ = true;
         Update.abort();
+        uploadTargetPartition_ = nullptr;
         if (target == "webui") {
             LittleFS.begin();
         }
@@ -1770,6 +1781,7 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
         if (limit > 0 && nextReceived > limit) {
             uploadFailed_ = true;
             Update.abort();
+            uploadTargetPartition_ = nullptr;
             if (target == "webui") {
                 LittleFS.begin();
             }
@@ -1783,6 +1795,7 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
         if (Update.write(data, len) != len) {
             uploadFailed_ = true;
             Update.abort();
+            uploadTargetPartition_ = nullptr;
             if (target == "webui") {
                 LittleFS.begin();
             }
@@ -1807,6 +1820,7 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
     const size_t finalSize = index + len;
     if ((target == "app" && finalSize < 65536) || (target == "webui" && finalSize < 4096)) {
         Update.abort();
+        uploadTargetPartition_ = nullptr;
         if (target == "webui") {
             LittleFS.begin();
         }
@@ -1818,12 +1832,30 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
     }
 
     if (!Update.end(true)) {
+        uploadTargetPartition_ = nullptr;
         if (target == "webui") {
             LittleFS.begin();
         }
         markUpdateFailed(Update.errorString());
         request->send(500, "application/json", (std::string("{\"error\":\"") + Update.errorString() + "\"}").c_str());
         return;
+    }
+
+    if (target == "app") {
+        // Falls wir vor dem Upload die Ziel-Partition ermittelt haben, diese jetzt als Boot-Partition setzen.
+        if (uploadTargetPartition_) {
+            esp_err_t err = esp_ota_set_boot_partition(uploadTargetPartition_);
+            if (err != ESP_OK) {
+                uploadTargetPartition_ = nullptr;
+                if (target == "webui") {
+                    LittleFS.begin();
+                }
+                markUpdateFailed(std::string("Boot-Partition konnte nicht gesetzt werden: ") + esp_err_to_name(err));
+                request->send(500, "application/json", (std::string("{\"error\":\"") + updateState_.message + "\"}").c_str());
+                return;
+            }
+        }
+        uploadTargetPartition_ = nullptr;
     }
 
     if (target == "webui") {

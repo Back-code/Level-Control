@@ -10,6 +10,7 @@
 #include "EventBus.h"
 #include "ConfigStore.h"
 #include "HistoryManager.h"
+#include <esp_ota_ops.h>
 
 void setup() {
     Serial.begin(115200);
@@ -30,6 +31,15 @@ void setup() {
         if (WifiManager::getInstance().connect()) {
             WebServerDashboard::getInstance().init();
             WebServerDashboard::getInstance().start();
+            // Wenn wir erfolgreich gebootet sind, markieren wir das aktuell laufende
+            // Image als gültig, damit der Bootloader kein Rollback auf die
+            // vorherige Partition durchführt.
+            esp_err_t otaMarkRes = esp_ota_mark_app_valid_cancel_rollback();
+            if (otaMarkRes == ESP_OK) {
+                DebugLogger::getInstance().log(LogLevel::INFO, "Aktuelles Image als gültig markiert");
+            } else {
+                DebugLogger::getInstance().log(LogLevel::WARN, std::string("esp_ota_mark_app_valid_cancel_rollback(): ") + esp_err_to_name(otaMarkRes));
+            }
             // Initialize MQTT with config
             Config config;
             if (ConfigStore::getInstance().load(config) && !config.mqtt.server.empty()) {

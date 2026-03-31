@@ -158,6 +158,10 @@ bool ConfigStore::load(Config& config) {
     if (config.sampleIntervalSeconds < 5UL) {
         config.sampleIntervalSeconds = 5UL;
     }
+    config.sensorType = doc["sensorType"] | 0;
+    if (config.sensorType != 0 && config.sensorType != 1) {
+        config.sensorType = 0;
+    }
 
     return true;
 }
@@ -215,6 +219,7 @@ bool ConfigStore::save(const Config& config) {
     doc["behaelterhoehe"] = config.behaelterhoehe;
     doc["offset"] = config.offset;
     doc["sampleIntervalSeconds"] = config.sampleIntervalSeconds < 5UL ? 5UL : config.sampleIntervalSeconds;
+    doc["sensorType"] = (config.sensorType == 1) ? 1 : 0;
 
     std::string jsonStr;
     serializeJson(doc, jsonStr);

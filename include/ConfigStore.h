@@ -56,6 +56,7 @@ struct Config {
     float behaelterhoehe = 95.0;
     float offset = 0.0;
     unsigned long sampleIntervalSeconds = 5;
+    int sensorType = 0; // 0 = HC-SR04 Ultraschall, 1 = VL53L1X Laser
 };
 
 class ConfigStore {

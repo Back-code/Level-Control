@@ -328,6 +328,7 @@ void WebServerDashboard::setupRoutes() {
             doc["behaelterhoehe"] = config.behaelterhoehe;
             doc["offset"] = config.offset;
             doc["sampleIntervalSeconds"] = config.sampleIntervalSeconds;
+            doc["sensorType"] = config.sensorType;
             std::string json;
             serializeJson(doc, json);
             request->send(200, "application/json", json.c_str());
@@ -371,10 +372,16 @@ void WebServerDashboard::setupRoutes() {
                 request->_tempObject = nullptr;
                 return;
             }
+            const int newSensorType = doc["sensorType"] | config.sensorType;
+            config.sensorType = (newSensorType == 1) ? 1 : 0;
             ConfigStore::getInstance().save(config);
             SensorManager::getInstance().setBehaelterhoehe(config.behaelterhoehe);
             SensorManager::getInstance().setOffset(config.offset);
             SensorManager::getInstance().setSampleIntervalSeconds(config.sampleIntervalSeconds);
+            SensorManager::getInstance().setSensorType(
+                config.sensorType == 1
+                    ? SensorManager::SensorType::Laser
+                    : SensorManager::SensorType::Ultraschall);
             request->send(200, "application/json", "{\"status\":\"ok\"}");
             delete body;
             request->_tempObject = nullptr;
@@ -808,6 +815,7 @@ void WebServerDashboard::setupRoutes() {
         cfgDoc["behaelterhoehe"] = config.behaelterhoehe;
         cfgDoc["offset"] = config.offset;
         cfgDoc["sampleIntervalSeconds"] = config.sampleIntervalSeconds;
+        cfgDoc["sensorType"] = config.sensorType;
         JsonObject wifiJ = cfgDoc.createNestedObject("wifi");
         wifiJ["ssid"] = config.wifi.ssid;
         wifiJ["password"] = config.wifi.password;
@@ -910,6 +918,10 @@ void WebServerDashboard::setupRoutes() {
             config.behaelterhoehe = cfg["behaelterhoehe"] | config.behaelterhoehe;
             config.offset = cfg["offset"] | config.offset;
             config.sampleIntervalSeconds = cfg["sampleIntervalSeconds"] | config.sampleIntervalSeconds;
+            if (cfg.containsKey("sensorType")) {
+                const int t = cfg["sensorType"] | 0;
+                config.sensorType = (t == 1) ? 1 : 0;
+            }
 
             if (cfg.containsKey("wifi")) {
                 const JsonObjectConst w = cfg["wifi"];
@@ -1038,6 +1050,7 @@ void WebServerDashboard::setupRoutes() {
             doc["push"]["authPassword"] = kPasswordMask;
             doc["behaelterhoehe"] = config.behaelterhoehe;
             doc["offset"] = config.offset;
+            doc["sensorType"] = config.sensorType;
             std::string json;
             serializeJson(doc, json);
             request->send(200, "application/json", json.c_str());

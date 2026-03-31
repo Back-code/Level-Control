@@ -27,6 +27,7 @@
   let wifiConfigDirty = false;
   let sensorOffsetValue = '0';
   let sensorHeightValue = '95';
+  let sensorTypeValue = 0;
   let sensorConfigDirty = false;
   let sensorIntervalValue = '5';
   let sensorIntervalUnit = 'seconds';
@@ -35,6 +36,7 @@
   let lastSyncedSampleIntervalSeconds = null;
   let lastSyncedSensorOffset = null;
   let lastSyncedSensorHeight = null;
+  let lastSyncedSensorType = null;
   let mqttConfig = { server: '', port: 1883, user: '', password: '', discovery: true };
   let mqttConfigDirty = false;
   let mqttHasPassword = false;
@@ -559,12 +561,15 @@
   $: if (module === 'sensor') {
     const nextOffset = String(data.offset ?? '');
     const nextHeight = String(data.behaelterhoehe ?? '');
-    const shouldSyncGeometry = !sensorConfigDirty && (nextOffset !== lastSyncedSensorOffset || nextHeight !== lastSyncedSensorHeight);
+    const nextSensorType = Number(data.sensorType ?? 0);
+    const shouldSyncGeometry = !sensorConfigDirty && (nextOffset !== lastSyncedSensorOffset || nextHeight !== lastSyncedSensorHeight || nextSensorType !== lastSyncedSensorType);
     if (shouldSyncGeometry) {
       sensorOffsetValue = nextOffset;
       sensorHeightValue = nextHeight;
+      sensorTypeValue = nextSensorType;
       lastSyncedSensorOffset = nextOffset;
       lastSyncedSensorHeight = nextHeight;
+      lastSyncedSensorType = nextSensorType;
     }
   }
 
@@ -574,7 +579,7 @@
     sensorIntervalValidation = { ...sensorIntervalValidation, attempted: true };
     const sampleIntervalSeconds = getSampleIntervalSeconds();
     if (sampleIntervalSeconds < MIN_SAMPLE_INTERVAL_SECONDS) {
-      showNotice('error', 'Die Ultraschall-Abtastrate muss mindestens 5 Sekunden betragen.');
+      showNotice('error', 'Die Abtastrate muss mindestens 5 Sekunden betragen.');
       return false;
     }
 
@@ -585,28 +590,31 @@
         body: JSON.stringify({
           behaelterhoehe: Number(sensorHeightValue),
           offset: Number(sensorOffsetValue),
-          sampleIntervalSeconds
+          sampleIntervalSeconds,
+          sensorType: Number(sensorTypeValue)
         })
       });
 
       if (!response.ok) {
-        showNotice('error', 'Behälter-Konfiguration konnte nicht gespeichert werden.');
+        showNotice('error', 'Sensor-Konfiguration konnte nicht gespeichert werden.');
         return false;
       }
 
-      showNotice('success', 'Behälter-Konfiguration gespeichert.');
+      showNotice('success', 'Sensor-Konfiguration gespeichert.');
       data.offset = Number(sensorOffsetValue);
       data.behaelterhoehe = Number(sensorHeightValue);
       data.sampleIntervalSeconds = sampleIntervalSeconds;
+      data.sensorType = Number(sensorTypeValue);
       lastSyncedSensorOffset = String(data.offset);
       lastSyncedSensorHeight = String(data.behaelterhoehe);
+      lastSyncedSensorType = Number(sensorTypeValue);
       lastSyncedSampleIntervalSeconds = sampleIntervalSeconds;
       sensorConfigDirty = false;
       sensorIntervalDirty = false;
       sensorIntervalValidation = { attempted: false, touched: false };
       return true;
     } catch (_) {
-      showNotice('error', 'Behälter-Konfiguration konnte nicht gespeichert werden.');
+      showNotice('error', 'Sensor-Konfiguration konnte nicht gespeichert werden.');
       return false;
     }
   }
@@ -834,6 +842,14 @@
     <h2>Konfiguration</h2>
 
     <label class="field-row">
+      <span>Sensortyp:</span>
+      <select class="sensor-fixed-width" bind:value={sensorTypeValue}>
+        <option value={0}>HC-SR04 Ultraschall</option>
+        <option value={1}>VL53L1X Laser (ToF)</option>
+      </select>
+    </label>
+
+    <label class="field-row">
       <span>Offset (cm):</span>
       <input class="sensor-fixed-width" type="number" bind:value={sensorOffsetValue} />
     </label>
@@ -844,7 +860,7 @@
     </label>
 
     <label class="field-row field-row--top-align">
-      <span><FieldLabel text="Abtastrate Ultraschall:" required={true} /></span>
+      <span><FieldLabel text="Abtastrate:" required={true} /></span>
       <div class="field-control field-control--inline sensor-inline-width">
         <input
           type="number"

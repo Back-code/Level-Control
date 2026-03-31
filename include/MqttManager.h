@@ -1,5 +1,6 @@
 #ifndef MQTT_MANAGER_H
 #define MQTT_MANAGER_H
+#include "WebConstants.h"
 
 #include <string>
 #include <WiFiClient.h>
@@ -25,7 +26,7 @@ public:
 
     // Publish sensor data (alle Messwerte auf einmal)
     void publishSensorState(float fillLevel, float distanceCm, float rawDistanceM,
-                            unsigned int pingUs, bool valid, const char* status = "ok");
+                            unsigned int pingUs, bool valid, const char* status = WebConstants::STATUS_OK);
 
     // Publish WiFi, Uptime & ESP32-Systemwerte
     void publishSystemState();
@@ -59,7 +60,7 @@ private:
     std::string password_;
     bool connecting_ = false;
     unsigned long lastConnectAttemptMs_ = 0;
-    static constexpr unsigned long connectRetryIntervalMs_ = 5000;
+    static constexpr unsigned long connectRetryIntervalMs_ = WebConstants::MQTT_CONNECT_RETRY_INTERVAL_MS;
     MqttConnectionState state_ = MqttConnectionState::UNINITIALIZED;
     int consecutiveFailures_ = 0;
 

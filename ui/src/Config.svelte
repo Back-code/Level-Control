@@ -35,6 +35,7 @@
   let lastSyncedSampleIntervalSeconds = null;
   let lastSyncedSensorOffset = null;
   let lastSyncedSensorHeight = null;
+  let sensorType = 0; // 0 = Ultraschall, 1 = Laser
   let mqttConfig = { server: '', port: 1883, user: '', password: '', discovery: true };
   let mqttConfigDirty = false;
   let mqttHasPassword = false;
@@ -475,6 +476,16 @@
   function loadAllConfig() {
     loadConfig();
 
+    fetch('/api/config', { cache: 'no-store' })
+      .then(r => r.json())
+      .then(c => {
+        if (typeof c.sensorType === 'number') {
+          sensorType = c.sensorType;
+        } else {
+          sensorType = 0;
+        }
+      });
+
     fetch('/api/wifi', { cache: 'no-store' })
       .then(r => r.json())
       .then(c => {
@@ -585,7 +596,8 @@
         body: JSON.stringify({
           behaelterhoehe: Number(sensorHeightValue),
           offset: Number(sensorOffsetValue),
-          sampleIntervalSeconds
+          sampleIntervalSeconds,
+          sensorType: Number(sensorType)
         })
       });
 
@@ -832,6 +844,23 @@
 {#if module === 'sensor'}
   <div class="config-section" on:input={markSensorConfigDirty}>
     <h2>Konfiguration</h2>
+
+    <label class="field-row">
+      <span>Sensor-Modell:</span>
+      <div class="field-control">
+        <label style="margin-right: 18px;">
+          <input type="radio" name="sensorType" value="0" bind:group={sensorType} /> Ultraschall RCWL-1670
+        </label>
+        <label>
+          <input type="radio" name="sensorType" value="1" bind:group={sensorType} /> Laser VL53L1X
+        </label>
+      </div>
+      <div class="helper-text" style="margin-top: 2px;">
+        {sensorType == 0
+          ? 'Trigger: GPIO 4, Echo: GPIO 5'
+          : 'SCL: GPIO 7, SDA: GPIO 6, XSHUT: GPIO 2, GPIO1: GPIO 3'}
+      </div>
+    </label>
 
     <label class="field-row">
       <span>Offset (cm):</span>

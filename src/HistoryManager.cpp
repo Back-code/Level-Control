@@ -1,4 +1,5 @@
 #include "HistoryManager.h"
+#include "WebConstants.h"
 #include "DebugLogger.h"
 #include <Preferences.h>
 #include <LittleFS.h>
@@ -45,7 +46,7 @@ void HistoryManager::init() {
 
 bool HistoryManager::loadFromNvs() {
     Preferences prefs;
-    if (!prefs.begin(kNvsNamespace, true, kNvsPartitionLabel)) {
+    if (!prefs.begin(WebConstants::NVS_NAMESPACE_HISTORY, true, WebConstants::NVS_PARTITION_HISTORY)) {
         DebugLogger::getInstance().log(LogLevel::WARN,
             "HistoryManager: NVS konnte nicht gelesen werden");
         return false;
@@ -93,7 +94,7 @@ bool HistoryManager::loadLegacyFile() {
         return false;
     }
 
-    File f = LittleFS.open(kLegacyPath, "r");
+    File f = LittleFS.open(WebConstants::LEGACY_HISTORY_PATH, "r");
     if (!f) {
         DebugLogger::getInstance().log(LogLevel::INFO,
             "HistoryManager: keine Legacy-Datei vorhanden, starte leer");
@@ -133,7 +134,7 @@ bool HistoryManager::loadLegacyFile() {
 
 void HistoryManager::saveToNvs() const {
     Preferences prefs;
-    if (!prefs.begin(kNvsNamespace, false, kNvsPartitionLabel)) {
+    if (!prefs.begin(WebConstants::NVS_NAMESPACE_HISTORY, false, WebConstants::NVS_PARTITION_HISTORY)) {
         DebugLogger::getInstance().log(LogLevel::ERROR,
             "HistoryManager: NVS konnte nicht geoeffnet werden");
         return;

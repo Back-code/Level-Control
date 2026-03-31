@@ -175,7 +175,7 @@ function scanWifi(btn){
     nets.forEach(function(n){var o=document.createElement('option');o.value=n.ssid;o.textContent=n.ssid+' ('+n.rssi+' dBm)';sel.appendChild(o);});
     document.getElementById('scanResult').style.display=nets.length?'block':'none';
     if(!nets.length){showMsg('err','Keine WiFi-Netze gefunden.');}
-  }).catch(function(){showMsg('err','WiFi-Scan fehlgeschlagen.');}).finally(function(){btn.disabled=false;});
+  }).catch(function(){showMsg('err',WebConstants.ERROR_WIFI_SCAN);}).finally(function(){btn.disabled=false;});
 }
 function saveConfig(){
   var ssid=document.getElementById('ssid').value.trim();

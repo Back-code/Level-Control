@@ -62,11 +62,15 @@ Terminal → Run Task → Salzstand: Test
 
 Oder im Chat: `*test`
 
+
 **Was passiert:**
 - UI bauen (`npm run build`)
 - Firmware kompilieren und flashen (`pio upload`)
 - LittleFS flashen (`pio uploadfs`)
-- **Keine Versionserhöhung** — der ESP zeigt die bisherige Versionsnummer
+- **Keine Versionserhöhung** — der ESP zeigt die bisherige Versionsnummer, aber mit Test-Suffix:
+  - Beispiel: `v1.1.47|A`, `v1.1.47|B`, ...
+  - Der Buchstabe wird bei jedem Test-Build hochgezählt (A–Z, dann wieder A)
+  - Die version.json bleibt dabei unverändert, der Suffix gilt nur für Test-Builds
 
 > Der *test-Schritt ist Optional, aber empfohlen vor jedem Push.
 
@@ -93,7 +97,12 @@ Oder im Chat: `*push`
   - **kein** zusätzlicher Build
   - bestehende lokale Commits werden einfach nach GitHub gepusht
 
-**Versionsschema:** `Major.Minor.Commit` (z. B. `1.1.28`)
+
+**Versionsschema:**
+- Offiziell: `Major.Minor.Commit` (z. B. `1.1.28`)
+- Bei Test-Builds: `Major.Minor.Commit|Buchstabe` (z. B. `1.1.28|A`, `1.1.28|B`)
+  - Der Suffix-Buchstabe wird nur bei lokalen Test-Builds angezeigt und hochgezählt
+  - Bei Push/Deploy/Release bleibt die Versionsnummer ohne Suffix
 - `commit` wird bei Pushes mit Firmware/UI-relevanten Änderungen um 1 erhöht
 - `minor` wird bei `commit == 99` um 1 erhöht (commit reset auf 0)
 - `major` wird bei `minor == 9` um 1 erhöht (minor reset auf 0)

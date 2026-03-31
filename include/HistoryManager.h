@@ -1,5 +1,6 @@
 #ifndef HISTORY_MANAGER_H
 #define HISTORY_MANAGER_H
+#include "WebConstants.h"
 
 #include <cstdint>
 #include <vector>
@@ -49,9 +50,9 @@ public:
     /** Gibt true zurück, wenn die Systemzeit gültig (NTP synchronisiert) ist. */
     static bool isTimeValid();
 
-    static constexpr uint16_t kCapacity         = 1460;
-    static constexpr uint32_t kSampleIntervalSec = 6UL * 3600UL;   ///< 6 Stunden
-    static constexpr uint32_t kRetentionSec      = 365UL * 24UL * 3600UL; ///< 12 Monate
+    static constexpr uint16_t kCapacity         = WebConstants::HISTORY_CAPACITY;
+    static constexpr uint32_t kSampleIntervalSec = WebConstants::HISTORY_SAMPLE_INTERVAL_SEC;
+    static constexpr uint32_t kRetentionSec      = WebConstants::HISTORY_RETENTION_SEC;
 
 private:
     HistoryManager() = default;
@@ -75,10 +76,10 @@ private:
     };
 
     static constexpr uint32_t kMagic    = 0x53414C54UL; // 'SALT'
-    static constexpr const char* kLegacyPath = "/history.bin";
-    static constexpr const char* kNvsNamespace = "history";
-    static constexpr const char* kNvsPartitionLabel = "histnvs";
-    static constexpr const char* kNvsKey = "ring";
+    static constexpr const char* kLegacyPath = WebConstants::LEGACY_HISTORY_PATH;
+    static constexpr const char* kNvsNamespace = WebConstants::NVS_NAMESPACE_HISTORY;
+    static constexpr const char* kNvsPartitionLabel = WebConstants::NVS_PARTITION_HISTORY;
+    static constexpr const char* kNvsKey = WebConstants::NVS_KEY_HISTORY;
 
     bool   initialized_ = false;
     uint16_t head_  = 0; ///< Index des ältesten Eintrags

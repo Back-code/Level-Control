@@ -21,9 +21,13 @@ Salzstand ist ein ESP32-C3-Projekt zur kontinuierlichen Füllstandsmessung von S
 | Komponente | Details |
 |---|---|
 | Mikrocontroller | ESP32-C3 DevKitM-1, 160 MHz, 320 KB RAM, 4 MB Flash |
-| Sensor | HC-SR04 Ultraschall-Abstandssensor |
+| Sensor (Standard) | RCWL-1670 Ultraschall-Abstandssensor |
 | Trigger-Pin | GPIO 4 |
 | Echo-Pin | GPIO 5 |
+| Sensor (alternativ) | VL53L1X Time-of-Flight Laser-Distanzsensor |
+| VL53L1X SDA-Pin | GPIO 6 |
+| VL53L1X SCL-Pin | GPIO 7 |
+| VL53L1X XSHUT-Pin | GPIO 2 |
 
 ---
 
@@ -191,10 +195,13 @@ Broadcast-Intervalle aus dem `loop()`:
 
 | Typ | Intervall | Felder |
 |---|---|---|
-| `sensor` | 5 s | `ping_us`, `valid`, `rohdistanz`, `salzstandCm`, `salzstandPercent` |
+| `sensor` | Direkt nach jeder Messung | `ping_us`, `valid`, `rohdistanz`, `salzstandCm`, `salzstandPercent` |
 | `wifi` | 5 s | `signal` (dBm), `ip`, `ssid`, `bssid` |
 | `uptime` | 5 s | `uptime` (Sekunden) |
 | `log` | bei jedem Log-Eintrag | `level`, `timestamp`, `message` |
+
+Sensor-Daten werden unmittelbar nach jeder neuen Messung übertragen – unabhängig vom 5-s-Broadcast-Takt für WiFi/Uptime/MQTT.  
+Die UI zeigt Verbindungsprobleme und veraltete Werte (kein Update länger als `2 × Abtastintervall`) mit einem Warnhinweis an.
 
 ---
 
@@ -433,6 +440,46 @@ pio device monitor --baud 115200
 
 ---
 
+## VL53L1X Laser-Kalibrierung
+
+Der VL53L1X ist ein Time-of-Flight (ToF) Laser-Distanzsensor, der deutlich präzisere Messungen als ein Ultraschallsensor liefert. Er wird über I²C angesprochen und in der Firmware über die Pololu-Bibliothek (`VL53L1X`) angesteuert.
+
+### Funktionsweise
+
+- **Distanzmodus:** `Short` (bis ~1,3 m) – für typische Salzbehälter optimal.
+- **Timing-Budget:** 50 ms pro Einzelmessung.
+- **Sampling:** Median aus 5 aufeinanderfolgenden Messungen; nur Messungen mit `range_status == 0` (gültig) fließen ein.
+- **Berechnung:** `Salzstand (cm) = (Behälterhöhe + Offset) – gemessene_Distanz_cm`
+
+### Kalibrierungsparameter
+
+Alle Kalibrierungsparameter werden persistent im NVS gespeichert und sind über **Konfiguration → Sensor** in der Web-UI einstellbar:
+
+| Parameter | Beschreibung | Einheit |
+|---|---|---|
+| `behaelterhoehe` | Innentiefe des Behälters vom Sensor bis zum Boden | cm |
+| `offset` | Korrekturwert für den Abstand zwischen Sensor und Behälteroberseite | cm |
+
+### Schritt-für-Schritt-Kalibrierung
+
+1. **Sensor montieren** – Den VL53L1X möglichst senkrecht über der Behälteröffnung befestigen.
+2. **Behälterhöhe eintragen** – Innentiefe des Behälters in cm in der Web-UI unter **Konfiguration → Sensor → Behälterhöhe** eingeben und speichern.
+3. **Offset bestimmen** – Befülle den Behälter mit einer bekannten Menge (z. B. vollständig leer oder auf einen bekannten Füllstand). Lies den angezeigten Rohwert (`Aktuelle Distanz`) ab und berechne den Offset:
+   ```
+   offset = bekannter_Fuellstand_cm - ((behaelterhoehe + offset_aktuell) - gemessene_Distanz_cm)
+   ```
+   Einfacher: Lass den Behälter leer und stelle sicher, dass `Salzstand = 0 cm`. Falls die Anzeige einen Wert ≠ 0 zeigt, passe den Offset entsprechend an (positiver Offset = Sensor sitzt weiter vom Inhalt entfernt als angenommen).
+4. **Verifizieren** – Befülle den Behälter auf einen bekannten Pegelstand und prüfe, ob der angezeigte Wert übereinstimmt. Wiederhole Schritt 3, bis die Abweichung < 1 cm ist.
+
+### Hinweise zur Messgenauigkeit
+
+- **Umgebungslicht:** Der VL53L1X ist empfindlich gegenüber starkem Umgebungslicht (Sonneneinstrahlung direkt auf den Sensor). Im Zweifel Sensor abschirmen.
+- **Oberfläche:** Körniges oder weißes Salz reflektiert gut; klare Flüssigkeiten oder dunkle Oberflächen können die Messqualität reduzieren.
+- **Abstandsbereich:** Der `Short`-Modus ist bis ca. 1,3 m zuverlässig. Für größere Behälter (> 1,3 m) muss ggf. in der Firmware auf `Long`-Modus gewechselt werden (`setDistanceMode(VL53L1X::Long)` in `SensorManager.cpp`).
+- **Temperaturdrift:** Der Sensor hat eine geringe Temperaturdrift. Bei großen Temperaturschwankungen (z. B. Außenaufstellung) kann eine erneute Kalibrierung notwendig sein.
+
+---
+
 ## Technische Kenndaten
 
 | Eigenschaft | Wert |
@@ -441,7 +488,8 @@ pio device monitor --baud 115200
 | RAM-Nutzung | ~12,3 % (320 KB) |
 | Sensor-Messintervall | konfigurierbar, mindestens 5 Sekunden |
 | MQTT-Publish-Intervall | 30 Sekunden |
-| WebSocket-Broadcast | 5 Sekunden |
+| WebSocket-Broadcast (Sensor) | Sofort nach jeder Messung |
+| WebSocket-Broadcast (WiFi/Uptime/MQTT) | 5 Sekunden |
 | MQTT-Reconnect-Prüfung | 5 Sekunden |
 | Serial-Diagnose | 10 Sekunden |
 | MQTT Keepalive | 30 Sekunden |

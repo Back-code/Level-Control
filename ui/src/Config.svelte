@@ -41,6 +41,33 @@
   let mqttConfigDirty = false;
   let mqttHasPassword = false;
   let mqttDeviceId = '';
+
+  // Laser-Version für VL53L1X
+  let laserVersionText = '';
+
+  $: if (module === 'sensor' && sensorTypeValue === 'vl53l1x') {
+    fetch('/api/laser-version')
+      .then(r => r.json())
+      .then(data => {
+        if (data && data.version) {
+          // Mapping laut Register
+          if (data.version === '0xC0' || data.version === '0xEE') {
+            laserVersionText = 'VL53L0X (gültig)';
+          } else if (data.version === '0x010F' || data.version === '0xEA') {
+            laserVersionText = 'VL53L1X (gültig)';
+          } else {
+            laserVersionText = 'Unbekannt: ' + data.version;
+          }
+        } else {
+          laserVersionText = 'Nicht erkannt';
+        }
+      })
+      .catch(() => {
+        laserVersionText = 'Fehler beim Auslesen';
+      });
+  } else {
+    laserVersionText = '';
+  }
   const DEFAULT_PUSH_SENDER_NAME = 'Salzstand Control';
   const DEFAULT_PUSH_SUBJECT = 'Salzstand Control Warnung: Stand hat {level_percent}% erreicht. Salz nachfüllen!';
   const DEFAULT_PUSH_BODY = 'Der Füllstand hat {level_percent}% ({level_cm} cm) erreicht.\nBitte Salz nachfüllen!\nDein Salzstand Control';
@@ -851,6 +878,7 @@
   <div class="config-section" on:input={markSensorConfigDirty} on:change={markSensorConfigDirty}>
     <h2>Konfiguration</h2>
 
+
     <label class="field-row">
       <span>Hardware-Ausführung:</span>
       <select bind:value={sensorTypeValue}>
@@ -859,6 +887,13 @@
         {/each}
       </select>
     </label>
+
+    {#if sensorTypeValue === 'vl53l1x'}
+      <div class="field-row">
+        <span>Laser-Version:</span>
+        <span>{laserVersionText}</span>
+      </div>
+    {/if}
 
     <label class="field-row">
       <span>Offset (cm):</span>

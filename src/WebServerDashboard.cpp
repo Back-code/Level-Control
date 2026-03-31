@@ -320,6 +320,15 @@ bool WebServerDashboard::requestRepoUpdate(const std::string& target, std::strin
 }
 
 void WebServerDashboard::setupRoutes() {
+        // API-Endpunkt: Laser-Version
+        server_.on("/api/laser-version", HTTP_GET, [](AsyncWebServerRequest *request) {
+            std::string version = SensorManager::getInstance().getLaserVersion();
+            DynamicJsonDocument doc(64);
+            doc["version"] = version;
+            std::string json;
+            serializeJson(doc, json);
+            request->send(200, "application/json", json.c_str());
+        });
     // API routes
     server_.on("/api/config", HTTP_GET, [](AsyncWebServerRequest *request) {
         Config config;

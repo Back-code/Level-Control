@@ -13,6 +13,9 @@ public:
     void init();
     void measure();
 
+    // Gibt die Laser-Version als String zurück (z.B. "VL53L1X", "VL53L0X", "Unbekannt")
+    std::string getLaserVersion();
+
     float getRawDistance() const { return rawDistance_; }
     float getDistanceCm() const { return distanceCm_; }
     float getDistancePercent() const { return distancePercent_; }
@@ -28,6 +31,8 @@ public:
     unsigned long getSampleIntervalSeconds() const { return sampleIntervalMs_ / 1000UL; }
     unsigned long getSampleIntervalMs() const { return sampleIntervalMs_; }
     std::string getSensorType() const { return sensorType_; }
+
+    static constexpr unsigned long kMinSampleIntervalSeconds = 1;
 
 private:
     SensorManager();

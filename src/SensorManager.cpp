@@ -1,11 +1,51 @@
-#include <Arduino.h>
-#include "SensorManager.h"
-#include "DebugLogger.h"
-#include "ConfigStore.h"
-#include "EventBus.h"
+// ...existing code...
 
-namespace {
-constexpr unsigned long kMinSampleIntervalSeconds = 5UL;
+#include <Arduino.h>
+#include <Wire.h>
+#include "ConfigStore.h"
+#include "DebugLogger.h"
+#include "SystemStateManager.h"
+// Falls noch nicht vorhanden, Konstante für Mindestintervall deklarieren
+#ifndef KMIN_SAMPLE_INTERVAL_SECONDS
+#define KMIN_SAMPLE_INTERVAL_SECONDS 1UL
+#endif
+#include <string>
+
+#include "SensorManager.h"
+#include <Wire.h>
+#include <string>
+
+std::string SensorManager::getLaserVersion() {
+    const uint8_t ADDR = 0x29;
+    Wire.begin();
+    delay(200);
+
+    // Test 1: VL53L0X (Register 0xC0)
+    Wire.beginTransmission(ADDR);
+    Wire.write(0xC0);
+    Wire.endTransmission(false);
+    Wire.requestFrom((uint8_t)ADDR, (uint8_t)1);
+    if (Wire.available()) {
+        uint8_t id_l0 = Wire.read();
+        if (id_l0 == 0xEE) {
+            return "VL53L0X";
+        }
+    }
+
+    // Test 2: VL53L1X (Register 0x010F, 2-Byte Adressierung)
+    Wire.beginTransmission(ADDR);
+    Wire.write(0x01); // high byte
+    Wire.write(0x0F); // low byte
+    Wire.endTransmission(false);
+    Wire.requestFrom((uint8_t)ADDR, (uint8_t)1);
+    if (Wire.available()) {
+        uint8_t id_l1 = Wire.read();
+        if (id_l1 == 0xEA) {
+            return "VL53L1X";
+        }
+    }
+
+    return "Unbekannt";
 }
 
 SensorManager& SensorManager::getInstance() {

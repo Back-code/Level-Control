@@ -35,6 +35,8 @@
   let lastSyncedSampleIntervalSeconds = null;
   let lastSyncedSensorOffset = null;
   let lastSyncedSensorHeight = null;
+  let sensorTypeValue = 'rcwl1670';
+  let lastSyncedSensorType = null;
   let mqttConfig = { server: '', port: 1883, user: '', password: '', discovery: true };
   let mqttConfigDirty = false;
   let mqttHasPassword = false;
@@ -139,6 +141,10 @@
     { value: 'days', label: 'Tage', seconds: 86400 }
   ];
   const MIN_SAMPLE_INTERVAL_SECONDS = 5;
+  const SENSOR_TYPE_OPTIONS = [
+    { value: 'rcwl1670', label: 'RCWL-1670 (Ultraschall)' },
+    { value: 'vl53l1x', label: 'VL53L1X (Time-of-Flight)' }
+  ];
   const PUSH_CYCLE_OPTIONS = [
     { value: 'day', label: 'Tag' },
     { value: 'week', label: 'Woche' },
@@ -374,6 +380,7 @@
       sensorConfigDirty = false;
       sensorIntervalDirty = false;
       sensorIntervalValidation = { attempted: false, touched: false };
+      lastSyncedSensorType = null;
     } else if (module === 'wifi') {
       wifiConfigDirty = false;
       wifiValidation = { attempted: false, touched: {} };
@@ -568,6 +575,14 @@
     }
   }
 
+  $: if (module === 'sensor') {
+    const nextSensorType = data.sensorType || 'rcwl1670';
+    if (!sensorConfigDirty && nextSensorType !== lastSyncedSensorType) {
+      sensorTypeValue = nextSensorType;
+      lastSyncedSensorType = nextSensorType;
+    }
+  }
+
   $: reportDirtyState(false, isCurrentModuleDirty());
 
   async function saveSensorConfig() {
@@ -585,7 +600,8 @@
         body: JSON.stringify({
           behaelterhoehe: Number(sensorHeightValue),
           offset: Number(sensorOffsetValue),
-          sampleIntervalSeconds
+          sampleIntervalSeconds,
+          sensorType: sensorTypeValue
         })
       });
 
@@ -598,9 +614,11 @@
       data.offset = Number(sensorOffsetValue);
       data.behaelterhoehe = Number(sensorHeightValue);
       data.sampleIntervalSeconds = sampleIntervalSeconds;
+      data.sensorType = sensorTypeValue;
       lastSyncedSensorOffset = String(data.offset);
       lastSyncedSensorHeight = String(data.behaelterhoehe);
       lastSyncedSampleIntervalSeconds = sampleIntervalSeconds;
+      lastSyncedSensorType = sensorTypeValue;
       sensorConfigDirty = false;
       sensorIntervalDirty = false;
       sensorIntervalValidation = { attempted: false, touched: false };
@@ -830,8 +848,17 @@
 </script>
 
 {#if module === 'sensor'}
-  <div class="config-section" on:input={markSensorConfigDirty}>
+  <div class="config-section" on:input={markSensorConfigDirty} on:change={markSensorConfigDirty}>
     <h2>Konfiguration</h2>
+
+    <label class="field-row">
+      <span>Hardware-Ausführung:</span>
+      <select bind:value={sensorTypeValue}>
+        {#each SENSOR_TYPE_OPTIONS as opt}
+          <option value={opt.value}>{opt.label}</option>
+        {/each}
+      </select>
+    </label>
 
     <label class="field-row">
       <span>Offset (cm):</span>
@@ -844,7 +871,7 @@
     </label>
 
     <label class="field-row field-row--top-align">
-      <span><FieldLabel text="Abtastrate Ultraschall:" required={true} /></span>
+      <span><FieldLabel text="Abtastrate:" required={true} /></span>
       <div class="field-control field-control--inline sensor-inline-width">
         <input
           type="number"

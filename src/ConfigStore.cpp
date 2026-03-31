@@ -46,6 +46,13 @@ unsigned long legacyMinutesFromReminderCycle(const std::string& cycle) {
     return 1440UL;
 }
 
+std::string normalizeSensorType(const std::string& value) {
+    if (value == "vl53l1x") {
+        return value;
+    }
+    return "rcwl1670";
+}
+
 std::string normalizeDeviceName(const std::string& value) {
     const std::string trimmed = trimCopy(value);
     if (trimmed.empty()) {
@@ -158,6 +165,7 @@ bool ConfigStore::load(Config& config) {
     if (config.sampleIntervalSeconds < 5UL) {
         config.sampleIntervalSeconds = 5UL;
     }
+    config.sensorType = normalizeSensorType(doc["sensorType"] | "rcwl1670");
 
     return true;
 }
@@ -215,6 +223,7 @@ bool ConfigStore::save(const Config& config) {
     doc["behaelterhoehe"] = config.behaelterhoehe;
     doc["offset"] = config.offset;
     doc["sampleIntervalSeconds"] = config.sampleIntervalSeconds < 5UL ? 5UL : config.sampleIntervalSeconds;
+    doc["sensorType"] = normalizeSensorType(config.sensorType);
 
     std::string jsonStr;
     serializeJson(doc, jsonStr);

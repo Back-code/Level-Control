@@ -56,6 +56,7 @@ struct Config {
     float behaelterhoehe = 95.0;
     float offset = 0.0;
     unsigned long sampleIntervalSeconds = 5;
+    std::string sensorType = "rcwl1670";
 };
 
 class ConfigStore {

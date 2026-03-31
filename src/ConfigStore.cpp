@@ -1,4 +1,5 @@
 #include "ConfigStore.h"
+#include "WebConstants.h"
 #include <Preferences.h>
 #include <ArduinoJson.h>
 
@@ -71,7 +72,7 @@ bool ConfigStore::load(Config& config) {
     Preferences prefs;
     if (!prefs.begin(nvsNamespace_, true)) return false; // Read-only
 
-    std::string jsonStr = prefs.getString("config", "").c_str();
+    std::string jsonStr = prefs.getString(WebConstants::NVS_NAMESPACE_CONFIG, "").c_str();
     prefs.end();
 
     if (jsonStr.empty()) return false;
@@ -123,7 +124,7 @@ bool ConfigStore::load(Config& config) {
         : normalizeReminderCycle(storedReminderCycle);
     config.push.reminderWeekday = normalizeReminderWeekday(doc["push"]["reminderWeekday"] | 1);
     config.push.subjectTemplate = doc["push"]["subjectTemplate"]
-        | "Salzstand Control Warnung: Stand hat {level_percent}% erreicht. Salz nachfüllen!";
+        | WebConstants::WARN_LEVEL_REACHED;
     config.push.bodyTemplate = doc["push"]["bodyTemplate"]
         | "Der Füllstand hat {level_percent}% ({level_cm} cm) erreicht.\nBitte Salz nachfüllen!\nDein Salzstand Control";
     if (config.push.smtpPort <= 0) {
@@ -147,7 +148,7 @@ bool ConfigStore::load(Config& config) {
     config.push.reminderCycle = normalizeReminderCycle(config.push.reminderCycle);
     config.push.reminderWeekday = normalizeReminderWeekday(config.push.reminderWeekday);
     if (config.push.subjectTemplate.empty()) {
-        config.push.subjectTemplate = "Salzstand Control Warnung: Stand hat {level_percent}% erreicht. Salz nachfüllen!";
+        config.push.subjectTemplate = WebConstants::WARN_LEVEL_REACHED;
     }
     if (config.push.bodyTemplate.empty()) {
         config.push.bodyTemplate = "Der Füllstand hat {level_percent}% ({level_cm} cm) erreicht.\nBitte Salz nachfüllen!\nDein Salzstand Control";
@@ -159,9 +160,6 @@ bool ConfigStore::load(Config& config) {
         config.sampleIntervalSeconds = 5UL;
     }
     config.sensorType = doc["sensorType"] | 0;
-    if (config.sensorType != 0 && config.sensorType != 1) {
-        config.sensorType = 0;
-    }
 
     return true;
 }
@@ -211,7 +209,7 @@ bool ConfigStore::save(const Config& config) {
     doc["push"]["reminderWeekday"] = normalizeReminderWeekday(config.push.reminderWeekday);
     doc["push"]["cycleMinutes"] = legacyMinutesFromReminderCycle(reminderCycle);
     doc["push"]["subjectTemplate"] = config.push.subjectTemplate.empty()
-        ? "Salzstand Control Warnung: Stand hat {level_percent}% erreicht. Salz nachfüllen!"
+        ? WebConstants::WARN_LEVEL_REACHED
         : config.push.subjectTemplate;
     doc["push"]["bodyTemplate"] = config.push.bodyTemplate.empty()
         ? "Der Füllstand hat {level_percent}% ({level_cm} cm) erreicht.\nBitte Salz nachfüllen!\nDein Salzstand Control"
@@ -219,12 +217,12 @@ bool ConfigStore::save(const Config& config) {
     doc["behaelterhoehe"] = config.behaelterhoehe;
     doc["offset"] = config.offset;
     doc["sampleIntervalSeconds"] = config.sampleIntervalSeconds < 5UL ? 5UL : config.sampleIntervalSeconds;
-    doc["sensorType"] = (config.sensorType == 1) ? 1 : 0;
+    doc["sensorType"] = config.sensorType;
 
     std::string jsonStr;
     serializeJson(doc, jsonStr);
 
-    bool success = prefs.putString("config", jsonStr.c_str());
+    bool success = prefs.putString(WebConstants::NVS_NAMESPACE_CONFIG, jsonStr.c_str());
     prefs.end();
     return success;
 }

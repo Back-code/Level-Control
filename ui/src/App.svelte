@@ -152,8 +152,10 @@
       if (!res.ok) return;
       const release = await res.json();
       const clean = (release.version || '').replace(/^v/, '');
+      // Suffix für Vergleich entfernen
+      const cleanLocal = versionStr.replace(/\|.*/, '');
       const [rm, rn, rc] = clean.split('.').map(Number);
-      const [lm, ln, lc] = versionStr.split('.').map(Number);
+      const [lm, ln, lc] = cleanLocal.split('.').map(Number);
       if (rm > lm || (rm === lm && rn > ln) || (rm === lm && rn === ln && rc > lc)) {
         updateAvailable = true;
         updateUrl = release.releaseUrl;

@@ -9,9 +9,30 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 Push-Location $repoRoot
 
 try {
+
     $version = Get-Content version.json | ConvertFrom-Json
     $versionStr = "$($version.major).$($version.minor).$($version.commit)"
-    Write-Host "Test-Deploy (Arbeitsstand, keine Versionserhöhung, aktuell: v$versionStr)..." -ForegroundColor Cyan
+
+    # Testbuild-Suffix verwalten (A-Z)
+    $suffixFile = Join-Path $repoRoot ".testbuild-suffix"
+    $suffix = "A"
+    if (Test-Path $suffixFile) {
+        $oldSuffix = Get-Content $suffixFile -Raw
+        if ($oldSuffix -match '^[A-Z]$') {
+            if ($oldSuffix -eq 'Z') {
+                $suffix = 'A'
+            } else {
+                $suffix = [char](([byte][char]$oldSuffix) + 1)
+            }
+        }
+    }
+    Set-Content $suffixFile $suffix
+    $versionStrWithSuffix = "$versionStr|$suffix"
+    Write-Host "Test-Deploy (Arbeitsstand, keine Versionserhöhung, aktuell: v$versionStrWithSuffix)..." -ForegroundColor Cyan
+
+
+    # Version mit Suffix in Header schreiben
+    python scripts/inject_version.py $suffix
 
     npm --prefix ui run build
     .\.venv\Scripts\platformio.exe run -t upload

@@ -41,8 +41,11 @@
   let otaReloadScheduled = false;
 
   function compareVersions(left, right) {
-    const leftParts = left.split('.').map(part => Number(part) || 0);
-    const rightParts = right.split('.').map(part => Number(part) || 0);
+    // Suffixe (|A, |B, ...) für Vergleich entfernen
+    const leftClean = left.replace(/\|.*/, '');
+    const rightClean = right.replace(/\|.*/, '');
+    const leftParts = leftClean.split('.').map(part => Number(part) || 0);
+    const rightParts = rightClean.split('.').map(part => Number(part) || 0);
     for (let index = 0; index < 3; index += 1) {
       const delta = (leftParts[index] || 0) - (rightParts[index] || 0);
       if (delta !== 0) return delta;

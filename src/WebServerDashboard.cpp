@@ -366,6 +366,9 @@ void WebServerDashboard::setupRoutes() {
             config.behaelterhoehe = doc["behaelterhoehe"] | 95.0;
             config.offset = doc["offset"] | 0.0;
             config.sampleIntervalSeconds = doc["sampleIntervalSeconds"] | 5UL;
+            if (doc.containsKey("sensorType")) {
+                config.sensorType = doc["sensorType"].as<int>();
+            }
             if (config.sampleIntervalSeconds < kMinSampleIntervalSeconds) {
                 request->send(400, "application/json", "{\"error\":\"sample_interval_too_small\"}");
                 delete body;
@@ -378,10 +381,9 @@ void WebServerDashboard::setupRoutes() {
             SensorManager::getInstance().setBehaelterhoehe(config.behaelterhoehe);
             SensorManager::getInstance().setOffset(config.offset);
             SensorManager::getInstance().setSampleIntervalSeconds(config.sampleIntervalSeconds);
+wdw            // SensorType umschalten
             SensorManager::getInstance().setSensorType(
-                config.sensorType == 1
-                    ? SensorManager::SensorType::Laser
-                    : SensorManager::SensorType::Ultraschall);
+                config.sensorType == 1 ? SensorManager::SensorType::Laser : SensorManager::SensorType::Ultraschall);
             request->send(200, "application/json", "{\"status\":\"ok\"}");
             delete body;
             request->_tempObject = nullptr;

@@ -134,7 +134,7 @@ void loop() {
     );
 
     // MQTT Reconnect alle 5 s prüfen
-    if (now - lastMqttReconnect > 5000) {
+    if (now - lastMqttReconnect > WebConstants::MQTT_CONNECT_RETRY_INTERVAL_MS) {
         lastMqttReconnect = now;
         if (WifiManager::getInstance().isConnected() &&
             !MqttManager::getInstance().isConnected()) {
@@ -165,7 +165,7 @@ void loop() {
     }
 
     // Salzstand-Verlauf alle 60 s prüfen; HistoryManager entscheidet intern ob 6h vergangen
-    if (lastHistoryCheck == 0 || now - lastHistoryCheck >= 60000UL) {
+    if (lastHistoryCheck == 0 || now - lastHistoryCheck >= WebConstants::WIFI_RECONNECT_BACKOFF_MAX_MS) {
         lastHistoryCheck = now;
         if (SensorManager::getInstance().hasValidReading()) {
             HistoryManager::getInstance().addSample(
@@ -174,7 +174,7 @@ void loop() {
     }
 
     // WebSocket Broadcast alle 5 s
-    if (now - lastBroadcast > 5000) {
+    if (now - lastBroadcast > WebConstants::MQTT_CONNECT_RETRY_INTERVAL_MS) {
         lastBroadcast = now;
         WebServerDashboard::getInstance().broadcastSensorData();
         WebServerDashboard::getInstance().broadcastWifiData();

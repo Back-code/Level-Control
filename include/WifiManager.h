@@ -1,5 +1,6 @@
 #ifndef WIFI_MANAGER_H
 #define WIFI_MANAGER_H
+#include "WebConstants.h"
 
 #include <WiFi.h>
 #include <vector>
@@ -46,8 +47,8 @@ private:
     bool reconnectPending_ = false;
     unsigned long nextReconnectAttemptMs_ = 0;
     unsigned long reconnectBackoffMs_ = 2000;
-    static constexpr unsigned long reconnectBackoffMinMs_ = 2000;
-    static constexpr unsigned long reconnectBackoffMaxMs_ = 60000;
+    static constexpr unsigned long reconnectBackoffMinMs_ = WebConstants::WIFI_RECONNECT_BACKOFF_MIN_MS;
+    static constexpr unsigned long reconnectBackoffMaxMs_ = WebConstants::WIFI_RECONNECT_BACKOFF_MAX_MS;
 };
 
 #endif // WIFI_MANAGER_H

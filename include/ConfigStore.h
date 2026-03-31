@@ -2,6 +2,7 @@
 #define CONFIG_STORE_H
 
 #include <string>
+#include "WebConstants.h"
 
 struct WifiConfig {
     std::string ssid;
@@ -43,9 +44,15 @@ struct PushConfig {
     int sendMinute = 0;
     std::string reminderCycle = "day";
     int reminderWeekday = 1;
-    std::string subjectTemplate = "Salzstand Control Warnung: Stand hat {level_percent}% erreicht. Salz nachfüllen!";
+    std::string subjectTemplate = WebConstants::WARN_LEVEL_REACHED;
     std::string bodyTemplate = "Der Füllstand hat {level_percent}% ({level_cm} cm) erreicht.\nBitte Salz nachfüllen!\nDein Salzstand Control";
 };
+
+
+// Forward declaration, damit SensorType im Config nutzbar ist
+namespace SensorManagerNS {
+    enum class SensorType : int;
+}
 
 struct Config {
     int version = 1;
@@ -56,7 +63,7 @@ struct Config {
     float behaelterhoehe = 95.0;
     float offset = 0.0;
     unsigned long sampleIntervalSeconds = 5;
-    int sensorType = 0; // 0 = HC-SR04 Ultraschall, 1 = VL53L1X Laser
+    int sensorType = 0; // 0 = Ultraschall, 1 = Laser (enum Wert von SensorManager::SensorType)
 };
 
 class ConfigStore {
@@ -68,7 +75,7 @@ public:
 
 private:
     ConfigStore();
-    const char* nvsNamespace_ = "config";
+    const char* nvsNamespace_ = WebConstants::NVS_NAMESPACE_CONFIG;
 };
 
 #endif // CONFIG_STORE_H

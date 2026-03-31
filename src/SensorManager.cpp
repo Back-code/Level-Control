@@ -22,22 +22,67 @@ void SensorManager::setSampleIntervalSeconds(unsigned long seconds) {
     sampleIntervalMs_ = seconds * 1000UL;
 }
 
-void SensorManager::init() {
-    pinMode(triggerPin_, OUTPUT);
-    pinMode(echoPin_, INPUT);
+void SensorManager::setSensorType(const std::string& type) {
+    sensorType_ = (type == "vl53l1x") ? "vl53l1x" : "rcwl1670";
+}
 
+void SensorManager::init() {
     // Kalibrierungswerte aus gespeicherter Config laden
     Config cfg;
     if (ConfigStore::getInstance().load(cfg)) {
         behaelterhoehe_ = cfg.behaelterhoehe;
         offset_ = cfg.offset;
         setSampleIntervalSeconds(cfg.sampleIntervalSeconds);
+        setSensorType(cfg.sensorType);
     }
 
     DebugLogger::getInstance().log(LogLevel::INFO,
         "SensorManager init (hoehe=" + std::to_string(behaelterhoehe_) +
         "cm, offset=" + std::to_string(offset_) +
-        "cm, intervall=" + std::to_string(getSampleIntervalSeconds()) + "s)");
+        "cm, intervall=" + std::to_string(getSampleIntervalSeconds()) +
+        "s, sensor=" + sensorType_ + ")");
+
+    if (sensorType_ == "vl53l1x") {
+        initVl53l1x();
+    } else {
+        initRcwl1670();
+    }
+}
+
+void SensorManager::initRcwl1670() {
+    pinMode(triggerPin_, OUTPUT);
+    pinMode(echoPin_, INPUT);
+    DebugLogger::getInstance().log(LogLevel::INFO, "RCWL-1670 initialisiert (trigger=" +
+        std::to_string(triggerPin_) + ", echo=" + std::to_string(echoPin_) + ")");
+}
+
+void SensorManager::initVl53l1x() {
+    vl53l1xInitialized_ = false;
+
+    // XSHUT pin steuern: sensor erst deaktivieren, dann aktivieren
+    pinMode(kXshutPin, OUTPUT);
+    digitalWrite(kXshutPin, LOW);
+    delay(10);
+    digitalWrite(kXshutPin, HIGH);
+    delay(10);
+
+    Wire.begin(kSdaPin, kSclPin);
+    vl53l1x_.setBus(&Wire);
+    vl53l1x_.setTimeout(500);
+
+    if (!vl53l1x_.init()) {
+        DebugLogger::getInstance().log(LogLevel::ERROR, "VL53L1X init fehlgeschlagen!");
+        return;
+    }
+
+    vl53l1x_.setDistanceMode(VL53L1X::Short);
+    vl53l1x_.setMeasurementTimingBudget(50000);
+    vl53l1x_.startContinuous(50);
+    vl53l1xInitialized_ = true;
+
+    DebugLogger::getInstance().log(LogLevel::INFO, "VL53L1X initialisiert (SDA=" +
+        std::to_string(kSdaPin) + ", SCL=" + std::to_string(kSclPin) +
+        ", XSHUT=" + std::to_string(kXshutPin) + ")");
 }
 
 unsigned int SensorManager::ping() {
@@ -54,6 +99,14 @@ unsigned int SensorManager::ping() {
 }
 
 void SensorManager::measure() {
+    if (sensorType_ == "vl53l1x") {
+        measureVl53l1x();
+    } else {
+        measureRcwl1670();
+    }
+}
+
+void SensorManager::measureRcwl1670() {
     // Take median of 10 measurements
     unsigned int measurements[10];
     int validCount = 0;
@@ -100,5 +153,63 @@ void SensorManager::measure() {
 
     DebugLogger::getInstance().log(LogLevel::DEBUG,
         "raw=" + std::to_string(rawDistance_) + "m cm=" +
+        std::to_string(distanceCm_) + " %=" + std::to_string(distancePercent_));
+}
+
+void SensorManager::measureVl53l1x() {
+    if (!vl53l1xInitialized_) {
+        lastPingUs_ = 0;
+        lastValid_ = false;
+        DebugLogger::getInstance().log(LogLevel::WARN, "VL53L1X nicht initialisiert");
+        EventBus::getInstance().publish({EventType::SENSOR_TIMEOUT, ""});
+        return;
+    }
+
+    // Take median of 5 measurements
+    float readings_mm[5];
+    int validCount = 0;
+
+    for (int i = 0; i < 5; i++) {
+        uint16_t dist_mm = vl53l1x_.read();
+        // range_status == 0 means valid measurement
+        if (vl53l1x_.ranging_data.range_status == 0 && dist_mm > 0 && dist_mm < 4000) {
+            readings_mm[validCount++] = static_cast<float>(dist_mm);
+        }
+    }
+
+    if (validCount == 0) {
+        lastPingUs_ = 0;
+        lastValid_ = false;
+        DebugLogger::getInstance().log(LogLevel::WARN, "VL53L1X timeout - no valid measurements");
+        EventBus::getInstance().publish({EventType::SENSOR_TIMEOUT, ""});
+        return;
+    }
+
+    // Simple median (sort and pick middle)
+    for (int i = 0; i < validCount - 1; i++) {
+        for (int j = i + 1; j < validCount; j++) {
+            if (readings_mm[i] > readings_mm[j]) {
+                float temp = readings_mm[i];
+                readings_mm[i] = readings_mm[j];
+                readings_mm[j] = temp;
+            }
+        }
+    }
+    float dist_mm = readings_mm[validCount / 2];
+
+    // Simulate ping_us for dashboard consistency: dist_mm / 1000 [m] / 340 [m/s] * 2 [round-trip] * 1e6 [µs/s]
+    lastPingUs_ = static_cast<unsigned int>(dist_mm / 1000.0f / 340.0f * 2.0f * 1000000.0f);
+    lastValid_ = true;
+    rawDistance_ = dist_mm / 1000.0f; // mm -> m
+
+    float d_cm = dist_mm / 10.0f; // mm -> cm
+    distanceCm_ = (behaelterhoehe_ + offset_) - d_cm;
+    if (distanceCm_ < 0) distanceCm_ = 0;
+    if (distanceCm_ > behaelterhoehe_) distanceCm_ = behaelterhoehe_;
+    distancePercent_ = (distanceCm_ / behaelterhoehe_) * 100.0f;
+    if (distancePercent_ > 100) distancePercent_ = 100;
+
+    DebugLogger::getInstance().log(LogLevel::DEBUG,
+        "VL53L1X raw=" + std::to_string(rawDistance_) + "m cm=" +
         std::to_string(distanceCm_) + " %=" + std::to_string(distancePercent_));
 }

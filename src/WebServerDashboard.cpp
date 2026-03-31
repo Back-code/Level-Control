@@ -328,6 +328,7 @@ void WebServerDashboard::setupRoutes() {
             doc["behaelterhoehe"] = config.behaelterhoehe;
             doc["offset"] = config.offset;
             doc["sampleIntervalSeconds"] = config.sampleIntervalSeconds;
+            doc["sensorType"] = config.sensorType;
             std::string json;
             serializeJson(doc, json);
             request->send(200, "application/json", json.c_str());
@@ -353,7 +354,7 @@ void WebServerDashboard::setupRoutes() {
         body->append(reinterpret_cast<const char*>(data), len);
 
         if (index + len == total) {
-            DynamicJsonDocument doc(384);
+            DynamicJsonDocument doc(512);
             if (deserializeJson(doc, *body) != DeserializationError::Ok) {
                 request->send(400, "application/json", "{\"error\":\"invalid_config_payload\"}");
                 delete body;
@@ -371,10 +372,17 @@ void WebServerDashboard::setupRoutes() {
                 request->_tempObject = nullptr;
                 return;
             }
+            const std::string newSensorType = doc["sensorType"] | config.sensorType.c_str();
+            const bool sensorTypeChanged = newSensorType != config.sensorType;
+            config.sensorType = (newSensorType == "vl53l1x") ? "vl53l1x" : "rcwl1670";
             ConfigStore::getInstance().save(config);
             SensorManager::getInstance().setBehaelterhoehe(config.behaelterhoehe);
             SensorManager::getInstance().setOffset(config.offset);
             SensorManager::getInstance().setSampleIntervalSeconds(config.sampleIntervalSeconds);
+            if (sensorTypeChanged) {
+                SensorManager::getInstance().setSensorType(config.sensorType);
+                SensorManager::getInstance().init();
+            }
             request->send(200, "application/json", "{\"status\":\"ok\"}");
             delete body;
             request->_tempObject = nullptr;

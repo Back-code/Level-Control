@@ -28,6 +28,7 @@
     behaelterhoehe: 95,
     offset: 0,
     sampleIntervalSeconds: 5,
+    sensorType: 'rcwl1670',
     mqttState: 'unknown'
   };
 
@@ -142,6 +143,7 @@
       data.behaelterhoehe = config.behaelterhoehe;
       data.offset = config.offset;
       data.sampleIntervalSeconds = config.sampleIntervalSeconds || 5;
+      data.sensorType = config.sensorType || 'rcwl1670';
       persistData();
     });
   }

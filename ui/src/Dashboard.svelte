@@ -2,6 +2,8 @@
   import { onMount } from 'svelte';
 
   export let data;
+  export let wsConnected = true;
+  export let lastSensorUpdate = 0;
 
   const PERIOD_OPTIONS = [
     { id: '1m', label: '1 Monat', months: 1 },
@@ -106,9 +108,18 @@
     return `${linePath} L ${lastX.toFixed(2)} ${innerHeight.toFixed(2)} L ${firstX.toFixed(2)} ${innerHeight.toFixed(2)} Z`;
   }
 
+  let nowMs = Date.now();
+  let staleCheckInterval;
+
   onMount(() => {
     fetchHistory();
+    staleCheckInterval = setInterval(() => { nowMs = Date.now(); }, 1000);
+    return () => clearInterval(staleCheckInterval);
   });
+
+  $: staleThresholdMs = Math.max((data.sampleIntervalSeconds || 5) * 1000 * 2, 30000);
+  $: isStale = lastSensorUpdate > 0 && (nowMs - lastSensorUpdate) > staleThresholdMs;
+  $: lastUpdateAgeSec = lastSensorUpdate > 0 ? Math.floor((nowMs - lastSensorUpdate) / 1000) : null;
 
   $: periodStart = getPeriodStart(activePeriod);
   $: filteredHistory = history.filter((entry) => entry.ts >= periodStart);
@@ -158,6 +169,16 @@
         <p class="value">{data.salzstandCm.toFixed(1)} cm <span class="value-equiv">≙</span> {data.salzstandPercent.toFixed(1)} %</p>
       </div>
     </div>
+
+    {#if !wsConnected}
+      <div class="ws-alert ws-alert--error" role="alert">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+        Verbindung getrennt – Werte werden nicht aktualisiert{lastUpdateAgeSec !== null ? ` (vor ${lastUpdateAgeSec} s)` : ''}</div>
+    {:else if isStale}
+      <div class="ws-alert ws-alert--warn" role="alert">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+        Wert möglicherweise veraltet (vor {lastUpdateAgeSec} s – kein neues Update empfangen)</div>
+    {/if}
 
     <div class="chart-meta">
       <div>
@@ -605,6 +626,46 @@
 
   .card-under-chart {
     grid-column: span 2;
+  }
+
+  .ws-alert {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 14px;
+    border-radius: 10px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    margin-bottom: 12px;
+  }
+
+  .ws-alert svg {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
+    flex-shrink: 0;
+  }
+
+  .ws-alert--error {
+    background: rgba(220, 50, 50, 0.14);
+    border: 1px solid rgba(220, 50, 50, 0.45);
+    color: #f07070;
+  }
+
+  .ws-alert--warn {
+    background: rgba(220, 160, 30, 0.14);
+    border: 1px solid rgba(220, 160, 30, 0.45);
+    color: #d4a640;
+  }
+
+  :global(html[data-theme='day']) .ws-alert--error {
+    background: rgba(200, 30, 30, 0.08);
+    color: #b52222;
+  }
+
+  :global(html[data-theme='day']) .ws-alert--warn {
+    background: rgba(180, 110, 0, 0.08);
+    color: #8a5c00;
   }
 
   @media (max-width: 980px) {

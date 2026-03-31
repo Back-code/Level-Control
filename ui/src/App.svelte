@@ -33,6 +33,9 @@
   };
 
   let ws;
+  let wsConnected = false;
+  let lastSensorUpdate = 0;
+  let wsDestroyed = false;
   let showMobileMoreMenu = false;
 
   const MOBILE_PRIMARY_TAB_IDS = ['dashboard', 'sensor', 'wifi'];
@@ -90,13 +93,13 @@
     applyTheme(nextTheme);
   }
 
-  onMount(() => {
-    const storedTheme = localStorage.getItem('salzstand-theme');
-    applyTheme(storedTheme === 'day' ? 'day' : 'night');
-    restoreCachedData();
-
-    // Connect to WebSocket
+  function connectWs() {
+    if (wsDestroyed) return;
     ws = new WebSocket('ws://' + window.location.host + '/ws');
+
+    ws.onopen = () => {
+      wsConnected = true;
+    };
 
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
@@ -104,6 +107,7 @@
         data.rohdistanz = msg.rohdistanz;
         data.salzstandCm = msg.salzstandCm;
         data.salzstandPercent = msg.salzstandPercent;
+        lastSensorUpdate = Date.now();
       } else if (msg.type === 'wifi') {
         data.wifiSignal = msg.signal;
         data.ip = msg.ip;
@@ -116,6 +120,27 @@
       }
       persistData();
     };
+
+    ws.onclose = () => {
+      wsConnected = false;
+      if (!wsDestroyed) {
+        setTimeout(connectWs, 3000);
+      }
+    };
+
+    ws.onerror = () => {
+      wsConnected = false;
+      ws.close();
+    };
+  }
+
+  onMount(() => {
+    const storedTheme = localStorage.getItem('salzstand-theme');
+    applyTheme(storedTheme === 'day' ? 'day' : 'night');
+    restoreCachedData();
+
+    // Connect to WebSocket (with auto-reconnect)
+    connectWs();
 
     // Load initial config
     loadConfig();
@@ -134,6 +159,7 @@
       .catch(() => {});
 
     return () => {
+      wsDestroyed = true;
       if (ws) ws.close();
     };
   });
@@ -274,7 +300,7 @@
 
     <section class="module-shell">
       {#if activeTab === 'dashboard'}
-        <Dashboard bind:data />
+        <Dashboard bind:data {wsConnected} {lastSensorUpdate} />
       {:else if activeTab === 'sensor'}
         <Config bind:data {loadConfig} module="sensor" />
       {:else if activeTab === 'wifi'}

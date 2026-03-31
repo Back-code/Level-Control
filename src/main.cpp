@@ -124,6 +124,8 @@ void loop() {
     if (lastMeasurement == 0 || now - lastMeasurement >= SensorManager::getInstance().getSampleIntervalMs()) {
         lastMeasurement = now;
         SensorManager::getInstance().measure();
+        // Sofort nach jeder Messung Sensordaten übertragen, damit die UI ohne Verzögerung aktualisiert wird.
+        WebServerDashboard::getInstance().broadcastSensorData();
     }
 
     PushNotificationManager::getInstance().process(
@@ -173,10 +175,10 @@ void loop() {
         }
     }
 
-    // WebSocket Broadcast alle 5 s
+    // WebSocket Broadcast (WiFi, Uptime, MQTT-Status) alle 5 s
+    // Sensor-Daten werden direkt nach jeder Messung gesendet (siehe oben).
     if (now - lastBroadcast > 5000) {
         lastBroadcast = now;
-        WebServerDashboard::getInstance().broadcastSensorData();
         WebServerDashboard::getInstance().broadcastWifiData();
         WebServerDashboard::getInstance().broadcastUptime();
         WebServerDashboard::getInstance().broadcastMqttState();

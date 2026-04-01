@@ -133,17 +133,17 @@ const changelogLines = getChangelogLines(previousTag);
 
 const manifest = {
   version: versionStr,
-  releaseUrl: `https://github.com/Back-code/Salzstand/releases/tag/v${versionStr}`,
+  releaseUrl: `https://github.com/Back-code/Level-Control/releases/tag/v${versionStr}`,
   assets: {
     app: {
       name: app.target,
-      url: `https://github.com/Back-code/Salzstand/releases/download/v${versionStr}/${app.target}`,
+      url: `https://github.com/Back-code/Level-Control/releases/download/v${versionStr}/${app.target}`,
       sha256: app.sha256,
       size: app.size
     },
     webui: {
       name: webui.target,
-      url: `https://github.com/Back-code/Salzstand/releases/download/v${versionStr}/${webui.target}`,
+      url: `https://github.com/Back-code/Level-Control/releases/download/v${versionStr}/${webui.target}`,
       sha256: webui.sha256,
       size: webui.size
     }

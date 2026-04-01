@@ -35,8 +35,8 @@ std::string g_latestManifestVersion;
 #include "WifiManager.h"
 
 namespace {
-constexpr char kLatestManifestUrl[] = "https://github.com/Back-code/Salzstand/releases/latest/download/manifest.json";
-constexpr char kLatestReleaseUrl[] = "https://github.com/Back-code/Salzstand/releases/latest";
+constexpr char kLatestManifestUrl[] = "https://github.com/Back-code/Level-Control/releases/latest/download/manifest.json";
+constexpr char kLatestReleaseUrl[] = "https://github.com/Back-code/Level-Control/releases/latest";
 constexpr char kUpdateUserAgent[] = "Salzstand-OTA/1.0";
 constexpr char kPasswordMask[] = "*****";
 constexpr unsigned long kMinSampleIntervalSeconds = 5UL;

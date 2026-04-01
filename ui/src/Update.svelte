@@ -390,7 +390,7 @@
   $: uploadWebUiProgress = localUpload.active && localUpload.target === 'webui' ? progressValue(localUpload.received, localUpload.total) : 0;
   $: displayedVersion = liveInstalledVersion || currentVersion;
   $: repoStatus = getRepoUpdateStatus(manifest, displayedVersion);
-  $: currentReleaseUrl = `https://github.com/Back-code/Salzstand/releases/tag/v${displayedVersion}`;
+  $: currentReleaseUrl = `https://github.com/Back-code/Level-Control/releases/tag/v${displayedVersion}`;
   $: anyBusy = status.inProgress || localUpload.active;
 
   onMount(() => {

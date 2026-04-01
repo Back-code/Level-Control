@@ -23,7 +23,7 @@ try {
         "release/v$versionStr/salzstand-v$versionStr-partitions.bin",
         "release/v$versionStr/manifest.json",
         "release/v$versionStr/SHA256SUMS.txt",
-        '--repo', 'Back-code/Salzstand',
+        '--repo', 'Back-code/Level-Control',
         '--title', "Salzstand v$versionStr",
         '--notes-file', "release/v$versionStr/release-notes.txt"
     )

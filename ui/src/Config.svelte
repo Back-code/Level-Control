@@ -50,10 +50,11 @@
       .then(r => r.json())
       .then(data => {
         if (data && data.version) {
-          // Mapping laut Register
-          if (data.version === '0xC0' || data.version === '0xEE') {
+          // Kompatibel mit Register-IDs und Klartext-Rueckgaben aus dem Backend.
+          const v = String(data.version).toUpperCase();
+          if (v === '0XC0' || v === '0XEE' || v === 'VL53L0X') {
             laserVersionText = 'VL53L0X (gültig)';
-          } else if (data.version === '0x010F' || data.version === '0xEA') {
+          } else if (v === '0X010F' || v === '0XEA' || v === 'VL53L1X') {
             laserVersionText = 'VL53L1X (gültig)';
           } else {
             laserVersionText = 'Unbekannt: ' + data.version;

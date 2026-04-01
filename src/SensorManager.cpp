@@ -17,32 +17,49 @@
 
 std::string SensorManager::getLaserVersion() {
     const uint8_t ADDR = 0x29;
-    Wire.begin();
-    delay(200);
 
-    // Test 1: VL53L0X (Register 0xC0)
+    // Gleiche Startsequenz wie im verifizierten TEST-Sketch.
+    pinMode(kXshutPin, OUTPUT);
+    digitalWrite(kXshutPin, LOW);
+    delay(10);
+    digitalWrite(kXshutPin, HIGH);
+    delay(10);
+    pinMode(kGpio1Pin, INPUT_PULLUP);
+
+    Wire.begin(kSdaPin, kSclPin);
+    Wire.setClock(100000);
+    delay(20);
+
+    // Erst pruefen, ob ueberhaupt ein Geraet auf 0x29 antwortet.
     Wire.beginTransmission(ADDR);
-    Wire.write(0xC0);
-    Wire.endTransmission(false);
-    Wire.requestFrom((uint8_t)ADDR, (uint8_t)1);
-    if (Wire.available()) {
-        uint8_t id_l0 = Wire.read();
-        if (id_l0 == 0xEE) {
-            return "VL53L0X";
-        }
+    if (Wire.endTransmission() != 0) {
+        return "Unbekannt";
     }
 
-    // Test 2: VL53L1X (Register 0x010F, 2-Byte Adressierung)
-    Wire.beginTransmission(ADDR);
-    Wire.write(0x01); // high byte
-    Wire.write(0x0F); // low byte
-    Wire.endTransmission(false);
-    Wire.requestFrom((uint8_t)ADDR, (uint8_t)1);
-    if (Wire.available()) {
-        uint8_t id_l1 = Wire.read();
-        if (id_l1 == 0xEA) {
-            return "VL53L1X";
+    auto readReg8 = [&](uint16_t reg, uint8_t &out) -> bool {
+        Wire.beginTransmission(ADDR);
+        Wire.write((uint8_t)(reg >> 8));
+        Wire.write((uint8_t)(reg & 0xFF));
+        if (Wire.endTransmission(false) != 0) {
+            return false;
         }
+        if (Wire.requestFrom((uint8_t)ADDR, (uint8_t)1) != 1) {
+            return false;
+        }
+        out = Wire.read();
+        return true;
+    };
+
+    // VL53L1X: Model-ID Register 0x010F == 0xEA
+    uint8_t id_l1 = 0;
+    if (readReg8(0x010F, id_l1) && id_l1 == 0xEA) {
+        return "VL53L1X";
+    }
+
+    // VL53L0X: IDENTIFICATION_MODEL_ID Register 0x00C0 == 0xEE
+    uint8_t id_l0 = 0;
+    if (readReg8(0x00C0, id_l0) && id_l0 == 0xEE) {
+        return "VL53L0X";
     }
 
     return "Unbekannt";

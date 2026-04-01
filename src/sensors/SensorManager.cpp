@@ -1,10 +1,8 @@
-// ...existing code...
-
 #include <Arduino.h>
 #include <Wire.h>
 #include "ConfigStore.h"
 #include "DebugLogger.h"
-#include "SystemStateManager.h"
+#include "SystemState.h"
 // Falls noch nicht vorhanden, Konstante für Mindestintervall deklarieren
 #ifndef KMIN_SAMPLE_INTERVAL_SECONDS
 #define KMIN_SAMPLE_INTERVAL_SECONDS 1UL
@@ -12,23 +10,19 @@
 #include <string>
 
 #include "SensorManager.h"
-#include <Wire.h>
-#include <string>
 
 std::string SensorManager::getLaserVersion() {
     const uint8_t ADDR = 0x29;
 
-    // Gleiche Startsequenz wie im verifizierten TEST-Sketch.
-    pinMode(kXshutPin, OUTPUT);
-    digitalWrite(kXshutPin, LOW);
-    delay(10);
-    digitalWrite(kXshutPin, HIGH);
-    delay(10);
-    pinMode(kGpio1Pin, INPUT_PULLUP);
+    // Nicht-invasiv: Wenn der VL53L1X bereits aktiv ist, keine Re-Initialisierung
+    // oder XSHUT-Toggles durchführen.
+    if (sensorType_ == "vl53l1x" && vl53l1xInitialized_) {
+        return "VL53L1X";
+    }
 
     Wire.begin(kSdaPin, kSclPin);
     Wire.setClock(100000);
-    delay(20);
+    delay(5);
 
     // Erst pruefen, ob ueberhaupt ein Geraet auf 0x29 antwortet.
     Wire.beginTransmission(ADDR);
@@ -123,6 +117,9 @@ void SensorManager::initVl53l1x() {
     digitalWrite(kXshutPin, HIGH);
     delay(10);
 
+    // VL53L1X GPIO1 ist active-low bei data-ready.
+    pinMode(kGpio1Pin, INPUT_PULLUP);
+
     Wire.begin(kSdaPin, kSclPin);
     vl53l1x_.setBus(&Wire);
     vl53l1x_.setTimeout(500);
@@ -139,7 +136,8 @@ void SensorManager::initVl53l1x() {
 
     DebugLogger::getInstance().log(LogLevel::INFO, "VL53L1X initialisiert (SDA=" +
         std::to_string(kSdaPin) + ", SCL=" + std::to_string(kSclPin) +
-        ", XSHUT=" + std::to_string(kXshutPin) + ")");
+        ", XSHUT=" + std::to_string(kXshutPin) +
+        ", GPIO1=" + std::to_string(kGpio1Pin) + ")");
 }
 
 unsigned int SensorManager::ping() {
@@ -227,9 +225,19 @@ void SensorManager::measureVl53l1x() {
     int validCount = 0;
 
     for (int i = 0; i < 5; i++) {
+        const unsigned long waitStartMs = millis();
+        while (digitalRead(kGpio1Pin) == HIGH && (millis() - waitStartMs) < 120UL) {
+            delay(1);
+        }
+        if (digitalRead(kGpio1Pin) == HIGH) {
+            continue;
+        }
+
         uint16_t dist_mm = vl53l1x_.read();
+
         // range_status == 0 means valid measurement
-        if (vl53l1x_.ranging_data.range_status == 0 && dist_mm > 0 && dist_mm < 4000) {
+        if (!vl53l1x_.timeoutOccurred() &&
+            vl53l1x_.ranging_data.range_status == 0 && dist_mm > 0 && dist_mm < 4000) {
             readings_mm[validCount++] = static_cast<float>(dist_mm);
         }
     }

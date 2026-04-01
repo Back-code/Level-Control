@@ -1,4 +1,4 @@
-#include "SystemStateManager.h"
+#include "SystemState.h"
 #include "DebugLogger.h"
 
 SystemStateManager& SystemStateManager::getInstance() {

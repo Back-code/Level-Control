@@ -5,6 +5,7 @@
   import GlobalDialogs from './GlobalDialogs.svelte';
   import Update from './Update.svelte';
   import { confirmAction, showNotice } from './dialogStore.js';
+  import { createTranslator, SUPPORTED_LANGS } from './i18n.js';
   import versionData from '../../version.json';
 
   let versionStr = `${Number(versionData.major) || 0}.${Number(versionData.minor) || 0}.${Number(versionData.commit) || 0}`;  // initial fallback; wird durch API-Wert überschrieben
@@ -15,6 +16,7 @@
 
   let activeTab = 'dashboard';
   let theme = 'night';
+  let lang = 'de';
   const DATA_CACHE_KEY = 'salzstand-last-data';
   let data = {
     rohdistanz: 0,
@@ -88,6 +90,11 @@
     localStorage.setItem('salzstand-theme', theme);
   }
 
+  function setLanguage(nextLang) {
+    lang = nextLang;
+    localStorage.setItem('stand-language', nextLang);
+  }
+
   function setTheme(nextTheme) {
     if (nextTheme === theme) return;
     applyTheme(nextTheme);
@@ -137,6 +144,8 @@
   onMount(() => {
     const storedTheme = localStorage.getItem('salzstand-theme');
     applyTheme(storedTheme === 'day' ? 'day' : 'night');
+    const storedLang = localStorage.getItem('stand-language');
+    setLanguage(storedLang === 'en' ? 'en' : 'de');
     restoreCachedData();
 
     // Connect to WebSocket (with auto-reconnect)
@@ -193,11 +202,12 @@
   }
 
   async function restartEsp() {
+    const t = createTranslator(lang);
     const confirmed = await confirmAction({
-      title: 'ESP neu starten?',
-      message: 'Das Gerät wird sofort neu gestartet. Die Weboberfläche ist für kurze Zeit nicht erreichbar.',
-      confirmLabel: 'Jetzt neu starten',
-      cancelLabel: 'Abbrechen',
+      title: t('restartDialogTitle'),
+      message: t('restartDialogMessage'),
+      confirmLabel: t('restartDialogConfirm'),
+      cancelLabel: t('cancel'),
       tone: 'danger'
     });
 
@@ -208,27 +218,28 @@
     try {
       const response = await fetch('/api/restart', { method: 'POST' });
       if (!response.ok) {
-        showNotice('error', 'Neustart konnte nicht ausgelöst werden.');
+        showNotice('error', t('restartFailed'));
         return;
       }
-      showNotice('success', 'Neustart wurde ausgelöst. Das Gerät ist gleich kurz nicht erreichbar.');
+      showNotice('success', t('restartSuccess'));
       // Nach dem ESP-Neustart UI automatisch neu laden, damit die Verbindung wieder sauber aufgebaut wird.
       setTimeout(() => {
         window.location.reload();
       }, 6000);
     } catch (_) {
-      showNotice('error', 'Neustart konnte nicht ausgelöst werden.');
+      showNotice('error', t('restartFailed'));
     }
   }
 
-  const tabs = [
-    { id: 'dashboard', label: 'Dashboard', subtitle: 'Live-Messwerte und Netzwerkstatus in einer kompakten Übersicht.' },
-    { id: 'sensor', label: 'Konfiguration', subtitle: 'Behälterparameter und Ultraschall-Abtastrate zentral konfigurieren.' },
-    { id: 'wifi', label: 'WiFi', subtitle: 'WLAN-Zugang und optionale statische Netzwerkdaten verwalten.' },
-    { id: 'mqtt_ha', label: 'MQTT & HA', subtitle: 'Broker, Discovery und Home-Assistant-Anbindung zentral steuern.' },
-    { id: 'push', label: 'Push Nachricht', subtitle: 'E-Mail Benachrichtigungen bei Schwellwert, Zeit und Zyklus konfigurieren.' },
-    { id: 'update', label: 'Update', subtitle: 'OTA aus Releases oder lokales BIN-Upload mit Dateikontrolle durchführen.' },
-    { id: 'backup', label: 'Sicherung', subtitle: 'Konfiguration und Messverlauf exportieren und importieren.' }
+  $: t = createTranslator(lang);
+  $: tabs = [
+    { id: 'dashboard', label: t('modules.dashboard.label'), subtitle: t('modules.dashboard.subtitle') },
+    { id: 'sensor', label: t('modules.sensor.label'), subtitle: t('modules.sensor.subtitle') },
+    { id: 'wifi', label: t('modules.wifi.label'), subtitle: t('modules.wifi.subtitle') },
+    { id: 'mqtt_ha', label: t('modules.mqtt_ha.label'), subtitle: t('modules.mqtt_ha.subtitle') },
+    { id: 'push', label: t('modules.push.label'), subtitle: t('modules.push.subtitle') },
+    { id: 'update', label: t('modules.update.label'), subtitle: t('modules.update.subtitle') },
+    { id: 'backup', label: t('modules.backup.label'), subtitle: t('modules.backup.subtitle') }
   ];
 
   $: mobilePrimaryTabs = tabs.filter((tab) => MOBILE_PRIMARY_TAB_IDS.includes(tab.id));
@@ -242,7 +253,7 @@
   {#if showMobileMoreMenu}
     <div class="mobile-more-backdrop" role="presentation" on:click={handleMobileMoreBackdropClick}>
       <div class="mobile-more-sheet" role="dialog" aria-modal="true" aria-label="Weitere Module">
-        <h3>Weitere Module</h3>
+        <h3>{t('moreModules')}</h3>
         <div class="mobile-more-list">
           {#each mobileMoreTabs as tab}
             <button class="mobile-more-item" class:active={activeTab === tab.id} on:click={() => requestTabChange(tab.id)}>
@@ -261,24 +272,32 @@
           <svg viewBox="0 0 24 24"><path d="M6.25 12a1.75 1.75 0 1 1 3.5 0 1.75 1.75 0 0 1-3.5 0Zm5.2 0a.95.95 0 0 1 .95-.95A5.6 5.6 0 0 0 18 5.45a.95.95 0 1 1 1.9 0 7.5 7.5 0 0 1-7.5 7.5.95.95 0 0 1-.95-.95Zm.95 4.55a.95.95 0 0 1 0-1.9A9.2 9.2 0 0 0 21.6 5.45a.95.95 0 1 1 1.9 0c0 6.04-4.91 10.95-10.95 10.95a.95.95 0 0 1-.15 0Zm0-8.95a.95.95 0 1 1 0-1.9 1.7 1.7 0 0 0 1.7-1.7.95.95 0 1 1 1.9 0 3.6 3.6 0 0 1-3.6 3.6Z"/></svg>
         </span>
         <div class="brand-copy">
-          <h1>Salzstand Control</h1>
-          <p class="brand-line">Smart Reservoir Monitor <span class="app-version">v{versionStr}</span>{#if updateAvailable}<a class="update-badge" href={updateUrl} target="_blank" rel="noopener noreferrer" title="Update verfügbar: {latestTag}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 13v-4H8l4-4 4 4h-3v4h-2z"/></svg></a>{/if}</p>
+          <h1>{t('appTitle')}</h1>
+          <p class="brand-line">{t('appTagline')} <span class="app-version">v{versionStr}</span>{#if updateAvailable}<a class="update-badge" href={updateUrl} target="_blank" rel="noopener noreferrer" title="{t('updateAvailableTitle')}: {latestTag}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 13v-4H8l4-4 4 4h-3v4h-2z"/></svg></a>{/if}</p>
 
         </div>
       </div>
       <div class="top-controls">
         <button class="restart-btn" on:click={restartEsp}>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6V3L8 7l4 4V8c2.76 0 5 2.24 5 5a5 5 0 0 1-5 5 5 5 0 0 1-4.9-4H5.08A7 7 0 0 0 12 20a7 7 0 0 0 0-14z"/></svg>
-          Neustart
+          {t('restart')}
         </button>
+        <label class="language-pick" aria-label={t('language')}>
+          <span>{t('language')}</span>
+          <select bind:value={lang} on:change={(event) => setLanguage(event.currentTarget.value)}>
+            {#each SUPPORTED_LANGS as option}
+              <option value={option.value}>{option.label}</option>
+            {/each}
+          </select>
+        </label>
         <div class="theme-switch" role="group" aria-label="Theme-Auswahl">
           <button class="theme-btn" class:active={theme === 'day'} on:click={() => setTheme('day')}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0V4a1 1 0 0 1 1-1zm0 15a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm8-5a1 1 0 0 1-1 1h-1a1 1 0 1 1 0-2h1a1 1 0 0 1 1 1zM7 13a1 1 0 0 1-1 1H5a1 1 0 1 1 0-2h1a1 1 0 0 1 1 1zm9.66 5.66a1 1 0 0 1-1.41 0l-.7-.71a1 1 0 0 1 1.41-1.41l.7.7a1 1 0 0 1 0 1.42zM9.45 6.45a1 1 0 0 1-1.41 0l-.71-.7a1 1 0 1 1 1.41-1.42l.71.71a1 1 0 0 1 0 1.41zm7.2-1.66a1 1 0 0 1 0 1.41l-.7.71a1 1 0 0 1-1.42-1.41l.71-.71a1 1 0 0 1 1.41 0zM9.45 17.55a1 1 0 0 1 0 1.41l-.71.7a1 1 0 0 1-1.41-1.41l.7-.71a1 1 0 0 1 1.42 0z"/></svg>
-            Tag
+            {t('day')}
           </button>
           <button class="theme-btn" class:active={theme === 'night'} on:click={() => setTheme('night')}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a1 1 0 0 1 1.05 1.47A6.5 6.5 0 1 0 18.53 13.45 1 1 0 0 1 20 14.5z"/></svg>
-            Nacht
+            {t('night')}
           </button>
         </div>
       </div>
@@ -300,19 +319,19 @@
 
     <section class="module-shell">
       {#if activeTab === 'dashboard'}
-        <Dashboard bind:data {wsConnected} {lastSensorUpdate} />
+        <Dashboard bind:data {wsConnected} {lastSensorUpdate} {lang} />
       {:else if activeTab === 'sensor'}
-        <Config bind:data {loadConfig} module="sensor" />
+        <Config bind:data {loadConfig} module="sensor" {lang} />
       {:else if activeTab === 'wifi'}
-        <Config bind:data {loadConfig} module="wifi" />
+        <Config bind:data {loadConfig} module="wifi" {lang} />
       {:else if activeTab === 'mqtt_ha'}
-        <Config bind:data {loadConfig} module="mqtt_ha" />
+        <Config bind:data {loadConfig} module="mqtt_ha" {lang} />
       {:else if activeTab === 'push'}
-        <Config bind:data {loadConfig} module="push" />
+        <Config bind:data {loadConfig} module="push" {lang} />
       {:else if activeTab === 'update'}
         <Update currentVersion={versionStr} />
       {:else if activeTab === 'backup'}
-        <Config bind:data {loadConfig} module="backup" />
+        <Config bind:data {loadConfig} module="backup" {lang} />
       {/if}
     </section>
   </div>
@@ -324,7 +343,7 @@
       </button>
     {/each}
     <button class="mobile-nav-item mobile-more-trigger" class:active={isMoreTabActive || showMobileMoreMenu} on:click={toggleMobileMoreMenu}>
-      Mehr
+      {t('more')}
     </button>
   </nav>
 
@@ -514,6 +533,26 @@
     display: inline-flex;
     align-items: center;
     gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .language-pick {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    font-weight: 700;
+  }
+
+  .language-pick select {
+    min-height: 34px;
+    border-radius: 999px;
+    border: 1px solid var(--surface-border);
+    padding: 0 12px;
+    background: var(--surface-2);
+    color: var(--text-main);
+    font-weight: 700;
   }
 
   .restart-btn {

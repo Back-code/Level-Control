@@ -1,9 +1,11 @@
 <script>
   import { onMount } from 'svelte';
+  import { createTranslator } from './i18n.js';
 
   export let data;
   export let wsConnected = true;
   export let lastSensorUpdate = 0;
+  export let lang = 'de';
 
   const PERIOD_OPTIONS = [
     { id: '1m', label: '1 Monat', months: 1 },
@@ -110,6 +112,7 @@
 
   let nowMs = Date.now();
   let staleCheckInterval;
+  $: t = createTranslator(lang);
 
   onMount(() => {
     fetchHistory();
@@ -141,10 +144,10 @@
   <div class="card card-chart">
     <div class="chart-head">
       <div class="chart-head-main">
-        <h2><span class="mini-icon"><svg viewBox="0 0 24 24"><path d="M4 18h16v2H4v-2zm2-3.5 3.5-3.5 2.5 2.5L18 8l1.4 1.4-6.9 6.9-2.5-2.5L7.4 16z"/></svg></span>Salzstand Verlauf</h2>
-        <button class="btn-reset" on:click={() => (showResetConfirm = true)} title="Verlaufsdaten löschen">
+        <h2><span class="mini-icon"><svg viewBox="0 0 24 24"><path d="M4 18h16v2H4v-2zm2-3.5 3.5-3.5 2.5 2.5L18 8l1.4 1.4-6.9 6.9-2.5-2.5L7.4 16z"/></svg></span>{t('dashboard.historyTitle')}</h2>
+        <button class="btn-reset" on:click={() => (showResetConfirm = true)} title={t('dashboard.resetHistory')}>
           <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-          Verlauf löschen
+          {t('dashboard.resetHistory')}
         </button>
       </div>
     </div>
@@ -161,11 +164,11 @@
 
     <div class="top-stats">
       <div class="top-stat-card">
-        <h3><span class="mini-icon"><svg viewBox="0 0 24 24"><path d="M3 17h18v2H3v-2zm2-8h14v2H5V9zm3-6h8v2H8V3z"/></svg></span>Aktuelle Distanz</h3>
+        <h3><span class="mini-icon"><svg viewBox="0 0 24 24"><path d="M3 17h18v2H3v-2zm2-8h14v2H5V9zm3-6h8v2H8V3z"/></svg></span>{t('dashboard.distance')}</h3>
         <p class="value">{data.rohdistanz.toFixed(2)} m</p>
       </div>
       <div class="top-stat-card">
-        <h3><span class="mini-icon"><svg viewBox="0 0 24 24"><path d="M5 20h14V4H5v16zm2-2v-4h10v4H7zm0-6V6h10v6H7z"/></svg></span>Salzstand</h3>
+        <h3><span class="mini-icon"><svg viewBox="0 0 24 24"><path d="M5 20h14V4H5v16zm2-2v-4h10v4H7zm0-6V6h10v6H7z"/></svg></span>{t('dashboard.level')}</h3>
         <p class="value">{data.salzstandCm.toFixed(1)} cm <span class="value-equiv">≙</span> {data.salzstandPercent.toFixed(1)} %</p>
       </div>
     </div>
@@ -173,16 +176,16 @@
     {#if !wsConnected}
       <div class="ws-alert ws-alert--error" role="alert">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
-        Verbindung getrennt – Werte werden nicht aktualisiert{lastUpdateAgeSec !== null ? ` (vor ${lastUpdateAgeSec} s)` : ''}</div>
+        {t('dashboard.disconnected')}{lastUpdateAgeSec !== null ? ` (${lang === 'en' ? `${lastUpdateAgeSec}s ago` : `vor ${lastUpdateAgeSec} s`})` : ''}</div>
     {:else if isStale}
       <div class="ws-alert ws-alert--warn" role="alert">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
-        Wert möglicherweise veraltet (vor {lastUpdateAgeSec} s – kein neues Update empfangen)</div>
+        {t('dashboard.stale')} ({lang === 'en' ? `${lastUpdateAgeSec}s ago` : `vor ${lastUpdateAgeSec} s`} - {lang === 'en' ? 'no new update received' : 'kein neues Update empfangen'})</div>
     {/if}
 
     <div class="chart-meta">
       <div>
-        <span>Zeitraum</span>
+        <span>{t('dashboard.period')}</span>
         <div class="chart-periods" role="group" aria-label="Zeitraum wählen">
           {#each PERIOD_OPTIONS as option}
             <button class:active={activePeriod === option.id} on:click={() => activePeriod = option.id}>{option.label}</button>
@@ -190,17 +193,17 @@
         </div>
       </div>
       <div>
-        <span>Start der Aufzeichnung</span>
-        <strong>{oldestPoint ? formatDateLabel(oldestPoint.ts) : 'Noch keine Historie'}</strong>
+        <span>{t('dashboard.recordStart')}</span>
+        <strong>{oldestPoint ? formatDateLabel(oldestPoint.ts) : t('dashboard.noHistory')}</strong>
       </div>
       <div>
-        <span>Letzte Messung</span>
-        <strong>{latestPoint ? formatDateTimeLabel(latestPoint.ts) : 'Noch keine Historie'}</strong>
+        <span>{t('dashboard.lastMeasurement')}</span>
+        <strong>{latestPoint ? formatDateTimeLabel(latestPoint.ts) : t('dashboard.noHistory')}</strong>
       </div>
     </div>
 
     <div class="chart-shell">
-      <svg viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} class="chart" role="img" aria-label="Verlauf des Salzstandes in Prozent">
+      <svg viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} class="chart" role="img" aria-label={t('dashboard.chartAria')}>
         <defs>
           <linearGradient id="salzstand-area" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.32" />
@@ -234,23 +237,23 @@
   </div>
 
   <div class="card card-combined card-under-chart">
-    <h2><span class="mini-icon"><svg viewBox="0 0 24 24"><path d="M12 18a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0-4c2.56 0 4.92 1.04 6.62 2.73l1.42-1.41A11.96 11.96 0 0 0 12 12c-3.12 0-5.96 1.19-8.04 3.14l1.42 1.41A9.33 9.33 0 0 1 12 14z"/></svg></span>System</h2>
+    <h2><span class="mini-icon"><svg viewBox="0 0 24 24"><path d="M12 18a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0-4c2.56 0 4.92 1.04 6.62 2.73l1.42-1.41A11.96 11.96 0 0 0 12 12c-3.12 0-5.96 1.19-8.04 3.14l1.42 1.41A9.33 9.33 0 0 1 12 14z"/></svg></span>{t('dashboard.system')}</h2>
     <div class="combined-stats">
       <div>
-        <span>WiFi Signal</span>
+        <span>{t('dashboard.wifiSignal')}</span>
         <div class="wifi-signal-row">
           <p class="value">{data.wifiSignal} dBm</p>
-          <span class="wifi-dot wifi-dot--{wifiQuality}" title="{wifiQuality === 'good' ? 'Gut' : wifiQuality === 'medium' ? 'Mittel' : 'Schlecht'}"></span>
+          <span class="wifi-dot wifi-dot--{wifiQuality}" title="{wifiQuality === 'good' ? t('dashboard.qualityGood') : wifiQuality === 'medium' ? t('dashboard.qualityMedium') : t('dashboard.qualityBad')}"></span>
         </div>
       </div>
       <div>
-        <span>Uptime</span>
+        <span>{t('dashboard.uptime')}</span>
         <p class="value">{formatUptime(data.uptime)}</p>
       </div>
     </div>
   </div>
   <div class="card card-under-chart">
-    <h2><span class="mini-icon"><svg viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 8-4v6h2V7L12 2zm-8 9v6l8 4 8-4v-6l-8 4-8-4z"/></svg></span>Netzwerk</h2>
+    <h2><span class="mini-icon"><svg viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 8-4v6h2V7L12 2zm-8 9v6l8 4 8-4v-6l-8 4-8-4z"/></svg></span>{t('dashboard.network')}</h2>
     <div class="combined-stats">
       <div>
         <span>IP</span>

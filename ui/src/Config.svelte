@@ -4,16 +4,19 @@
   import { SMTP_PROVIDERS, detectProvider } from './smtpProviders.js';
   import FieldLabel from './FieldLabel.svelte';
   import PasswordInput from './PasswordInput.svelte';
+  import SensorSchema from './SensorSchema.svelte';
+  import { createTranslator } from './i18n.js';
 
   export let data;
   export let loadConfig;
   export let module = 'sensor';
+  export let lang = 'de';
   export let onDirtyStateChange = () => {};
 
   let wifiConfig = {
     ssid: '',
     password: '',
-    deviceName: 'Salzstand',
+    deviceName: 'Stand',
     ntpServerPrimary: 'pool.ntp.org',
     ntpServerSecondary: 'time.cloudflare.com',
     staticIp: { ip: '', gateway: '', subnet: '', dns: '' }
@@ -69,9 +72,9 @@
   } else {
     laserVersionText = '';
   }
-  const DEFAULT_PUSH_SENDER_NAME = 'Salzstand Control';
-  const DEFAULT_PUSH_SUBJECT = 'Salzstand Control Warnung: Stand hat {level_percent}% erreicht. Salz nachfüllen!';
-  const DEFAULT_PUSH_BODY = 'Der Füllstand hat {level_percent}% ({level_cm} cm) erreicht.\nBitte Salz nachfüllen!\nDein Salzstand Control';
+  const DEFAULT_PUSH_SENDER_NAME = 'Stand Control';
+  const DEFAULT_PUSH_SUBJECT = 'Stand Control Warnung: Stand hat {level_percent}% erreicht. Salz nachfüllen!';
+  const DEFAULT_PUSH_BODY = 'Der Füllstand hat {level_percent}% ({level_cm} cm) erreicht.\nBitte Salz nachfüllen!\nDein Stand Control';
   let pushConfig = {
     enabled: false,
     smtpServer: '',
@@ -98,6 +101,7 @@
   let smtpDiagResult = null;
   let smtpDiagLoading = false;
   let lastReportedDirtyState = null;
+  $: t = createTranslator(lang);
 
   // Backup-Modul
   let importFile = null;
@@ -285,7 +289,7 @@
       .replace(/^-+|-+$/g, '')
       .slice(0, 63);
 
-    return normalized || 'salzstand';
+    return normalized || 'stand';
   }
 
   function getWifiLocalUrl() {
@@ -519,7 +523,7 @@
         wifiConfig = {
           ssid: c.ssid || '',
           password: isMaskedPassword(c.password || '') ? '' : (c.password || ''),
-          deviceName: c.deviceName || 'Salzstand',
+          deviceName: c.deviceName || 'Stand',
           ntpServerPrimary: c.ntpServerPrimary || 'pool.ntp.org',
           ntpServerSecondary: c.ntpServerSecondary || 'time.cloudflare.com',
           staticIp: {
@@ -877,11 +881,11 @@
 
 {#if module === 'sensor'}
   <div class="config-section" on:input={markSensorConfigDirty} on:change={markSensorConfigDirty}>
-    <h2>Konfiguration</h2>
+    <h2>{t('config.sensorTitle')}</h2>
 
 
     <label class="field-row">
-      <span>Hardware-Ausführung:</span>
+      <span>{t('config.hardware')}</span>
       <select bind:value={sensorTypeValue}>
         {#each SENSOR_TYPE_OPTIONS as opt}
           <option value={opt.value}>{opt.label}</option>
@@ -891,23 +895,23 @@
 
     {#if sensorTypeValue === 'vl53l1x'}
       <div class="field-row">
-        <span>Laser-Version:</span>
+        <span>{t('config.laserVersion')}</span>
         <span>{laserVersionText}</span>
       </div>
     {/if}
 
     <label class="field-row">
-      <span>Offset (cm):</span>
+      <span>{t('config.offset')}</span>
       <input class="sensor-fixed-width" type="number" bind:value={sensorOffsetValue} />
     </label>
 
     <label class="field-row">
-      <span>Behälterhöhe (cm):</span>
+      <span>{t('config.height')}</span>
       <input class="sensor-fixed-width" type="number" bind:value={sensorHeightValue} />
     </label>
 
     <label class="field-row field-row--top-align">
-      <span><FieldLabel text="Abtastrate:" required={true} /></span>
+      <span><FieldLabel text={t('config.sampleRate')} required={true} /></span>
       <div class="field-control field-control--inline sensor-inline-width">
         <input
           type="number"
@@ -928,52 +932,15 @@
         {#if hasSensorIntervalError()}
           <p class="field-error field-error--inline">{getSensorIntervalError()}</p>
         {:else}
-          <p class="helper-text field-help">Kleinster zulässiger Wert: 5 Sekunden.</p>
+          <p class="helper-text field-help">{t('config.minRateHint')}</p>
         {/if}
       </div>
     </label>
 
-    <div class="sensor-sketch" aria-label="Erklärung Behälterhöhe und Offset">
-      <svg viewBox="0 0 400 148" role="img">
-        <!-- Behälter Container mit Sensor-Module -->
-        <rect x="120" y="30" width="160" height="110" rx="8" fill="rgba(255,255,255,0.08)" stroke="currentColor" stroke-width="2" />
-        
-        <!-- Kleine eckige Kiste mit 2 Sensoren oben im Behälter (zentriert) -->
-        <rect x="165" y="35" width="70" height="18" rx="3" fill="rgba(100,150,255,0.2)" stroke="currentColor" stroke-width="1.5" />
-        <circle cx="180" cy="44" r="3" fill="var(--accent)" />
-        <circle cx="220" cy="44" r="3" fill="var(--accent)" />
-        
-        <!-- Ultraschallwellen vom linken und rechten Sensor -->
-        <ellipse cx="180" cy="54" rx="8" ry="5" fill="none" stroke="rgba(100,150,255,0.4)" stroke-width="1" />
-        <ellipse cx="180" cy="61" rx="13" ry="8" fill="none" stroke="rgba(100,150,255,0.3)" stroke-width="1" />
-        <ellipse cx="180" cy="68" rx="18" ry="11" fill="none" stroke="rgba(100,150,255,0.2)" stroke-width="1" />
-        
-        <ellipse cx="220" cy="54" rx="8" ry="5" fill="none" stroke="rgba(100,150,255,0.4)" stroke-width="1" />
-        <ellipse cx="220" cy="61" rx="13" ry="8" fill="none" stroke="rgba(100,150,255,0.3)" stroke-width="1" />
-        <ellipse cx="220" cy="68" rx="18" ry="11" fill="none" stroke="rgba(100,150,255,0.2)" stroke-width="1" />
-        
-        <!-- Behälterboden Linie (zentriert) -->
-        <line x1="130" y1="118" x2="270" y2="118" stroke="currentColor" stroke-width="2" stroke-dasharray="5 3" />
+    <!-- Neue modulare Sensor-Skizze: ein Basisschema, dynamische Darstellung je nach Hardwaretyp. -->
+    <SensorSchema sensorType={sensorTypeValue} note={t('config.sketchNote')} />
 
-        <!-- Offset Pfeil (Links, näher an Behälterhöhe) -->
-        <line x1="112" y1="65" x2="112" y2="82" stroke="var(--accent)" stroke-width="2" />
-        <polygon points="108,67 116,67 112,59" fill="var(--accent)" />
-        <polygon points="108,80 116,80 112,88" fill="var(--accent)" />
-        <text x="105" y="77" text-anchor="end" fill="var(--accent)" font-size="13" font-weight="600">Offset</text>
-
-        <!-- Behälterhöhe Pfeil (Links unten) -->
-        <line x1="112" y1="92" x2="112" y2="125" stroke="var(--accent)" stroke-width="2" />
-        <polygon points="108,94 116,94 112,86" fill="var(--accent)" />
-        <polygon points="108,123 116,123 112,131" fill="var(--accent)" />
-        <text x="105" y="113" text-anchor="end" fill="var(--accent)" font-size="13" font-weight="600">Behälterhöhe</text>
-
-        <text x="200" y="22" text-anchor="middle" fill="var(--text-muted)" font-size="11">Sensor</text>
-        <text x="200" y="137" text-anchor="middle" fill="var(--text-muted)" font-size="11">Behälterboden</text>
-      </svg>
-      <p class="sketch-note">Offset verschiebt die Referenz der Sensorposition. Positive Werte vergrößern, negative Werte verkleinern den berechneten Füllstand.</p>
-    </div>
-
-    <button class="primary" on:click={saveSensorConfig}>Speichern</button>
+    <button class="primary" on:click={saveSensorConfig}>{t('config.save')}</button>
   </div>
 {:else if module === 'wifi'}
   <div class="config-section" on:input={markWifiConfigDirty} on:change={markWifiConfigDirty}>
@@ -1011,7 +978,7 @@
 
     <label class="field-row">
       <span>Gerätename:</span>
-      <input bind:value={wifiConfig.deviceName} placeholder="Salzstand" />
+      <input bind:value={wifiConfig.deviceName} placeholder={t('config.deviceNamePlaceholder')} />
     </label>
     <p class="helper-text">Im Netzwerk erreichbar unter {getWifiLocalUrl()}</p>
 
@@ -1093,7 +1060,7 @@
   </div>
 {:else if module === 'push'}
   <div class="config-section" on:input={markPushConfigDirty} on:change={markPushConfigDirty}>
-    <h2>Push Nachricht</h2>
+    <h2>{t('config.pushTitle')}</h2>
 
     <label class="checkbox-row"><input type="checkbox" bind:checked={pushConfig.enabled} /> Push Benachrichtigung aktivieren</label>
 
@@ -1657,8 +1624,10 @@
     margin-top: 10px;
   }
   .button-row--push {
-    gap: 400px;
-    flex-wrap: nowrap;
+    width: min(560px, 100%);
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
   }
   .checkbox-row--warning {
     color: var(--text-muted);
@@ -1716,29 +1685,6 @@
   .time-select {
     width: min(180px, 100%);
   }
-  .sensor-sketch {
-    margin-top: 14px;
-    margin-bottom: 8px;
-    padding: 10px;
-    border: 1px solid var(--surface-border);
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.05);
-    color: var(--text-main);
-  }
-  .sensor-sketch svg {
-    width: 100%;
-    max-width: 500px;
-    height: auto;
-    display: block;
-    margin: 0 auto;
-  }
-  .sketch-note {
-    margin: 2px 0 2px;
-    font-size: 0.85rem;
-    color: var(--text-muted);
-    text-align: center;
-  }
-
   @media (max-width: 640px) {
     .field-row {
       grid-template-columns: 1fr;
@@ -1759,8 +1705,7 @@
       grid-template-columns: 1fr;
     }
     .button-row--push {
-      gap: 12px;
-      flex-wrap: wrap;
+      grid-template-columns: 1fr;
     }
     .topic-card summary {
       align-items: flex-start;

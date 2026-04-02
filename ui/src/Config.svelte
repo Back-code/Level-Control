@@ -265,6 +265,7 @@
       startTls,
       smtpPort
     };
+    markPushConfigDirty();
   }
 
   function getReminderDescription() {
@@ -561,12 +562,33 @@
         if (pushConfigDirty) {
           return;
         }
+        const providerId = detectProvider(c.smtpServer || '', c.smtpPort || 587);
+        const provider = SMTP_PROVIDERS.find((entry) => entry.id === providerId);
+        const rawEncryptionMode = String(c.encryption || c.security || '').toLowerCase();
+
+        let effectiveEncryptionMode = rawEncryptionMode;
+        if (!effectiveEncryptionMode) {
+          if (c.useSsl === true) {
+            effectiveEncryptionMode = 'ssl';
+          } else if (c.startTls === true) {
+            effectiveEncryptionMode = 'starttls';
+          } else if (provider?.security) {
+            effectiveEncryptionMode = String(provider.security).toLowerCase();
+          } else if (Number(c.smtpPort) === 465) {
+            effectiveEncryptionMode = 'ssl';
+          } else {
+            effectiveEncryptionMode = 'none';
+          }
+        }
+
+        const useSsl = effectiveEncryptionMode === 'ssl' || effectiveEncryptionMode === 'tls';
+        const startTls = effectiveEncryptionMode === 'starttls' || effectiveEncryptionMode === 'start_tls' || effectiveEncryptionMode === 'start-tls';
         pushConfig = {
           enabled: c.enabled ?? false,
           smtpServer: c.smtpServer || '',
           smtpPort: c.smtpPort || 587,
-          useSsl: c.useSsl ?? false,
-          startTls: c.startTls ?? false,
+          useSsl,
+          startTls: useSsl ? false : startTls,
           smtpSkipCertVerify: c.smtpSkipCertVerify ?? true,
           authUser: c.authUser || '',
           authPassword: isMaskedPassword(c.authPassword || '') ? '' : (c.authPassword || ''),
@@ -582,7 +604,7 @@
           bodyTemplate: c.bodyTemplate || DEFAULT_PUSH_BODY
         };
         pushHasAuthPassword = (c.hasAuthPassword ?? false) || isMaskedPassword(c.authPassword || '');
-        selectedProvider = detectProvider(c.smtpServer || '', c.smtpPort || 587);
+        selectedProvider = providerId;
       });
   }
 
@@ -753,6 +775,7 @@
         body: JSON.stringify({
           ...pushConfig,
           smtpPort,
+          encryption: useSsl ? 'ssl' : (startTls ? 'starttls' : 'none'),
           useSsl,
           startTls,
           triggerPercent,

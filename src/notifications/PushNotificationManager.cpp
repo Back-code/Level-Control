@@ -147,6 +147,24 @@ std::string trimCopy(const std::string& value) {
     return value.substr(begin, end - begin);
 }
 
+std::string readTlsLastError(WiFiClientSecure& client) {
+    char buffer[160] = {0};
+    const int code = client.lastError(buffer, sizeof(buffer));
+    if (code == 0 && buffer[0] == '\0') {
+        return "";
+    }
+
+    std::string detail = "TLS Fehler";
+    if (code != 0) {
+        detail += " (" + std::to_string(code) + ")";
+    }
+    if (buffer[0] != '\0') {
+        detail += ": ";
+        detail += buffer;
+    }
+    return detail;
+}
+
 std::string normalizeReminderCycle(const std::string& value) {
     if (value == "week" || value == "month") {
         return value;
@@ -350,6 +368,11 @@ bool PushNotificationManager::sendEmailInternal(const std::string& subject, cons
         return false;
     }
 
+    if (config.push.useSsl && !config.push.smtpSkipCertVerify && time(nullptr) < kMinValidEpoch) {
+        error = "TLS-Zertifikatspruefung nicht moeglich: Uhrzeit noch nicht synchronisiert. Bitte NTP/WLAN pruefen oder testweise 'Zertifikat ueberspringen' aktivieren.";
+        return false;
+    }
+
     WiFiClient plainClient;
     WiFiClientSecure secureClient;
     Client* client = nullptr;
@@ -375,6 +398,15 @@ bool PushNotificationManager::sendEmailInternal(const std::string& subject, cons
 
     if (!client->connect(smtpServer.c_str(), config.push.smtpPort)) {
         error = "SMTP Verbindung fehlgeschlagen (" + smtpServer + ":" + std::to_string(config.push.smtpPort) + ")";
+        if (config.push.useSsl && !config.push.smtpSkipCertVerify) {
+            error += " - pruefe Uhrzeit/NTP oder aktiviere testweise 'Zertifikat ueberspringen'.";
+
+            const std::string tlsDetail = readTlsLastError(secureClient);
+            if (!tlsDetail.empty()) {
+                error += " - ";
+                error += tlsDetail;
+            }
+        }
         return false;
     }
 
@@ -518,6 +550,10 @@ SmtpDiagResult PushNotificationManager::smtpDiagnostic() {
         result.steps.push_back({"Config", false, "STARTTLS wird nicht unterstuetzt – bitte SSL/TLS aktivieren"});
         return result;
     }
+    if (config.push.useSsl && !config.push.smtpSkipCertVerify && time(nullptr) < kMinValidEpoch) {
+        result.steps.push_back({"Zeit", false, "Uhrzeit noch nicht synchronisiert (NTP). TLS-Zertifikatspruefung dadurch nicht moeglich."});
+        return result;
+    }
     result.steps.push_back({"Config", true, "Konfiguration vorhanden"});
 
     IPAddress smtpIp;
@@ -548,6 +584,12 @@ SmtpDiagResult PushNotificationManager::smtpDiagnostic() {
         std::string detail = "Verbindung fehlgeschlagen (" + smtpServer + ":" + std::to_string(config.push.smtpPort) + ")";
         if (config.push.useSsl && !config.push.smtpSkipCertVerify) {
             detail += " – Tipp: Zertifikatspruefung deaktivieren, falls der Provider kein hinterlegtes Root-CA verwendet.";
+
+            const std::string tlsDetail = readTlsLastError(secureClient);
+            if (!tlsDetail.empty()) {
+                detail += " - ";
+                detail += tlsDetail;
+            }
         }
         const std::string label = config.push.useSsl ? "TLS" : "Verbinden";
         result.steps.push_back({label, false, detail});

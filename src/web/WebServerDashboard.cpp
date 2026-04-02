@@ -148,6 +148,33 @@ int normalizeReminderWeekday(int value) {
     return value;
 }
 
+std::string normalizePushEncryptionMode(const std::string& rawMode) {
+    const std::string mode = toLowerCopy(rawMode);
+    if (mode == "ssl" || mode == "tls") {
+        return "ssl";
+    }
+    if (mode == "starttls" || mode == "start_tls" || mode == "start-tls") {
+        return "starttls";
+    }
+    return "none";
+}
+
+std::string derivePushEncryptionMode(bool useSsl, bool startTls) {
+    if (useSsl) {
+        return "ssl";
+    }
+    if (startTls) {
+        return "starttls";
+    }
+    return "none";
+}
+
+void applyPushEncryptionModeToConfig(const std::string& mode, bool& useSsl, bool& startTls) {
+    const std::string normalized = normalizePushEncryptionMode(mode);
+    useSsl = normalized == "ssl";
+    startTls = normalized == "starttls";
+}
+
 const char* resetReasonToString(esp_reset_reason_t reason) {
     switch (reason) {
         case ESP_RST_UNKNOWN:   return "unknown";
@@ -634,6 +661,8 @@ void WebServerDashboard::setupRoutes() {
             doc["smtpPort"] = config.push.smtpPort;
             doc["useSsl"] = config.push.useSsl;
             doc["startTls"] = config.push.startTls;
+            doc["encryption"] = derivePushEncryptionMode(config.push.useSsl, config.push.startTls);
+            doc["security"] = derivePushEncryptionMode(config.push.useSsl, config.push.startTls);
             doc["smtpSkipCertVerify"] = config.push.smtpSkipCertVerify;
             doc["authUser"] = config.push.authUser;
             doc["authPassword"] = config.push.authPassword.empty() ? "" : kPasswordMask;
@@ -671,6 +700,21 @@ void WebServerDashboard::setupRoutes() {
         config.push.smtpPort = doc["smtpPort"] | 587;
         config.push.useSsl = doc["useSsl"] | false;
         config.push.startTls = doc["startTls"] | false;
+
+        if (!config.push.useSsl) {
+            config.push.useSsl = doc["ssl"] | false;
+        }
+
+        std::string encryptionMode;
+        if (doc.containsKey("encryption")) {
+            encryptionMode = doc["encryption"] | "";
+        } else if (doc.containsKey("security")) {
+            encryptionMode = doc["security"] | "";
+        }
+        if (!encryptionMode.empty()) {
+            applyPushEncryptionModeToConfig(encryptionMode, config.push.useSsl, config.push.startTls);
+        }
+
         if (config.push.useSsl && config.push.startTls) {
             config.push.startTls = false;
         }
@@ -848,6 +892,8 @@ void WebServerDashboard::setupRoutes() {
         pushJ["smtpPort"] = config.push.smtpPort;
         pushJ["useSsl"] = config.push.useSsl;
         pushJ["startTls"] = config.push.startTls;
+        pushJ["encryption"] = derivePushEncryptionMode(config.push.useSsl, config.push.startTls);
+        pushJ["security"] = derivePushEncryptionMode(config.push.useSsl, config.push.startTls);
         pushJ["smtpSkipCertVerify"] = config.push.smtpSkipCertVerify;
         pushJ["authUser"] = config.push.authUser;
         pushJ["authPassword"] = config.push.authPassword;

@@ -40,7 +40,7 @@ constexpr unsigned long kMinSampleIntervalSeconds = 5UL;
 constexpr uint32_t kRestartDelayMs = 2500;
 constexpr size_t kUploadBufferSize = 4096;
 constexpr unsigned long kManifestCacheTtlMs = 300000;
-constexpr unsigned long kUploadStallTimeoutMs = 15000;
+constexpr unsigned long kUploadStallTimeoutMs = 300000;
 constexpr char kManifestSignatureAlgorithm[] = "ECDSA_P256_SHA256";
 
 bool mountLittleFsWithKnownLabels() {
@@ -1411,6 +1411,7 @@ void WebServerDashboard::sendUpdateStatus(AsyncWebServerRequest *request) {
     doc["total"] = updateState_.total;
     doc["uploadActive"] = uploadActive_;
     doc["activityAgeMs"] = updateState_.lastActivityMs == 0 ? 0UL : (millis() - updateState_.lastActivityMs);
+    doc["uploadStallTimeoutMs"] = kUploadStallTimeoutMs;
     doc["canReset"] = !updateState_.rebootPending
         && updateState_.source == "upload"
         && (!updateState_.inProgress || updateState_.phase == "failed");

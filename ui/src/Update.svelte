@@ -100,7 +100,7 @@
       const xhr = new XMLHttpRequest();
       xhr.open('POST', `/api/update/upload/${target}`);
       xhr.responseType = 'text';
-      xhr.timeout = 30000;
+      xhr.timeout = 300000;
 
       xhr.upload.onprogress = (event) => {
         if (!event.lengthComputable) {
@@ -118,6 +118,11 @@
       xhr.onerror = () => {
         localUpload = { active: false, target: '', received: 0, total: 0 };
         reject(new Error('Netzwerkfehler beim Upload'));
+      };
+
+      xhr.onabort = () => {
+        localUpload = { active: false, target: '', received: 0, total: 0 };
+        reject(new Error('Upload wurde abgebrochen'));
       };
 
       xhr.ontimeout = () => {
@@ -497,7 +502,12 @@
   onMount(() => {
     loadManifest();
     loadStatus();
-    const interval = setInterval(loadStatus, 1000);
+    const interval = setInterval(() => {
+      if (localUpload.active) {
+        return;
+      }
+      loadStatus();
+    }, 1000);
     return () => clearInterval(interval);
   });
 </script>

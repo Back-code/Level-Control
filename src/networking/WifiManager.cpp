@@ -85,6 +85,8 @@ WifiManager::WifiManager() {
 
 void WifiManager::init() {
     WiFi.setAutoReconnect(false);
+    WiFi.setSleep(false);
+    DebugLogger::getInstance().log(LogLevel::INFO, "WiFi powersave disabled for stable OTA/upload throughput");
 
     WiFi.onEvent([this](WiFiEvent_t event, WiFiEventInfo_t info) {
         DebugLogger::getInstance().log(LogLevel::INFO, "WiFi connected");
@@ -268,6 +270,7 @@ std::string WifiManager::getLocalUrl() const {
 void WifiManager::applyStationIdentity() {
     const std::string hostname = getMdnsHostname();
     WiFi.mode(WIFI_STA);
+    WiFi.setSleep(false);
     WiFi.setHostname(hostname.c_str());
     DebugLogger::getInstance().log(LogLevel::INFO, "WiFi hostname set to " + hostname);
 }

@@ -122,6 +122,18 @@ void App::loop() {
     MqttManager::getInstance().loop();
 
     const unsigned long now = millis();
+    const bool updateInProgress = WebServerDashboard::getInstance().isUpdateInProgress();
+
+    if (updateInProgress) {
+        if (now - lastSerial_ > 10000) {
+            lastSerial_ = now;
+            Serial.println("[Salzstand] Update aktiv, nicht-kritische Laufzeitjobs pausiert");
+        }
+
+        delay(10);
+        return;
+    }
+
     if (lastMeasurement_ == 0 || now - lastMeasurement_ >= SensorManager::getInstance().getSampleIntervalMs()) {
         lastMeasurement_ = now;
         SensorManager::getInstance().measure();

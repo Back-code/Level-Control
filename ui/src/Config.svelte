@@ -97,6 +97,7 @@
   };
   let pushConfigDirty = false;
   let pushHasAuthPassword = false;
+  let pushEncryptionMode = 'none';
   let selectedProvider = 'custom';
   let smtpDiagResult = null;
   let smtpDiagLoading = false;
@@ -244,9 +245,32 @@
     return 'none';
   }
 
+  function normalizePushEncryptionMode(value) {
+    const mode = String(value || '').trim().toLowerCase();
+    if (mode === 'ssl' || mode === 'tls') {
+      return 'ssl';
+    }
+    if (mode === 'starttls' || mode === 'start_tls' || mode === 'start-tls') {
+      return 'starttls';
+    }
+    return 'none';
+  }
+
+  function parseApiBool(value) {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+    if (typeof value === 'number') {
+      return value !== 0;
+    }
+    const normalized = String(value || '').trim().toLowerCase();
+    return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+  }
+
   function applyPushEncryptionMode(mode) {
-    const useSsl = mode === 'ssl';
-    const startTls = mode === 'starttls';
+    const normalizedMode = normalizePushEncryptionMode(mode);
+    const useSsl = normalizedMode === 'ssl';
+    const startTls = normalizedMode === 'starttls';
     let smtpPort = Math.max(1, Number(pushConfig.smtpPort) || 0);
 
     if (useSsl && (!smtpPort || smtpPort === 587)) {
@@ -265,6 +289,7 @@
       startTls,
       smtpPort
     };
+    pushEncryptionMode = normalizedMode;
     markPushConfigDirty();
   }
 
@@ -564,16 +589,19 @@
         }
         const providerId = detectProvider(c.smtpServer || '', c.smtpPort || 587);
         const provider = SMTP_PROVIDERS.find((entry) => entry.id === providerId);
-        const rawEncryptionMode = String(c.encryption || c.security || '').toLowerCase();
+        const rawEncryptionSource = c.encryption ?? c.security ?? '';
+        const normalizedRawMode = normalizePushEncryptionMode(rawEncryptionSource);
+        const hasRecognizedRawMode = String(rawEncryptionSource || '').trim() !== ''
+          && ['ssl', 'starttls', 'none'].includes(normalizedRawMode);
 
-        let effectiveEncryptionMode = rawEncryptionMode;
+        let effectiveEncryptionMode = hasRecognizedRawMode ? normalizedRawMode : '';
         if (!effectiveEncryptionMode) {
-          if (c.useSsl === true) {
+          if (parseApiBool(c.useSsl)) {
             effectiveEncryptionMode = 'ssl';
-          } else if (c.startTls === true) {
+          } else if (parseApiBool(c.startTls)) {
             effectiveEncryptionMode = 'starttls';
           } else if (provider?.security) {
-            effectiveEncryptionMode = String(provider.security).toLowerCase();
+            effectiveEncryptionMode = normalizePushEncryptionMode(provider.security);
           } else if (Number(c.smtpPort) === 465) {
             effectiveEncryptionMode = 'ssl';
           } else {
@@ -581,8 +609,8 @@
           }
         }
 
-        const useSsl = effectiveEncryptionMode === 'ssl' || effectiveEncryptionMode === 'tls';
-        const startTls = effectiveEncryptionMode === 'starttls' || effectiveEncryptionMode === 'start_tls' || effectiveEncryptionMode === 'start-tls';
+        const useSsl = effectiveEncryptionMode === 'ssl';
+        const startTls = effectiveEncryptionMode === 'starttls';
         pushConfig = {
           enabled: c.enabled ?? false,
           smtpServer: c.smtpServer || '',
@@ -603,6 +631,7 @@
           subjectTemplate: c.subjectTemplate || DEFAULT_PUSH_SUBJECT,
           bodyTemplate: c.bodyTemplate || DEFAULT_PUSH_BODY
         };
+        pushEncryptionMode = useSsl ? 'ssl' : (startTls ? 'starttls' : 'none');
         pushHasAuthPassword = (c.hasAuthPassword ?? false) || isMaskedPassword(c.authPassword || '');
         selectedProvider = providerId;
       });
@@ -853,6 +882,7 @@
         useSsl: provider.security === 'ssl',
         startTls: provider.security === 'starttls'
       };
+      pushEncryptionMode = provider.security === 'ssl' ? 'ssl' : (provider.security === 'starttls' ? 'starttls' : 'none');
       markPushConfigDirty();
     }
   }
@@ -1110,20 +1140,20 @@
         <select
           class="theme-select"
           aria-label="SMTP-Verschlüsselung"
-          value={getPushEncryptionMode()}
-          on:change={(e) => applyPushEncryptionMode(e.currentTarget.value)}
+          bind:value={pushEncryptionMode}
+          on:change={() => applyPushEncryptionMode(pushEncryptionMode)}
         >
           <option value="none">Keine</option>
           <option value="ssl">SSL/TLS</option>
           <option value="starttls">STARTTLS</option>
         </select>
-        {#if getPushEncryptionMode() === 'starttls'}
+        {#if pushEncryptionMode === 'starttls'}
           <p class="helper-text error">STARTTLS wird aktuell vom SMTP-Client noch nicht unterstützt. Für den Versand bitte derzeit SSL/TLS verwenden.</p>
         {/if}
       </div>
     </label>
 
-    {#if getPushEncryptionMode() === 'ssl' || getPushEncryptionMode() === 'starttls'}
+    {#if pushEncryptionMode === 'ssl' || pushEncryptionMode === 'starttls'}
       <label class="checkbox-row checkbox-row--warning">
         <input type="checkbox" bind:checked={pushConfig.smtpSkipCertVerify} />
         Zertifikat überspringen (unsicher – nur für Provider ohne hinterlegtes Root-CA)

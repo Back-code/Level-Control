@@ -153,6 +153,10 @@ Die UI ist als Svelte-Frontend mit Vite gebaut, wird aus LittleFS ausgeliefert u
 - Lokale BIN-Dateien für App oder Web-UI hochladen
 - Update-Status, Größenlimits und Fortschritt anzeigen
 
+Die in der UI angezeigte installierte Version stammt bewusst aus der laufenden Firmware (`SALZSTAND_VERSION`). Bei App-OTA oder App-Upload wechselt diese Anzeige deshalb erst nach dem Neustart in die neue OTA-Partition. Ein reines Web-UI-Update ändert die Firmware-Version nicht.
+
+Wenn ein manueller Upload mitten im Transfer abbricht, setzt die Firmware einen hängenden Upload-Status nach 15 Sekunden Inaktivität automatisch auf `failed` zurück. Zusätzlich steht über die UI/API ein Reset des Upload-Status zur Verfügung, damit ein Retry ohne Geräteneustart möglich ist.
+
 ---
 
 ## REST-API

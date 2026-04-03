@@ -23,11 +23,17 @@
     phase: 'idle',
     message: '',
     availableVersion: '',
+    pendingVersion: '',
     received: 0,
     total: 0,
+    uploadActive: false,
+    activityAgeMs: 0,
+    canReset: false,
     appMaxSize: 0,
     firmwareMaxSize: 0,
-    webuiMaxSize: 0
+    webuiMaxSize: 0,
+    lastResetReason: '',
+    lastResetReasonCode: 0
   };
 
   let appFile = null;
@@ -81,11 +87,20 @@
     return status.inProgress || localUpload.active;
   }
 
+  function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  function isFirmwareLikeTarget(target) {
+    return target === 'app' || target === 'full';
+  }
+
   function uploadFileWithProgress(target, formData) {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open('POST', `/api/update/upload/${target}`);
       xhr.responseType = 'text';
+      xhr.timeout = 30000;
 
       xhr.upload.onprogress = (event) => {
         if (!event.lengthComputable) {
@@ -103,6 +118,11 @@
       xhr.onerror = () => {
         localUpload = { active: false, target: '', received: 0, total: 0 };
         reject(new Error('Netzwerkfehler beim Upload'));
+      };
+
+      xhr.ontimeout = () => {
+        localUpload = { active: false, target: '', received: 0, total: 0 };
+        reject(new Error('Upload-Request hat ein Timeout erreicht'));
       };
 
       xhr.onload = () => {
@@ -179,10 +199,79 @@
             window.location.reload(); // Fallback nach ~12 s
           }, 3000);
         }
+
+        return status;
       }
     } catch (_) {
       // Status-Polling ist optional.
     }
+
+    return null;
+  }
+
+  async function recoverAfterUploadTransportError(target, previousVersion) {
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      await delay(500);
+      const nextStatus = await loadStatus();
+      if (!nextStatus) {
+        continue;
+      }
+
+      if (nextStatus.phase === 'failed') {
+        return { ok: false, message: nextStatus.message || 'Upload fehlgeschlagen' };
+      }
+
+      if (nextStatus.success && nextStatus.rebootPending) {
+        return {
+          ok: true,
+          message: nextStatus.message || `${target === 'app' ? 'App' : 'Web-UI'} wurde übernommen. Gerät startet neu.`
+        };
+      }
+
+      if (
+        isFirmwareLikeTarget(target)
+        && previousVersion
+        && nextStatus.installedVersion
+        && compareVersions(nextStatus.installedVersion, previousVersion) > 0
+      ) {
+        return {
+          ok: true,
+          message: `Neue Firmware-Version erkannt: v${nextStatus.installedVersion}. Gerät war bereits neu gestartet.`
+        };
+      }
+
+      if (!nextStatus.inProgress && !nextStatus.uploadActive && nextStatus.phase === 'done') {
+        return {
+          ok: true,
+          message: nextStatus.message || `${target === 'app' ? 'App' : 'Web-UI'} wurde übernommen.`
+        };
+      }
+    }
+
+    if (status.canReset) {
+      return {
+        ok: false,
+        message: 'Upload-Verbindung wurde unterbrochen. Der Gerätestatus ist bereits entsperrt und kann neu versucht werden.'
+      };
+    }
+
+    const resetHint = status.lastResetReason ? ` Letzter Reset: ${status.lastResetReason}.` : '';
+    return {
+      ok: false,
+      message: `Netzwerkfehler beim Upload.${resetHint}`
+    };
+  }
+
+  async function resetDeviceUpdateState() {
+    const response = await fetch('/api/update/reset', { method: 'POST' });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      showNotice('error', payload.error || 'Update-Status konnte nicht zurückgesetzt werden');
+      return;
+    }
+
+    await loadStatus();
+    showNotice('success', payload.message || 'Update-Status wurde zurückgesetzt');
   }
 
   async function startRepoUpdate() {
@@ -330,6 +419,7 @@
 
     const formData = new FormData();
     formData.append('file', fileToUpload);
+    const previousVersion = displayedVersion;
 
     localUpload = { active: true, target, received: 0, total: fileToUpload.size };
 
@@ -342,7 +432,16 @@
     try {
       payload = await uploadFileWithProgress(target, formData);
     } catch (errorReason) {
-      showNotice('error', errorReason.message || `${label}-Upload fehlgeschlagen`);
+      const isTransportFailure = errorReason?.message === 'Netzwerkfehler beim Upload'
+        || errorReason?.message === 'Upload-Request hat ein Timeout erreicht';
+      if (isTransportFailure) {
+        const recovery = await recoverAfterUploadTransportError(target, previousVersion);
+        showNotice(recovery.ok ? 'success' : 'error', recovery.message);
+        return;
+      }
+
+      await loadStatus();
+      showNotice('error', status.message || errorReason.message || `${label}-Upload fehlgeschlagen`);
       return;
     }
 
@@ -392,6 +491,8 @@
   $: repoStatus = getRepoUpdateStatus(manifest, displayedVersion);
   $: currentReleaseUrl = `https://github.com/Back-code/Level-Control/releases/tag/v${displayedVersion}`;
   $: anyBusy = status.inProgress || localUpload.active;
+  $: showResetAction = status.canReset && !localUpload.active;
+  $: pendingVersionLabel = status.pendingVersion && isFirmwareLikeTarget(status.target) ? status.pendingVersion : '';
 
   onMount(() => {
     loadManifest();
@@ -448,10 +549,21 @@
         <strong>{status.phase || 'idle'}</strong>
       </div>
       <p>{status.message || 'Kein Update aktiv.'}</p>
+      {#if pendingVersionLabel}
+        <small>Zielversion nach Neustart: v{pendingVersionLabel}</small>
+      {/if}
+      {#if status.lastResetReason}
+        <small>Letzter Reset: {status.lastResetReason}</small>
+      {/if}
       <div class="progress-track">
         <div class="progress-fill" style={`width:${progressPercent}%`}></div>
       </div>
       <small>{status.received} / {status.total || 0} Bytes</small>
+      {#if showResetAction}
+        <button class="secondary-button" on:click={resetDeviceUpdateState}>
+          Update-Status zurücksetzen
+        </button>
+      {/if}
     </div>
   </article>
 
@@ -812,6 +924,12 @@
 
   .button-group button {
     width: 100%;
+  }
+
+  .secondary-button {
+    margin-top: 10px;
+    min-height: 38px;
+    background: transparent;
   }
 
   .sizes-info {

@@ -68,6 +68,8 @@ Oder im Chat: `*test`
 - LittleFS flashen (`pio uploadfs`)
 - **Keine Versionserhöhung** — der ESP zeigt die bisherige Versionsnummer
 
+Hinweis: Die angezeigte installierte Version kommt immer aus der aktuell gebooteten Firmware. Nach einem OTA-/Upload-App-Update ändert sie sich deshalb erst nach dem Reboot in die neue OTA-Partition. Ein reines Web-UI-Update lässt die Firmware-Version unverändert.
+
 > Der *test-Schritt ist Optional, aber empfohlen vor jedem Push.
 
 ---

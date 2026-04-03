@@ -54,6 +54,7 @@ private:
         std::string availableVersion;
         size_t received = 0;
         size_t total = 0;
+        unsigned long lastActivityMs = 0;
     };
 
     WebServerDashboard();
@@ -77,11 +78,14 @@ private:
     void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len);
 
     void resetUpdateState(const std::string& source, const std::string& target);
+    void touchUpdateActivity();
     void setUpdatePhase(const std::string& phase, const std::string& message, size_t received = 0, size_t total = 0);
+    void clearUploadSession(bool abortUpdate = false);
+    void recoverStuckUploadIfNeeded();
     void markUpdateFailed(const std::string& message);
     void markUpdateSucceeded(const std::string& message);
     void scheduleRestart(uint32_t delayMs = 1500);
-    void sendUpdateStatus(AsyncWebServerRequest *request) const;
+    void sendUpdateStatus(AsyncWebServerRequest *request);
     void sendUpdateManifest(AsyncWebServerRequest *request);
     bool fetchLatestManifest(ReleaseManifest& manifest, std::string& rawManifest, std::string& error);
     bool refreshManifestCache(bool forceRefresh, std::string& error);
@@ -90,12 +94,14 @@ private:
     std::string resolveUpdateTarget(const ReleaseManifest& manifest, const std::string& requestedTarget, std::string& error) const;
     void startRemoteUpdateTask(const std::string& target);
     void runRemoteUpdateTask(const std::string& target);
-    bool applyRemoteAsset(const ManifestAsset& asset, int command, const std::string& phase, std::string& error);
+    bool applyRemoteAsset(const ManifestAsset& asset, int command, const std::string& phase, const std::string& version, std::string& error);
     bool validateUploadStart(const String& target, const String& filename, size_t contentLength, std::string& error) const;
     bool validateUploadChunk(const String& target, const uint8_t *data, size_t len, size_t index, std::string& error) const;
     void handleUpload(AsyncWebServerRequest *request, const String& target, const String& filename, size_t index, uint8_t *data, size_t len, bool final);
     size_t getAppPartitionSize() const;
     size_t getFilesystemPartitionSize() const;
+
+    unsigned long uploadLastChunkMs_ = 0;
 };
 
 #endif // WEB_SERVER_DASHBOARD_H

@@ -1,7 +1,4 @@
 #include <string>
-
-// Globale Variable für die aktuelle Manifest-Version (für OTA/NVS-Update)
-std::string g_latestManifestVersion;
 #include "WebServerDashboard.h"
 #include <AsyncJson.h>
 #include <ArduinoJson.h>
@@ -40,9 +37,10 @@ constexpr char kLatestReleaseUrl[] = "https://github.com/Back-code/Level-Control
 constexpr char kUpdateUserAgent[] = "Salzstand-OTA/1.0";
 constexpr char kPasswordMask[] = "*****";
 constexpr unsigned long kMinSampleIntervalSeconds = 5UL;
-constexpr uint32_t kRestartDelayMs = 1500;
+constexpr uint32_t kRestartDelayMs = 2500;
 constexpr size_t kUploadBufferSize = 4096;
 constexpr unsigned long kManifestCacheTtlMs = 300000;
+constexpr unsigned long kUploadStallTimeoutMs = 15000;
 constexpr char kManifestSignatureAlgorithm[] = "ECDSA_P256_SHA256";
 
 bool mountLittleFsWithKnownLabels() {
@@ -323,6 +321,8 @@ int WebServerDashboard::getUpdateProgressPercent() const {
 }
 
 bool WebServerDashboard::requestRepoUpdate(const std::string& target, std::string& error) {
+    recoverStuckUploadIfNeeded();
+
     if (updateState_.inProgress || uploadActive_) {
         error = "Update läuft bereits";
         return false;
@@ -1173,6 +1173,27 @@ void WebServerDashboard::setupUpdateRoutes() {
         sendUpdateStatus(request);
     });
 
+    server_.on("/api/update/reset", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        recoverStuckUploadIfNeeded();
+
+        if (updateState_.inProgress && updateState_.source != "upload") {
+            request->send(409, "application/json", "{\"error\":\"Aktives Repo-Update kann nicht manuell zurückgesetzt werden\"}");
+            return;
+        }
+
+        if (updateState_.rebootPending) {
+            request->send(409, "application/json", "{\"error\":\"Neustart steht bereits aus\"}");
+            return;
+        }
+
+        clearUploadSession(true);
+        resetUpdateState("", "");
+        updateState_.message = "Update-Status wurde zurückgesetzt";
+        touchUpdateActivity();
+        DebugLogger::getInstance().log(LogLevel::INFO, "Update status reset requested via API");
+        request->send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Update-Status wurde zurückgesetzt\"}");
+    });
+
     server_.on("/api/update/manifest", HTTP_GET, [this](AsyncWebServerRequest *request) {
         sendUpdateManifest(request);
     });
@@ -1196,6 +1217,8 @@ void WebServerDashboard::setupUpdateRoutes() {
         if (index + len != total) {
             return;
         }
+
+        recoverStuckUploadIfNeeded();
 
         if (updateState_.inProgress || uploadActive_) {
             request->send(409, "application/json", "{\"error\":\"Update läuft bereits\"}");
@@ -1263,6 +1286,11 @@ void WebServerDashboard::resetUpdateState(const std::string& source, const std::
     updateState_.target = target;
     updateState_.phase = "idle";
     restartScheduled_ = false;
+    touchUpdateActivity();
+}
+
+void WebServerDashboard::touchUpdateActivity() {
+    updateState_.lastActivityMs = millis();
 }
 
 void WebServerDashboard::setUpdatePhase(const std::string& phase, const std::string& message, size_t received, size_t total) {
@@ -1270,9 +1298,50 @@ void WebServerDashboard::setUpdatePhase(const std::string& phase, const std::str
     updateState_.message = message;
     updateState_.received = received;
     updateState_.total = total;
+    touchUpdateActivity();
+}
+
+void WebServerDashboard::clearUploadSession(bool abortUpdate) {
+    const bool shouldRemountFs = uploadTarget_ == "webui";
+
+    if (abortUpdate && (uploadActive_ || (updateState_.source == "upload" && updateState_.inProgress))) {
+        Update.abort();
+    }
+
+    uploadActive_ = false;
+    uploadFailed_ = false;
+    uploadTarget_ = "";
+    uploadFilename_ = "";
+    uploadTargetPartition_ = nullptr;
+    uploadLastChunkMs_ = 0;
+
+    if (shouldRemountFs) {
+        ensureLittleFsMounted();
+    }
+}
+
+void WebServerDashboard::recoverStuckUploadIfNeeded() {
+    if (!uploadActive_ || updateState_.source != "upload" || !updateState_.inProgress) {
+        return;
+    }
+
+    const unsigned long referenceMs = uploadLastChunkMs_ != 0 ? uploadLastChunkMs_ : updateState_.lastActivityMs;
+    const unsigned long now = millis();
+    if (referenceMs == 0 || (now - referenceMs) < kUploadStallTimeoutMs) {
+        return;
+    }
+
+    DebugLogger::getInstance().log(
+        LogLevel::ERROR,
+        std::string("Upload stalled, resetting state after ") + std::to_string(now - referenceMs) + " ms");
+    clearUploadSession(true);
+    markUpdateFailed("Upload wurde wegen Inaktivität abgebrochen. Bitte erneut versuchen.");
 }
 
 void WebServerDashboard::markUpdateFailed(const std::string& message) {
+    if (updateState_.source == "upload") {
+        clearUploadSession(false);
+    }
     updateState_.inProgress = false;
     updateState_.success = false;
     updateState_.rebootPending = false;
@@ -1283,6 +1352,9 @@ void WebServerDashboard::markUpdateFailed(const std::string& message) {
 }
 
 void WebServerDashboard::markUpdateSucceeded(const std::string& message) {
+    if (updateState_.source == "upload") {
+        clearUploadSession(false);
+    }
     updateState_.inProgress = false;
     updateState_.success = true;
     updateState_.rebootPending = true;
@@ -1317,8 +1389,10 @@ void WebServerDashboard::scheduleRestart(uint32_t delayMs) {
     }
 }
 
-void WebServerDashboard::sendUpdateStatus(AsyncWebServerRequest *request) const {
-    DynamicJsonDocument doc(1024);
+void WebServerDashboard::sendUpdateStatus(AsyncWebServerRequest *request) {
+    recoverStuckUploadIfNeeded();
+
+    DynamicJsonDocument doc(1280);
     doc["inProgress"] = updateState_.inProgress;
     doc["success"] = updateState_.success;
     doc["rebootPending"] = updateState_.rebootPending;
@@ -1326,11 +1400,20 @@ void WebServerDashboard::sendUpdateStatus(AsyncWebServerRequest *request) const 
     doc["target"] = updateState_.target;
     doc["phase"] = updateState_.phase;
     doc["message"] = updateState_.message;
-    doc["installedVersion"] = SALZSTAND_VERSION;
+    doc["installedVersion"] = getInstalledVersion();
     doc["availableVersion"] = updateState_.availableVersion;
+    doc["pendingVersion"] = (updateState_.success && updateState_.rebootPending
+        && (updateState_.target == "app" || updateState_.target == "full"))
+        ? updateState_.availableVersion
+        : "";
     doc["manifestError"] = manifestError_;
     doc["received"] = updateState_.received;
     doc["total"] = updateState_.total;
+    doc["uploadActive"] = uploadActive_;
+    doc["activityAgeMs"] = updateState_.lastActivityMs == 0 ? 0UL : (millis() - updateState_.lastActivityMs);
+    doc["canReset"] = !updateState_.rebootPending
+        && updateState_.source == "upload"
+        && (!updateState_.inProgress || updateState_.phase == "failed");
     doc["appMaxSize"] = getAppPartitionSize();
     doc["firmwareMaxSize"] = getAppPartitionSize();
     doc["webuiMaxSize"] = getFilesystemPartitionSize();
@@ -1680,19 +1763,15 @@ void WebServerDashboard::runRemoteUpdateTask(const std::string& target) {
     lastManifestCheckMs_ = millis();
     updateState_.availableVersion = manifest.version;
 
-    // Globale Variable für die aktuelle Version setzen
-    g_latestManifestVersion = manifest.version;
-
     if ((target == "webui" || target == "full") && !manifest.webui.url.empty()) {
-        if (!applyRemoteAsset(manifest.webui, U_SPIFFS, "webui", error)) {
+        if (!applyRemoteAsset(manifest.webui, U_SPIFFS, "webui", manifest.version, error)) {
             markUpdateFailed(error);
             return;
         }
     }
 
     if ((target == "app" || target == "full") && !manifest.app.url.empty()) {
-        g_latestManifestVersion = manifest.version;
-        if (!applyRemoteAsset(manifest.app, U_FLASH, "app", error)) {
+        if (!applyRemoteAsset(manifest.app, U_FLASH, "app", manifest.version, error)) {
             markUpdateFailed(error);
             return;
         }
@@ -1709,11 +1788,15 @@ void WebServerDashboard::runRemoteUpdateTask(const std::string& target) {
     scheduleRestart(kRestartDelayMs);
 }
 
-bool WebServerDashboard::applyRemoteAsset(const ManifestAsset& asset, int command, const std::string& phase, std::string& error) {
+bool WebServerDashboard::applyRemoteAsset(const ManifestAsset& asset, int command, const std::string& phase, const std::string& version, std::string& error) {
     if (!isHttpsUrl(asset.url)) {
         error = "Asset-URL muss HTTPS verwenden";
         return false;
     }
+
+    DebugLogger::getInstance().log(
+        LogLevel::INFO,
+        std::string("OTA asset start: phase=") + phase + ", version=" + version + ", url=" + asset.url);
 
     WiFiClientSecure client;
     client.setCACert(kOtaTrustedRootCAs);
@@ -1846,19 +1929,6 @@ bool WebServerDashboard::applyRemoteAsset(const ManifestAsset& asset, int comman
                 return false;
             }
         }
-        // Firmware-Version im NVS aktualisieren
-        // Die Version muss von außen (aus dem ReleaseManifest) übergeben werden!
-        // Daher: Funktion um Version als Argument erweitern oder globalen Wert nutzen.
-        extern std::string g_latestManifestVersion;
-        Config config;
-        if (ConfigStore::getInstance().load(config)) {
-            try {
-                config.version = std::stoi(g_latestManifestVersion);
-            } catch (...) {
-                // Falls Umwandlung fehlschlägt, Version nicht ändern
-            }
-            ConfigStore::getInstance().save(config);
-        }
     }
 
     if (command == U_SPIFFS) {
@@ -1906,6 +1976,8 @@ bool WebServerDashboard::validateUploadChunk(const String& target, const uint8_t
 }
 
 void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const String& target, const String& filename, size_t index, uint8_t *data, size_t len, bool final) {
+    recoverStuckUploadIfNeeded();
+
     if (index == 0) {
         if (updateState_.inProgress || uploadActive_) {
             request->send(409, "application/json", "{\"error\":\"Update läuft bereits\"}");
@@ -1922,10 +1994,16 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
         uploadFailed_ = false;
         uploadTarget_ = target;
         uploadFilename_ = filename;
+        uploadLastChunkMs_ = millis();
         resetUpdateState("upload", target.c_str());
         updateState_.inProgress = true;
         setUpdatePhase("validating", "Upload wird geprüft", 0, request->contentLength());
         EventBus::getInstance().publish({ EventType::OTA_STARTED, std::string(target.c_str()) });
+        DebugLogger::getInstance().log(
+            LogLevel::INFO,
+            std::string("Manual upload started: target=") + target.c_str()
+                + ", file=" + filename.c_str()
+                + ", size=" + std::to_string(request->contentLength()));
 
         if (target == "webui") {
             LittleFS.end();
@@ -1939,10 +2017,6 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
 
         if (!Update.begin(UPDATE_SIZE_UNKNOWN, target == "app" ? U_FLASH : U_SPIFFS)) {
             uploadFailed_ = true;
-            uploadActive_ = false;
-            if (target == "webui") {
-                LittleFS.begin();
-            }
             markUpdateFailed(Update.errorString());
             request->send(500, "application/json", (std::string("{\"error\":\"") + Update.errorString() + "\"}").c_str());
             return;
@@ -1965,6 +2039,7 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
     }
 
     if (!uploadFailed_ && len > 0) {
+        uploadLastChunkMs_ = millis();
         const size_t nextReceived = index + len;
         const size_t limit = target == "app" ? getAppPartitionSize() : getFilesystemPartitionSize();
         if (limit > 0 && nextReceived > limit) {
@@ -1981,6 +2056,7 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
     }
 
     if (!uploadFailed_ && len > 0) {
+        uploadLastChunkMs_ = millis();
         if (Update.write(data, len) != len) {
             uploadFailed_ = true;
             Update.abort();
@@ -1998,8 +2074,6 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
     if (!final) {
         return;
     }
-
-    uploadActive_ = false;
 
     if (uploadFailed_) {
         request->send(400, "application/json", (std::string("{\"error\":\"") + updateState_.message + "\"}").c_str());

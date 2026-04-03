@@ -1107,11 +1107,16 @@
     <label class="field-row field-row--top-align">
       <span>Verschlüsselung:</span>
       <div class="field-control field-control--choice">
-        <div class="choice-grid choice-grid--triple" role="radiogroup" aria-label="SMTP-Verschlüsselung">
-          <label class="choice-card"><input type="radio" name="push-encryption" checked={getPushEncryptionMode() === 'none'} on:change={() => applyPushEncryptionMode('none')} /><span>Keine</span></label>
-          <label class="choice-card"><input type="radio" name="push-encryption" checked={getPushEncryptionMode() === 'ssl'} on:change={() => applyPushEncryptionMode('ssl')} /><span>SSL/TLS</span></label>
-          <label class="choice-card"><input type="radio" name="push-encryption" checked={getPushEncryptionMode() === 'starttls'} on:change={() => applyPushEncryptionMode('starttls')} /><span>STARTTLS</span></label>
-        </div>
+        <select
+          class="theme-select"
+          aria-label="SMTP-Verschlüsselung"
+          value={getPushEncryptionMode()}
+          on:change={(e) => applyPushEncryptionMode(e.currentTarget.value)}
+        >
+          <option value="none">Keine</option>
+          <option value="ssl">SSL/TLS</option>
+          <option value="starttls">STARTTLS</option>
+        </select>
         {#if getPushEncryptionMode() === 'starttls'}
           <p class="helper-text error">STARTTLS wird aktuell vom SMTP-Client noch nicht unterstützt. Für den Versand bitte derzeit SSL/TLS verwenden.</p>
         {/if}

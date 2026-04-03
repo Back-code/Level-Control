@@ -311,11 +311,11 @@
           {tab.label}
         </button>
       {/each}
-    </aside>
 
-    <div class="sidebar-credit-box">
-      <a href="https://salzstand.montag.nrw" target="_blank" rel="noopener noreferrer">salzstand.montag.nrw</a>
-    </div>
+      <div class="sidebar-credit-box">
+        <a href="https://levelcontrol.montag.nrw" target="_blank" rel="noopener noreferrer">levelcontrol.montag.nrw</a>
+      </div>
+    </aside>
 
     <section class="module-shell">
       {#if activeTab === 'dashboard'}
@@ -609,19 +609,13 @@
   .app-layout {
     display: grid;
     grid-template-columns: 240px minmax(0, 1fr);
-    grid-template-areas:
-      "sidebar content"
-      "credit  content";
+    grid-template-areas: "sidebar content";
     gap: 14px;
     align-items: start;
   }
 
   .sidebar-nav {
     grid-area: sidebar;
-  }
-
-  .sidebar-credit-box {
-    grid-area: credit;
   }
 
   .module-shell {
@@ -638,6 +632,10 @@
     border-radius: 10px;
     padding: 10px;
     box-shadow: var(--shadow);
+  }
+
+  .sidebar-credit-box {
+    margin-top: 8px;
   }
 
   .sidebar-item {

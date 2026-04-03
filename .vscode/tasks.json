@@ -13,9 +13,7 @@
 				"-ExecutionPolicy",
 				"Bypass",
 				"-File",
-				"${workspaceFolder}/scripts/run-commit.ps1",
-				"-CommitMessage",
-				"${input:commitMessage}"
+				"${workspaceFolder}/scripts/run-commit.ps1"
 			],
 			"options": {
 				"cwd": "${workspaceFolder}"
@@ -93,13 +91,6 @@
 				"${workspaceFolder}/scripts/run-release.ps1",
 				"-TestOTA"
 			]
-		}
-	],
-	"inputs": [
-		{
-			"id": "commitMessage",
-			"type": "promptString",
-			"description": "Commit-Message"
 		}
 	]
 }

@@ -205,7 +205,7 @@
     <div class="chart-shell">
       <svg viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} class="chart" role="img" aria-label={t('dashboard.chartAria')}>
         <defs>
-          <linearGradient id="salzstand-area" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id="level-control-area" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.32" />
             <stop offset="100%" stop-color="var(--accent)" stop-opacity="0.02" />
           </linearGradient>
@@ -544,7 +544,7 @@
   }
 
   .chart-area {
-    fill: url(#salzstand-area);
+    fill: url(#level-control-area);
   }
 
   .chart-dot {
@@ -708,3 +708,4 @@
     }
   }
 </style>
+

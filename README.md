@@ -1,10 +1,10 @@
-# Salzstand – ESP32-C3 Ultraschall-Füllstandssensor
+# Level-Control – ESP32-C3 Ultraschall-Füllstandssensor
 
 Dieses Projekt implementiert einen WLAN-fähigen Füllstandssensor für Salzbehälter auf Basis eines ESP32-C3 mit HC-SR04-Ultraschallsensor. Die Messwerte werden über eine Svelte-Web-UI dargestellt, per WebSocket in Echtzeit übertragen und über MQTT (inkl. Home Assistant Auto-Discovery) bereitgestellt.
 
 ## About
 
-Salzstand ist ein ESP32-C3-Projekt zur kontinuierlichen Füllstandsmessung von Salzbehältern mit Ultraschall. Es kombiniert Firmware, Web-Dashboard (Svelte), MQTT-Telemetrie und Home-Assistant-Discovery in einem System.
+Level-Control ist ein ESP32-C3-Projekt zur kontinuierlichen Füllstandsmessung von Salzbehältern mit Ultraschall. Es kombiniert Firmware, Web-Dashboard (Svelte), MQTT-Telemetrie und Home-Assistant-Discovery in einem System.
 
 **Highlights:**
 - Live-Dashboard mit Tag/Nacht-Theme und Modulnavigation
@@ -44,8 +44,8 @@ Salzstand ist ein ESP32-C3-Projekt zur kontinuierlichen Füllstandsmessung von S
 | Wert | Berechnung |
 |---|---|
 | Rohdistanz (m) | Direkt aus `ping_us / 2 / 29.1 / 100` |
-| Salzstand (cm) | `(behaelterhoehe + offset) - gemessene_cm` |
-| Füllstand (%) | `salzstand_cm / behaelterhoehe * 100` |
+| Level-Control (cm) | `(behaelterhoehe + offset) - gemessene_cm` |
+| Füllstand (%) | `level_control_cm / behaelterhoehe * 100` |
 | Ping-Zeit (µs) | Roher `pulseIn`-Wert |
 | Messung gültig | `true` wenn Ping-Zeit im Gültigkeitsbereich |
 
@@ -90,7 +90,7 @@ Der Messverlauf wird getrennt davon in der dedizierten Partition `histnvs` gespe
 
 ```
 Erster Start / keine SSID konfiguriert  ODER  WLAN-Verbindung schlägt fehl
-  → SETUP_MODE: Access Point "Salzstand-Setup" (kein Passwort)
+  → SETUP_MODE: Access Point "Level-Control-Setup" (kein Passwort)
   → Webseite auf 192.168.4.1: WiFi-Konfigurationsformular
 
 Normaler Betrieb
@@ -110,7 +110,7 @@ Die UI ist als Svelte-Frontend mit Vite gebaut, wird aus LittleFS ausgeliefert u
 | Karte | Inhalt |
 |---|---|
 | Aktuelle Distanz | Rohdistanz in m (Ultraschall-Messwert) |
-| Salzstand | Füllstand in cm und Prozent |
+| Level-Control | Füllstand in cm und Prozent |
 | WiFi-Signal | RSSI in dBm |
 | Uptime | Betriebszeit in Stunden und Minuten |
 | Netzwerk | IP-Adresse, SSID, BSSID |
@@ -153,7 +153,7 @@ Die UI ist als Svelte-Frontend mit Vite gebaut, wird aus LittleFS ausgeliefert u
 - Lokale BIN-Dateien für App oder Web-UI hochladen
 - Update-Status, Größenlimits und Fortschritt anzeigen
 
-Die in der UI angezeigte installierte Version stammt bewusst aus der laufenden Firmware (`SALZSTAND_VERSION`). Bei App-OTA oder App-Upload wechselt diese Anzeige deshalb erst nach dem Neustart in die neue OTA-Partition. Ein reines Web-UI-Update ändert die Firmware-Version nicht.
+Die in der UI angezeigte installierte Version stammt bewusst aus der laufenden Firmware (`LEVEL_CONTROL_VERSION`). Bei App-OTA oder App-Upload wechselt diese Anzeige deshalb erst nach dem Neustart in die neue OTA-Partition. Ein reines Web-UI-Update ändert die Firmware-Version nicht.
 
 Wenn ein manueller Upload mitten im Transfer abbricht, setzt die Firmware einen hängenden Upload-Status nach 15 Sekunden Inaktivität automatisch auf `failed` zurück. Zusätzlich steht über die UI/API ein Reset des Upload-Status zur Verfügung, damit ein Retry ohne Geräteneustart möglich ist.
 
@@ -214,25 +214,25 @@ Die UI zeigt Verbindungsprobleme und veraltete Werte (kein Update länger als `2
 Broker-Verbindung über PubSubClient 2.8.  
 Reconnect-Versuch alle 5 Sekunden bei Verbindungsverlust.  
 Keepalive: 30 Sekunden, Buffer: 1024 Bytes.  
-Geräte-ID: `salzstand_` + MAC-Adresse ohne Doppelpunkte (z. B. `salzstand_A4CF121E3B00`).
+Geräte-ID: `level_control_` + MAC-Adresse ohne Doppelpunkte (z. B. `level_control_A4CF121E3B00`).
 
 ### Topics
 
 | Topic | Richtung | Retain | Beschreibung |
 |---|---|---|---|
-| `salzstand/status` | pub | ✓ | `online` / `offline` (LWT) |
-| `salzstand/sensor/state` | pub | ✓ | Alle Messwerte als JSON (alle 30 s) |
-| `salzstand/config/behaelterhoehe/state` | pub | ✓ | Aktuelle Behälterhöhe in cm |
-| `salzstand/config/behaelterhoehe/set` | **sub** | – | Neue Behälterhöhe setzen (1–1000 cm) |
-| `salzstand/config/offset/state` | pub | ✓ | Aktueller Offset-Wert |
-| `salzstand/config/offset/set` | **sub** | – | Neuen Offset setzen (–500 bis +500 cm) |
-| `salzstand/config/sampleinterval/state` | pub | ✓ | Aktuelle Abtastrate in Sekunden |
-| `salzstand/config/sampleinterval/set` | **sub** | – | Neue Abtastrate setzen (mind. 5 s) |
-| `salzstand/system/state` | pub | ✓ | WiFi, Uptime & ESP32-Systemdaten (alle 30 s) |
-| `salzstand/update/state` | pub | ✓ | OTA-Status und Versionsinformationen |
-| `salzstand/update/install` | **sub** | – | OTA-Installation auslösen |
+| `level-control/status` | pub | ✓ | `online` / `offline` (LWT) |
+| `level-control/sensor/state` | pub | ✓ | Alle Messwerte als JSON (alle 30 s) |
+| `level-control/config/behaelterhoehe/state` | pub | ✓ | Aktuelle Behälterhöhe in cm |
+| `level-control/config/behaelterhoehe/set` | **sub** | – | Neue Behälterhöhe setzen (1–1000 cm) |
+| `level-control/config/offset/state` | pub | ✓ | Aktueller Offset-Wert |
+| `level-control/config/offset/set` | **sub** | – | Neuen Offset setzen (–500 bis +500 cm) |
+| `level-control/config/sampleinterval/state` | pub | ✓ | Aktuelle Abtastrate in Sekunden |
+| `level-control/config/sampleinterval/set` | **sub** | – | Neue Abtastrate setzen (mind. 5 s) |
+| `level-control/system/state` | pub | ✓ | WiFi, Uptime & ESP32-Systemdaten (alle 30 s) |
+| `level-control/update/state` | pub | ✓ | OTA-Status und Versionsinformationen |
+| `level-control/update/install` | **sub** | – | OTA-Installation auslösen |
 
-### Sensor-State-Payload (`salzstand/sensor/state`)
+### Sensor-State-Payload (`level-control/sensor/state`)
 
 ```json
 {
@@ -253,7 +253,7 @@ Geräte-ID: `salzstand_` + MAC-Adresse ohne Doppelpunkte (z. B. `salzstand_A4CF1
 | `timeout` | Kein Echo empfangen (Ping-Zeit = 0) |
 | `out_of_range` | Echo außerhalb des Gültigkeitsbereichs |
 
-### System-State-Payload (`salzstand/system/state`)
+### System-State-Payload (`level-control/system/state`)
 
 ```json
 {
@@ -287,7 +287,7 @@ Wenn `mqtt.discovery = true`, werden beim Connect 14 Entitäten veröffentlicht:
 | HA-Entität | Domain | Object-ID | Einheit | Kategorie |
 |---|---|---|---|---|
 | Füllstand | `sensor` | `fill_level` | % | – |
-| Salzstand | `sensor` | `distance_cm` | cm | – |
+| Level-Control | `sensor` | `distance_cm` | cm | – |
 | Rohdistanz | `sensor` | `raw_distance` | m | diagnostic |
 | Ultraschall Pingzeit | `sensor` | `ping_us` | µs | diagnostic |
 | Behälterhöhe | `number` | `behaelterhoehe` | cm | config |
@@ -303,8 +303,8 @@ Wenn `mqtt.discovery = true`, werden beim Connect 14 Entitäten veröffentlicht:
 
 Jede Entität enthält:
 - `unique_id` (Geräte-ID + Feldname) für stabile HA-Identifikation
-- `availability_topic` → `salzstand/status`
-- Device-Block: Name `Salzstand`, Manufacturer `DIY`, Model `ESP32-C3`
+- `availability_topic` → `level-control/status`
+- Device-Block: Name `Level-Control`, Manufacturer `DIY`, Model `ESP32-C3`
 
 Discovery-Topic-Schema:
 ```
@@ -431,7 +431,7 @@ pio device monitor --baud 115200
 
 ## Erstkonfiguration
 
-1. ESP32 einschalten → Access Point **"Salzstand-Setup"** erscheint
+1. ESP32 einschalten → Access Point **"Level-Control-Setup"** erscheint
 2. Mit dem AP verbinden (kein Passwort)
 3. Browser öffnen: `http://192.168.4.1`
 4. SSID und WLAN-Passwort eintragen → Speichern
@@ -453,7 +453,7 @@ Der VL53L1X ist ein Time-of-Flight (ToF) Laser-Distanzsensor, der deutlich präz
 - **Distanzmodus:** `Short` (bis ~1,3 m) – für typische Salzbehälter optimal.
 - **Timing-Budget:** 50 ms pro Einzelmessung.
 - **Sampling:** Median aus 5 aufeinanderfolgenden Messungen; nur Messungen mit `range_status == 0` (gültig) fließen ein.
-- **Berechnung:** `Salzstand (cm) = (Behälterhöhe + Offset) – gemessene_Distanz_cm`
+- **Berechnung:** `Level-Control (cm) = (Behälterhöhe + Offset) – gemessene_Distanz_cm`
 
 ### Kalibrierungsparameter
 
@@ -472,7 +472,7 @@ Alle Kalibrierungsparameter werden persistent im NVS gespeichert und sind über 
    ```
    offset = bekannter_Fuellstand_cm - ((behaelterhoehe + offset_aktuell) - gemessene_Distanz_cm)
    ```
-   Einfacher: Lass den Behälter leer und stelle sicher, dass `Salzstand = 0 cm`. Falls die Anzeige einen Wert ≠ 0 zeigt, passe den Offset entsprechend an (positiver Offset = Sensor sitzt weiter vom Inhalt entfernt als angenommen).
+   Einfacher: Lass den Behälter leer und stelle sicher, dass `Level-Control = 0 cm`. Falls die Anzeige einen Wert ≠ 0 zeigt, passe den Offset entsprechend an (positiver Offset = Sensor sitzt weiter vom Inhalt entfernt als angenommen).
 4. **Verifizieren** – Befülle den Behälter auf einen bekannten Pegelstand und prüfe, ob der angezeigte Wert übereinstimmt. Wiederhole Schritt 3, bis die Abweichung < 1 cm ist.
 
 ### Hinweise zur Messgenauigkeit
@@ -498,3 +498,4 @@ Alle Kalibrierungsparameter werden persistent im NVS gespeichert und sind über 
 | Serial-Diagnose | 10 Sekunden |
 | MQTT Keepalive | 30 Sekunden |
 | MQTT Buffer | 1024 Bytes |
+

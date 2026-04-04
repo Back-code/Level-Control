@@ -95,10 +95,10 @@ function getChangelogLines(previousTag) {
 fetchTags();
 
 const assets = [
-  { source: 'bootloader.bin', target: `salzstand-v${versionStr}-bootloader.bin`, kind: 'bootloader' },
-  { source: 'partitions.bin', target: `salzstand-v${versionStr}-partitions.bin`, kind: 'partitions' },
-  { source: 'firmware.bin', target: `salzstand-v${versionStr}-app.bin`, kind: 'app' },
-  { source: 'littlefs.bin', target: `salzstand-v${versionStr}-web-ui.bin`, kind: 'webui' }
+  { source: 'bootloader.bin', target: `level-control-v${versionStr}-bootloader.bin`, kind: 'bootloader' },
+  { source: 'partitions.bin', target: `level-control-v${versionStr}-partitions.bin`, kind: 'partitions' },
+  { source: 'firmware.bin', target: `level-control-v${versionStr}-app.bin`, kind: 'app' },
+  { source: 'littlefs.bin', target: `level-control-v${versionStr}-web-ui.bin`, kind: 'webui' }
 ];
 
 mkdirSync(releaseDir, { recursive: true });
@@ -156,7 +156,7 @@ manifest.signature = signManifest(manifest);
 writeFileSync(join(releaseDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
 
 const releaseNotes = [
-  `## Salzstand v${versionStr}`,
+  `## Level-Control v${versionStr}`,
   '',
   'Release-Assets für OTA und manuelles Flashen.',
   '',

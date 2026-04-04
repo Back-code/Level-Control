@@ -34,7 +34,7 @@
 namespace {
 constexpr char kLatestManifestUrl[] = "https://github.com/Back-code/Level-Control/releases/latest/download/manifest.json";
 constexpr char kLatestReleaseUrl[] = "https://github.com/Back-code/Level-Control/releases/latest";
-constexpr char kUpdateUserAgent[] = "Salzstand-OTA/1.0";
+constexpr char kUpdateUserAgent[] = "Level-Control-OTA/1.0";
 constexpr char kPasswordMask[] = "*****";
 constexpr unsigned long kMinSampleIntervalSeconds = 5UL;
 constexpr uint32_t kRestartDelayMs = 2500;
@@ -290,7 +290,7 @@ void WebServerDashboard::broadcastMqttState() {
 }
 
 std::string WebServerDashboard::getInstalledVersion() const {
-    return SALZSTAND_VERSION;
+    return LEVEL_CONTROL_VERSION;
 }
 
 std::string WebServerDashboard::getAvailableVersion(bool forceRefresh) {
@@ -521,7 +521,7 @@ void WebServerDashboard::setupRoutes() {
             Config config;
             ConfigStore::getInstance().load(config); // Load current
             config.wifi.ssid = doc["ssid"] | "";
-            config.wifi.deviceName = doc["deviceName"] | "Salzstand";
+            config.wifi.deviceName = doc["deviceName"] | "Level-Control";
             config.wifi.ntpServerPrimary = doc["ntpServerPrimary"] | "pool.ntp.org";
             config.wifi.ntpServerSecondary = doc["ntpServerSecondary"] | "time.cloudflare.com";
             std::string newWifiPassword = doc["password"] | "";
@@ -726,7 +726,7 @@ void WebServerDashboard::setupRoutes() {
             config.push.authPassword = newAuthPassword;
         }
 
-        config.push.senderName = doc["senderName"] | "Salzstand Control";
+        config.push.senderName = doc["senderName"] | "Level-Control";
         config.push.senderEmail = doc["senderEmail"] | "";
         config.push.recipientEmail = doc["recipientEmail"] | "";
         config.push.triggerPercent = doc["triggerPercent"] | 20.0f;
@@ -739,9 +739,9 @@ void WebServerDashboard::setupRoutes() {
             : normalizeReminderCycle(reminderCycle);
         config.push.reminderWeekday = normalizeReminderWeekday(doc["reminderWeekday"] | 1);
         config.push.subjectTemplate = doc["subjectTemplate"]
-            | "Salzstand Control Warnung: Stand hat {level_percent}% erreicht. Salz nachfüllen!";
+            | "Level-Control Warnung: Stand hat {level_percent}% erreicht. Salz nachfüllen!";
         config.push.bodyTemplate = doc["bodyTemplate"]
-            | "Der Füllstand hat {level_percent}% ({level_cm} cm) erreicht.\nBitte Salz nachfüllen!\nDein Salzstand Control";
+            | "Der Füllstand hat {level_percent}% ({level_cm} cm) erreicht.\nBitte Salz nachfüllen!\nDein Level-Control";
 
         if (config.push.smtpPort <= 0) config.push.smtpPort = 587;
         if (config.push.useSsl && config.push.smtpPort == 587) {
@@ -757,15 +757,15 @@ void WebServerDashboard::setupRoutes() {
         if (config.push.sendMinute < 0) config.push.sendMinute = 0;
         if (config.push.sendMinute > 59) config.push.sendMinute = 59;
         if (config.push.senderName.empty()) {
-            config.push.senderName = "Salzstand Control";
+            config.push.senderName = "Level-Control";
         }
         config.push.reminderCycle = normalizeReminderCycle(config.push.reminderCycle);
         config.push.reminderWeekday = normalizeReminderWeekday(config.push.reminderWeekday);
         if (config.push.subjectTemplate.empty()) {
-            config.push.subjectTemplate = "Salzstand Control Warnung: Stand hat {level_percent}% erreicht. Salz nachfüllen!";
+            config.push.subjectTemplate = "Level-Control Warnung: Stand hat {level_percent}% erreicht. Salz nachfüllen!";
         }
         if (config.push.bodyTemplate.empty()) {
-            config.push.bodyTemplate = "Der Füllstand hat {level_percent}% ({level_cm} cm) erreicht.\nBitte Salz nachfüllen!\nDein Salzstand Control";
+            config.push.bodyTemplate = "Der Füllstand hat {level_percent}% ({level_cm} cm) erreicht.\nBitte Salz nachfüllen!\nDein Level-Control";
         }
 
         if (!ConfigStore::getInstance().save(config)) {
@@ -827,7 +827,7 @@ void WebServerDashboard::setupRoutes() {
         request->send(statusCode, "application/json", json.c_str());
     });
 
-    // GET /api/history – liefert alle gespeicherten Salzstand-Verläufe als JSON-Array
+    // GET /api/history – liefert alle gespeicherten Level-Control-Verläufe als JSON-Array
     server_.on("/api/history", HTTP_GET, [](AsyncWebServerRequest *request) {
         const auto entries = HistoryManager::getInstance().getHistory();
         AsyncResponseStream* resp = request->beginResponseStream("application/json");
@@ -863,7 +863,7 @@ void WebServerDashboard::setupRoutes() {
         const time_t t = time(nullptr);
         struct tm* tmInfo = localtime(&t);
         char filename[64];
-        strftime(filename, sizeof(filename), "salzstand-backup-%Y-%m-%d.json", tmInfo);
+        strftime(filename, sizeof(filename), "level-control-backup-%Y-%m-%d.json", tmInfo);
 
         DynamicJsonDocument cfgDoc(3072);
         cfgDoc["behaelterhoehe"] = config.behaelterhoehe;
@@ -1379,7 +1379,7 @@ void WebServerDashboard::scheduleRestart(uint32_t delayMs) {
         vTaskDelay(pdMS_TO_TICKS(ctx->delayMs));
         delete ctx;
         ESP.restart();
-    }, "salzstand-restart", 4096, context, 1, nullptr);
+    }, "level-control-restart", 4096, context, 1, nullptr);
 
     if (created != pdPASS) {
         delete context;
@@ -1739,7 +1739,7 @@ void WebServerDashboard::startRemoteUpdateTask(const std::string& target) {
             ctx->dashboard->runRemoteUpdateTask(ctx->target);
             delete ctx;
             vTaskDelete(nullptr);
-        }, "salzstand-ota", 16384, context, 1, nullptr) != pdPASS) {
+        }, "level-control-ota", 16384, context, 1, nullptr) != pdPASS) {
         delete context;
         markUpdateFailed("OTA-Task konnte nicht gestartet werden");
     }

@@ -18,17 +18,17 @@
 #endif
 
 // ------------------------------------------------------------------ Topics
-static const char* TOPIC_STATUS          = "salzstand/status";
-static const char* TOPIC_SENSOR_STATE    = "salzstand/sensor/state";
-static const char* TOPIC_CFG_HOEHE_STATE = "salzstand/config/behaelterhoehe/state";
-static const char* TOPIC_CFG_HOEHE_SET   = "salzstand/config/behaelterhoehe/set";
-static const char* TOPIC_CFG_OFFSET_STATE = "salzstand/config/offset/state";
-static const char* TOPIC_CFG_OFFSET_SET  = "salzstand/config/offset/set";
-static const char* TOPIC_SYSTEM_STATE    = "salzstand/system/state";
-static const char* TOPIC_UPDATE_STATE      = "salzstand/update/state";
-static const char* TOPIC_UPDATE_INSTALL    = "salzstand/update/install";
-static const char* TOPIC_CFG_SAMPLE_STATE  = "salzstand/config/sampleinterval/state";
-static const char* TOPIC_CFG_SAMPLE_SET    = "salzstand/config/sampleinterval/set";
+static const char* TOPIC_STATUS          = "level-control/status";
+static const char* TOPIC_SENSOR_STATE    = "level-control/sensor/state";
+static const char* TOPIC_CFG_HOEHE_STATE = "level-control/config/behaelterhoehe/state";
+static const char* TOPIC_CFG_HOEHE_SET   = "level-control/config/behaelterhoehe/set";
+static const char* TOPIC_CFG_OFFSET_STATE = "level-control/config/offset/state";
+static const char* TOPIC_CFG_OFFSET_SET  = "level-control/config/offset/set";
+static const char* TOPIC_SYSTEM_STATE    = "level-control/system/state";
+static const char* TOPIC_UPDATE_STATE      = "level-control/update/state";
+static const char* TOPIC_UPDATE_INSTALL    = "level-control/update/install";
+static const char* TOPIC_CFG_SAMPLE_STATE  = "level-control/config/sampleinterval/state";
+static const char* TOPIC_CFG_SAMPLE_SET    = "level-control/config/sampleinterval/set";
 static constexpr unsigned long kMetadataRepublishIntervalMs = 60000UL;
 
 static std::string toLowerCopy(std::string value) {
@@ -167,7 +167,7 @@ void MqttManager::init(const char* server, uint16_t port) {
 
     // Eindeutige Geräte-ID aus MAC-Adresse
     std::string mac = WiFi.macAddress().c_str();
-    deviceId_ = "salzstand_";
+    deviceId_ = "level_control_";
     for (char c : mac) {
         if (c != ':') deviceId_ += c;
     }
@@ -375,7 +375,7 @@ void MqttManager::publishUpdateState() {
     DynamicJsonDocument doc(512);
     doc["installed_version"] = installedVersion;
     doc["latest_version"] = latestVersion;
-    doc["title"] = "Salzstand OTA";
+    doc["title"] = "Level-Control OTA";
     doc["release_url"] = dashboard.getLatestReleaseUrl(false);
     if (dashboard.isUpdateInProgress()) {
         doc["in_progress"] = true;
@@ -395,7 +395,7 @@ void MqttManager::publishDiscovery() {
     auto addDevice = [&](JsonDocument& d) {
         JsonObject dev = d.createNestedObject("device");
         dev["identifiers"][0] = deviceId_;
-        dev["name"]           = "Salzstand";
+        dev["name"]           = "Level-Control";
         dev["manufacturer"]   = "DIY";
         dev["model"]          = "ESP32-C3";
     };
@@ -427,8 +427,8 @@ void MqttManager::publishDiscovery() {
     {
         DynamicJsonDocument doc(768);
         doc["unique_id"] = deviceId_ + "_ota_update";
-        doc["name"] = "Salzstand OTA";
-        doc["title"] = "Salzstand Firmware";
+        doc["name"] = "Level-Control OTA";
+        doc["title"] = "Level-Control Firmware";
         doc["state_topic"] = TOPIC_UPDATE_STATE;
         doc["command_topic"] = TOPIC_UPDATE_INSTALL;
         doc["payload_install"] = "install";
@@ -439,11 +439,11 @@ void MqttManager::publishDiscovery() {
         send("update", "ota", doc);
     }
 
-    // --- 2. Salzstand in cm ---
+    // --- 2. Level-Control in cm ---
     {
         DynamicJsonDocument doc(512);
         doc["unique_id"]          = deviceId_ + "_distance_cm";
-        doc["name"]               = "Salzstand";
+        doc["name"]               = "Level-Control";
         doc["state_topic"]        = TOPIC_SENSOR_STATE;
         doc["value_template"]     = "{{ value_json.distance_cm | round(1) }}";
         doc["unit_of_measurement"]= "cm";
@@ -631,3 +631,4 @@ void MqttManager::publishDiscovery() {
         "MQTT HA Discovery published (" + deviceId_ + ")");
 }
     // ------------------------------------------------------------------ (discovery entities for system/state appended above)
+

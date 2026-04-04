@@ -6,7 +6,7 @@
 struct WifiConfig {
     std::string ssid;
     std::string password;
-    std::string deviceName = "Salzstand";
+    std::string deviceName = "Level-Control";
     std::string ntpServerPrimary = "pool.ntp.org";
     std::string ntpServerSecondary = "time.cloudflare.com";
 };
@@ -35,7 +35,7 @@ struct PushConfig {
     bool smtpSkipCertVerify = false;
     std::string authUser;
     std::string authPassword;
-    std::string senderName = "Salzstand Control";
+    std::string senderName = "Level-Control";
     std::string senderEmail;
     std::string recipientEmail;
     float triggerPercent = 20.0f;
@@ -43,8 +43,8 @@ struct PushConfig {
     int sendMinute = 0;
     std::string reminderCycle = "day";
     int reminderWeekday = 1;
-    std::string subjectTemplate = "Salzstand Control Warnung: Stand hat {level_percent}% erreicht. Salz nachfüllen!";
-    std::string bodyTemplate = "Der Füllstand hat {level_percent}% ({level_cm} cm) erreicht.\nBitte Salz nachfüllen!\nDein Salzstand Control";
+    std::string subjectTemplate = "Level-Control Warnung: Stand hat {level_percent}% erreicht. Salz nachfüllen!";
+    std::string bodyTemplate = "Der Füllstand hat {level_percent}% ({level_cm} cm) erreicht.\nBitte Salz nachfüllen!\nDein Level-Control";
 };
 
 struct Config {

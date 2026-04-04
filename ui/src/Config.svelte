@@ -1276,14 +1276,14 @@
 
         <p class="topic-heading">Status-Topics</p>
         <ul class="topic-list">
-          <li><code>salzstand/status</code> - online / offline (LWT)</li>
-          <li><code>salzstand/sensor/state</code> - Messwerte (JSON)</li>
-          <li><code>salzstand/config/behaelterhoehe/state</code> / <code>.../set</code></li>
-          <li><code>salzstand/config/offset/state</code> / <code>.../set</code></li>
-          <li><code>salzstand/config/sampleinterval/state</code> / <code>.../set</code></li>
-          <li><code>salzstand/system/state</code> - CPU, RAM, WiFi (JSON)</li>
-          <li><code>salzstand/update/state</code> - OTA-Status (JSON)</li>
-          <li><code>salzstand/update/install</code> - OTA starten (Befehl)</li>
+          <li><code>level-control/status</code> - online / offline (LWT)</li>
+          <li><code>level-control/sensor/state</code> - Messwerte (JSON)</li>
+          <li><code>level-control/config/behaelterhoehe/state</code> / <code>.../set</code></li>
+          <li><code>level-control/config/offset/state</code> / <code>.../set</code></li>
+          <li><code>level-control/config/sampleinterval/state</code> / <code>.../set</code></li>
+          <li><code>level-control/system/state</code> - CPU, RAM, WiFi (JSON)</li>
+          <li><code>level-control/update/state</code> - OTA-Status (JSON)</li>
+          <li><code>level-control/update/install</code> - OTA starten (Befehl)</li>
         </ul>
       </div>
     </details>

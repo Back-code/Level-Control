@@ -58,7 +58,7 @@ bool requireSetupSubnet(AsyncWebServerRequest* request) {
   const String apIp = WiFi.softAPIP().toString();
   const String staIp = WiFi.localIP().toString();
   String message = "Forbidden\n";
-  message += "Verbinde dich mit dem Setup-AP 'Salzstand-Setup' oder nutze die STA-IP im selben Subnetz.\n";
+  message += "Verbinde dich mit dem Setup-AP 'Level-Control-Setup' oder nutze die STA-IP im selben Subnetz.\n";
   message += "AP-IP: " + apIp + "\n";
   message += "STA-IP: " + staIp + "\n";
   request->send(403, "text/plain", message);
@@ -93,7 +93,7 @@ void WebServerSetup::setupRoutes() {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Salzstand Control – WiFi Setup</title>
+<title>Level-Control – WiFi Setup</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Trebuchet MS','Segoe UI',sans-serif;background:radial-gradient(circle at 20% 0%,#0f2140 0%,#0b1630 46%,#070d1f 100%);min-height:100vh;color:#e8f0ff;padding:16px}
@@ -127,7 +127,7 @@ input:focus,select:focus{outline:none;border-color:#62b8dd}
   <div class="brand">
     <span class="brand-icon"><svg viewBox="0 0 24 24"><path d="M6.25 12a1.75 1.75 0 1 1 3.5 0 1.75 1.75 0 0 1-3.5 0Zm5.2 0a.95.95 0 0 1 .95-.95A5.6 5.6 0 0 0 18 5.45a.95.95 0 1 1 1.9 0 7.5 7.5 0 0 1-7.5 7.5.95.95 0 0 1-.95-.95Zm.95 4.55a.95.95 0 0 1 0-1.9A9.2 9.2 0 0 0 21.6 5.45a.95.95 0 1 1 1.9 0c0 6.04-4.91 10.95-10.95 10.95a.95.95 0 0 1-.15 0Zm0-8.95a.95.95 0 1 1 0-1.9 1.7 1.7 0 0 0 1.7-1.7.95.95 0 1 1 1.9 0 3.6 3.6 0 0 1-3.6 3.6Z"/></svg></span>
     <div>
-      <h1>Salzstand Control</h1>
+      <h1>Level-Control</h1>
       <p class="brand-sub">WiFi Setup</p>
     </div>
   </div>
@@ -243,3 +243,4 @@ function showMsg(cls,txt){
         request->send(404, "text/plain", "Not found");
       });
 }
+

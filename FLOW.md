@@ -1,4 +1,4 @@
-# Entwicklungs-Flow – Salzstand
+# Entwicklungs-Flow – Level-Control
 
 Dieser Flow beschreibt den kompletten Entwicklungsablauf vom ersten Code bis zum GitHub Release.
 
@@ -38,7 +38,7 @@ Code schreiben
 Änderungen implementieren, dann mit dem VS Code Task committen:
 
 ```
-Terminal → Run Task → Salzstand: Commit
+Terminal → Run Task → Level-Control: Commit
 ```
 
 Oder im Chat: Ich führe den Commit automatisch nach jeder erledigten Aufgabe aus.
@@ -57,7 +57,7 @@ Oder im Chat: Ich führe den Commit automatisch nach jeder erledigten Aufgabe au
 Wenn die Änderungen auf dem ESP geprüft werden sollen:
 
 ```
-Terminal → Run Task → Salzstand: Test
+Terminal → Run Task → Level-Control: Test
 ```
 
 Oder im Chat: `*test`
@@ -79,7 +79,7 @@ Hinweis: Die angezeigte installierte Version kommt immer aus der aktuell geboote
 Wenn die Tests erfolgreich waren:
 
 ```
-Terminal → Run Task → Salzstand: Push
+Terminal → Run Task → Level-Control: Push
 ```
 
 Oder im Chat: `*push`
@@ -107,7 +107,7 @@ Oder im Chat: `*push`
 Nach dem Push läuft auf dem ESP noch die alte Version. Damit der ESP die neue Versionsnummer zeigt:
 
 ```
-Terminal → Run Task → Salzstand: Deploy
+Terminal → Run Task → Level-Control: Deploy
 ```
 
 Oder im Chat: `*deploy`
@@ -125,7 +125,7 @@ Oder im Chat: `*deploy`
 Wenn ein offizielles Release veröffentlicht werden soll:
 
 ```
-Terminal → Run Task → Salzstand: Release
+Terminal → Run Task → Level-Control: Release
 ```
 
 Oder im Chat: `*release`
@@ -140,10 +140,10 @@ Oder im Chat: `*release`
 **Wichtig:** `*release` baut nicht selbst neu. Es verpackt nur die vorhandenen Artefakte aus `.pio/build`. Nach `*push` muss daher vor `*release` mindestens einmal `*deploy` oder ein gleichwertiger frischer Build des gepushten Stands gelaufen sein.
 
 **Artefakte im Release:**
-- `salzstand-vX.Y.Z-app.bin` — Firmware
-- `salzstand-vX.Y.Z-web-ui.bin` — LittleFS (Web-UI)
-- `salzstand-vX.Y.Z-bootloader.bin`
-- `salzstand-vX.Y.Z-partitions.bin`
+- `level-control-vX.Y.Z-app.bin` — Firmware
+- `level-control-vX.Y.Z-web-ui.bin` — LittleFS (Web-UI)
+- `level-control-vX.Y.Z-bootloader.bin`
+- `level-control-vX.Y.Z-partitions.bin`
 - `manifest.json` — OTA-Manifest
 - `SHA256SUMS.txt` — Prüfsummen
 
@@ -153,11 +153,11 @@ Oder im Chat: `*release`
 
 | Befehl im Chat | VS Code Task | Aktion |
 |----------------|-------------|--------|
-| *(Copilot committet automatisch)* | `Salzstand: Commit` | Änderungen committen |
-| `*test` | `Salzstand: Test` | Aktuellen Stand auf ESP flashen (kein Bump) |
-| `*push` | `Salzstand: Push` | Bei Firmware/UI-Änderungen bumpen, sonst ohne Bump pushen |
-| `*deploy` | `Salzstand: Deploy` | Gepushte Version auf ESP flashen |
-| `*release` | `Salzstand: Release` | GitHub Release erstellen |
+| *(Copilot committet automatisch)* | `Level-Control: Commit` | Änderungen committen |
+| `*test` | `Level-Control: Test` | Aktuellen Stand auf ESP flashen (kein Bump) |
+| `*push` | `Level-Control: Push` | Bei Firmware/UI-Änderungen bumpen, sonst ohne Bump pushen |
+| `*deploy` | `Level-Control: Deploy` | Gepushte Version auf ESP flashen |
+| `*release` | `Level-Control: Release` | GitHub Release erstellen |
 
 > **Wichtig:** `*push`, `*deploy` und `*release` werden von Copilot **niemals automatisch** ausgeführt — immer nur auf expliziten Befehl.
 
@@ -200,3 +200,4 @@ scripts/
   tasks.json        ← 5 VS Code Tasks (Commit/Test/Push/Deploy/Release)
 version.json        ← { "major": 1, "minor": 1, "commit": 35 }
 ```
+

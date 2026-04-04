@@ -6,7 +6,7 @@ $releaseRoot = Join-Path $repoRoot 'release'
 Push-Location $repoRoot
 
 try {
-    # Salzstand: Release
+    # Level-Control: Release
     # Erstellt Release-Artefakte aus den zuletzt gebauten Binaries und veröffentlicht ein GitHub-Release.
     # Voraussetzung: Schritt "Deploy" wurde bereits erfolgreich ausgeführt (Firmware gebaut und geflasht).
     $version = Get-Content version.json | ConvertFrom-Json
@@ -17,14 +17,14 @@ try {
 
     $releaseArgs = @(
         'release', 'create', "v$versionStr",
-        "release/v$versionStr/salzstand-v$versionStr-app.bin",
-        "release/v$versionStr/salzstand-v$versionStr-web-ui.bin",
-        "release/v$versionStr/salzstand-v$versionStr-bootloader.bin",
-        "release/v$versionStr/salzstand-v$versionStr-partitions.bin",
+        "release/v$versionStr/level-control-v$versionStr-app.bin",
+        "release/v$versionStr/level-control-v$versionStr-web-ui.bin",
+        "release/v$versionStr/level-control-v$versionStr-bootloader.bin",
+        "release/v$versionStr/level-control-v$versionStr-partitions.bin",
         "release/v$versionStr/manifest.json",
         "release/v$versionStr/SHA256SUMS.txt",
         '--repo', 'Back-code/Level-Control',
-        '--title', "Salzstand v$versionStr",
+        '--title', "Level-Control v$versionStr",
         '--notes-file', "release/v$versionStr/release-notes.txt"
     )
     & gh @releaseArgs

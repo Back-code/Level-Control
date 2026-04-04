@@ -6,11 +6,11 @@
 
 struct HistoryEntry {
     uint32_t timestamp; ///< Unix-Zeit in Sekunden
-    float    value;     ///< Salzstand in Prozent (0..100)
+    float    value;     ///< Level-Control in Prozent (0..100)
 };
 
 /**
- * HistoryManager – speichert Salzstand-Messwerte dauerhaft in NVS.
+ * HistoryManager – speichert Level-Control-Messwerte dauerhaft in NVS.
  *
  * Historie liegt in einem separaten NVS-Namespace und bleibt damit bei
  * Firmware- und LittleFS-Uploads erhalten. Falls alte Daten noch als
@@ -92,3 +92,4 @@ private:
 };
 
 #endif // HISTORY_MANAGER_H
+

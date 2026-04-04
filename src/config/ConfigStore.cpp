@@ -56,7 +56,7 @@ std::string normalizeSensorType(const std::string& value) {
 std::string normalizeDeviceName(const std::string& value) {
     const std::string trimmed = trimCopy(value);
     if (trimmed.empty()) {
-        return "Salzstand";
+        return "Level-Control";
     }
     return trimmed;
 }
@@ -89,7 +89,7 @@ bool ConfigStore::load(Config& config) {
     config.version = doc["version"] | 1;
     config.wifi.ssid = doc["wifi"]["ssid"] | "";
     config.wifi.password = doc["wifi"]["password"] | "";
-    config.wifi.deviceName = normalizeDeviceName(doc["wifi"]["deviceName"] | "Salzstand");
+    config.wifi.deviceName = normalizeDeviceName(doc["wifi"]["deviceName"] | "Level-Control");
     config.wifi.ntpServerPrimary = normalizeNtpServer(
         doc["wifi"]["ntpServerPrimary"] | "pool.ntp.org",
         "pool.ntp.org"
@@ -117,7 +117,7 @@ bool ConfigStore::load(Config& config) {
     config.push.smtpSkipCertVerify = doc["push"]["smtpSkipCertVerify"] | true;
     config.push.authUser = doc["push"]["authUser"] | "";
     config.push.authPassword = doc["push"]["authPassword"] | "";
-    config.push.senderName = doc["push"]["senderName"] | "Salzstand Control";
+    config.push.senderName = doc["push"]["senderName"] | "Level-Control";
     config.push.senderEmail = doc["push"]["senderEmail"] | "";
     config.push.recipientEmail = doc["push"]["recipientEmail"] | "";
     config.push.triggerPercent = doc["push"]["triggerPercent"] | 20.0f;
@@ -130,9 +130,9 @@ bool ConfigStore::load(Config& config) {
         : normalizeReminderCycle(storedReminderCycle);
     config.push.reminderWeekday = normalizeReminderWeekday(doc["push"]["reminderWeekday"] | 1);
     config.push.subjectTemplate = doc["push"]["subjectTemplate"]
-        | "Salzstand Control Warnung: Stand hat {level_percent}% erreicht. Salz nachfüllen!";
+        | "Level-Control Warnung: Stand hat {level_percent}% erreicht. Salz nachfüllen!";
     config.push.bodyTemplate = doc["push"]["bodyTemplate"]
-        | "Der Füllstand hat {level_percent}% ({level_cm} cm) erreicht.\nBitte Salz nachfüllen!\nDein Salzstand Control";
+        | "Der Füllstand hat {level_percent}% ({level_cm} cm) erreicht.\nBitte Salz nachfüllen!\nDein Level-Control";
     if (config.push.smtpPort <= 0) {
         config.push.smtpPort = 587;
     }
@@ -149,15 +149,15 @@ bool ConfigStore::load(Config& config) {
         config.push.sendMinute = 0;
     }
     if (config.push.senderName.empty()) {
-        config.push.senderName = "Salzstand Control";
+        config.push.senderName = "Level-Control";
     }
     config.push.reminderCycle = normalizeReminderCycle(config.push.reminderCycle);
     config.push.reminderWeekday = normalizeReminderWeekday(config.push.reminderWeekday);
     if (config.push.subjectTemplate.empty()) {
-        config.push.subjectTemplate = "Salzstand Control Warnung: Stand hat {level_percent}% erreicht. Salz nachfüllen!";
+        config.push.subjectTemplate = "Level-Control Warnung: Stand hat {level_percent}% erreicht. Salz nachfüllen!";
     }
     if (config.push.bodyTemplate.empty()) {
-        config.push.bodyTemplate = "Der Füllstand hat {level_percent}% ({level_cm} cm) erreicht.\nBitte Salz nachfüllen!\nDein Salzstand Control";
+        config.push.bodyTemplate = "Der Füllstand hat {level_percent}% ({level_cm} cm) erreicht.\nBitte Salz nachfüllen!\nDein Level-Control";
     }
     config.behaelterhoehe = doc["behaelterhoehe"] | 95.0;
     config.offset = doc["offset"] | 0.0;
@@ -198,7 +198,7 @@ bool ConfigStore::save(const Config& config) {
     doc["push"]["smtpSkipCertVerify"] = config.push.smtpSkipCertVerify;
     doc["push"]["authUser"] = config.push.authUser;
     doc["push"]["authPassword"] = config.push.authPassword;
-    doc["push"]["senderName"] = config.push.senderName.empty() ? "Salzstand Control" : config.push.senderName;
+    doc["push"]["senderName"] = config.push.senderName.empty() ? "Level-Control" : config.push.senderName;
     doc["push"]["senderEmail"] = config.push.senderEmail;
     doc["push"]["recipientEmail"] = config.push.recipientEmail;
     doc["push"]["triggerPercent"] = config.push.triggerPercent < 0.0f
@@ -215,10 +215,10 @@ bool ConfigStore::save(const Config& config) {
     doc["push"]["reminderWeekday"] = normalizeReminderWeekday(config.push.reminderWeekday);
     doc["push"]["cycleMinutes"] = legacyMinutesFromReminderCycle(reminderCycle);
     doc["push"]["subjectTemplate"] = config.push.subjectTemplate.empty()
-        ? "Salzstand Control Warnung: Stand hat {level_percent}% erreicht. Salz nachfüllen!"
+        ? "Level-Control Warnung: Stand hat {level_percent}% erreicht. Salz nachfüllen!"
         : config.push.subjectTemplate;
     doc["push"]["bodyTemplate"] = config.push.bodyTemplate.empty()
-        ? "Der Füllstand hat {level_percent}% ({level_cm} cm) erreicht.\nBitte Salz nachfüllen!\nDein Salzstand Control"
+        ? "Der Füllstand hat {level_percent}% ({level_cm} cm) erreicht.\nBitte Salz nachfüllen!\nDein Level-Control"
         : config.push.bodyTemplate;
     doc["behaelterhoehe"] = config.behaelterhoehe;
     doc["offset"] = config.offset;

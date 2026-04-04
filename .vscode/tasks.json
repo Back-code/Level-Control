@@ -2,7 +2,7 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"label": "Salzstand: Commit",
+			"label": "Level-Control: Commit",
 			"type": "shell",
 			"group": {
 				"kind": "build",
@@ -21,7 +21,7 @@
 			"problemMatcher": []
 		},
 		{
-			"label": "Salzstand: Test",
+			"label": "Level-Control: Test",
 			"type": "shell",
 			"command": "pwsh",
 			"args": [
@@ -36,7 +36,7 @@
 			"problemMatcher": []
 		},
 		{
-			"label": "Salzstand: Push",
+			"label": "Level-Control: Push",
 			"type": "shell",
 			"command": "pwsh",
 			"args": [
@@ -51,7 +51,7 @@
 			"problemMatcher": []
 		},
 		{
-			"label": "Salzstand: Deploy",
+			"label": "Level-Control: Deploy",
 			"type": "shell",
 			"command": "pwsh",
 			"args": [
@@ -66,7 +66,7 @@
 			"problemMatcher": []
 		},
 		{
-			"label": "Salzstand: Release",
+			"label": "Level-Control: Release",
 			"type": "shell",
 			"command": "pwsh",
 			"args": [
@@ -81,7 +81,7 @@
 			"problemMatcher": []
 		},
 		{
-			"label": "Salzstand: Test OTA Release",
+			"label": "Level-Control: Test OTA Release",
 			"type": "shell",
 			"command": "pwsh",
 			"args": [

@@ -17,7 +17,7 @@
   let activeTab = 'dashboard';
   let theme = 'night';
   let lang = 'de';
-  const DATA_CACHE_KEY = 'salzstand-last-data';
+  const DATA_CACHE_KEY = 'level-control-last-data';
   let data = {
     rohdistanz: 0,
     salzstandCm: 0,
@@ -87,7 +87,7 @@
   function applyTheme(nextTheme) {
     theme = nextTheme;
     document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('salzstand-theme', theme);
+    localStorage.setItem('level-control-theme', theme);
   }
 
   function setLanguage(nextLang) {
@@ -142,7 +142,7 @@
   }
 
   onMount(() => {
-    const storedTheme = localStorage.getItem('salzstand-theme');
+    const storedTheme = localStorage.getItem('level-control-theme');
     applyTheme(storedTheme === 'day' ? 'day' : 'night');
     const storedLang = localStorage.getItem('stand-language');
     setLanguage(storedLang === 'en' ? 'en' : 'de');

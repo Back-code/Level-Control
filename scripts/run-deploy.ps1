@@ -1,4 +1,4 @@
-# Salzstand: Deploy
+# Level-Control: Deploy
 # Baut UI und Firmware mit der aktuellen (gepushten) Version
 # und flasht beides auf den ESP.
 
@@ -24,8 +24,9 @@ try {
     & $venvPython -m platformio run -t uploadfs
 
     Write-Host "Deploy v$versionStr abgeschlossen." -ForegroundColor Green
-    Write-Host "Naechster Schritt: 'Salzstand: Release' ausfuehren um ein GitHub-Release zu erstellen." -ForegroundColor Yellow
+    Write-Host "Naechster Schritt: 'Level-Control: Release' ausfuehren um ein GitHub-Release zu erstellen." -ForegroundColor Yellow
 }
 finally {
     Pop-Location
 }
+

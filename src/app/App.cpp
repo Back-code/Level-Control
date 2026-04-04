@@ -23,8 +23,8 @@ App& App::getInstance() {
 void App::init() {
     Serial.begin(115200);
     delay(100);
-    Serial.println("[Salzstand] Starting...");
-    DebugLogger::getInstance().log(LogLevel::INFO, "Starting Salzstand Sensor");
+    Serial.println("[Level-Control] Starting...");
+    DebugLogger::getInstance().log(LogLevel::INFO, "Starting Level-Control Sensor");
 
     // OTA-Rollback-Validierung so frueh wie moeglich ausfuehren.
     // Darf nicht vom WLAN-Status abhaengen, sonst kann ein frischer OTA-Boot
@@ -64,7 +64,7 @@ void App::init() {
             std::string("DEBUG_BOOT H1/H3: entering SETUP_MODE, wifiCfg.ssid_len=") + std::to_string(wifiCfg.ssid.size())
         );
         // #endregion
-        WifiManager::getInstance().startAP("Salzstand-Setup", "");
+        WifiManager::getInstance().startAP("Level-Control-Setup", "");
         WebServerSetup::getInstance().init();
         WebServerSetup::getInstance().start();
     } else {
@@ -91,7 +91,7 @@ void App::init() {
             DebugLogger::getInstance().log(LogLevel::WARN,
                 "WiFi connect failed, switching to SETUP_MODE");
             ssm.setState(SystemState::SETUP_MODE);
-            WifiManager::getInstance().startAP("Salzstand-Setup", "");
+            WifiManager::getInstance().startAP("Level-Control-Setup", "");
             WebServerSetup::getInstance().init();
             WebServerSetup::getInstance().start();
         }
@@ -103,7 +103,7 @@ void App::init() {
     HistoryManager::getInstance().init();
 
     // Sensor Test beim Start
-    Serial.println("[Salzstand] Starting sensor test...");
+    Serial.println("[Level-Control] Starting sensor test...");
     for (int i = 0; i < 5; i++) {
         SensorManager::getInstance().measure();
         delay(500);
@@ -114,7 +114,7 @@ void App::init() {
         bool valid = SensorManager::getInstance().hasValidReading();
         Serial.printf("[Test %d] raw=%.3fm cm=%.1f pct=%.1f valid=%d ping=%uus\n", i+1, raw, cm, pct, valid ? 1 : 0, ping);
     }
-    Serial.println("[Salzstand] Sensor test complete");
+    Serial.println("[Level-Control] Sensor test complete");
 }
 
 void App::loop() {
@@ -127,7 +127,7 @@ void App::loop() {
     if (updateInProgress) {
         if (now - lastSerial_ > 10000) {
             lastSerial_ = now;
-            Serial.println("[Salzstand] Update aktiv, nicht-kritische Laufzeitjobs pausiert");
+            Serial.println("[Level-Control] Update aktiv, nicht-kritische Laufzeitjobs pausiert");
         }
 
         delay(10);
@@ -179,7 +179,7 @@ void App::loop() {
         MqttManager::getInstance().publishUpdateState();
     }
 
-    // Salzstand-Verlauf alle 60 s prüfen; HistoryManager entscheidet intern ob 6h vergangen
+    // Level-Control-Verlauf alle 60 s prüfen; HistoryManager entscheidet intern ob 6h vergangen
     if (lastHistoryCheck_ == 0 || now - lastHistoryCheck_ >= 60000UL) {
         lastHistoryCheck_ = now;
         if (SensorManager::getInstance().hasValidReading()) {
@@ -201,10 +201,11 @@ void App::loop() {
     if (now - lastSerial_ > 10000) {
         lastSerial_ = now;
         SensorManager& s = SensorManager::getInstance();
-        Serial.printf("[Salzstand] raw=%.3fm cm=%.1f pct=%.1f valid=%d ping=%uus\n",
+        Serial.printf("[Level-Control] raw=%.3fm cm=%.1f pct=%.1f valid=%d ping=%uus\n",
             s.getRawDistance(), s.getDistanceCm(), s.getDistancePercent(),
             s.hasValidReading() ? 1 : 0, s.getLastPingUs());
     }
 
     delay(100);
 }
+

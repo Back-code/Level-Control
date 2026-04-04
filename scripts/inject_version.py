@@ -17,7 +17,7 @@ generated_dir.mkdir(parents=True, exist_ok=True)
 generated_header.write_text(
     "#ifndef GENERATED_VERSION_H\n"
     "#define GENERATED_VERSION_H\n"
-    f"#define SALZSTAND_VERSION \"{version_str}\"\n"
+    f"#define LEVEL_CONTROL_VERSION \"{version_str}\"\n"
     "#endif\n",
     encoding="utf-8",
 )

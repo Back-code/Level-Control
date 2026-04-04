@@ -1,4 +1,4 @@
-# Salzstand: Push
+# Level-Control: Push
 # Bumpt nur dann die Version, wenn firmware-/ui-relevante Dateien geändert wurden.
 # Bei reinen Doku/Repo-Aenderungen wird ohne Versionsbump nur Git gepusht.
 
@@ -48,7 +48,7 @@ try {
         git push --no-verify origin main
 
         Write-Host "Push abgeschlossen: v$versionStr" -ForegroundColor Green
-        Write-Host "Naechster Schritt: 'Salzstand: Deploy' fuer v$versionStr auf ESP." -ForegroundColor Yellow
+        Write-Host "Naechster Schritt: 'Level-Control: Deploy' fuer v$versionStr auf ESP." -ForegroundColor Yellow
     }
     else {
         if ($aheadCount -eq 0) {
@@ -64,3 +64,4 @@ try {
 finally {
     Pop-Location
 }
+

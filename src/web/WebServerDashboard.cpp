@@ -2295,6 +2295,17 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
     const std::string successMessage = target == "app"
         ? "App wurde erfolgreich hochgeladen"
         : "Web-UI wurde erfolgreich hochgeladen";
+    const bool deferReboot = request->hasParam("deferReboot")
+        && (request->getParam("deferReboot")->value() == "1"
+            || request->getParam("deferReboot")->value().equalsIgnoreCase("true"));
+
+    if (deferReboot) {
+        markUpdateSucceeded(successMessage + " (Neustart ausstehend)");
+        updateState_.rebootPending = false;
+        request->send(200, "application/json", (std::string("{\"status\":\"ok\",\"message\":\"") + successMessage + "\",\"deferredReboot\":true}").c_str());
+        return;
+    }
+
     markUpdateSucceeded(successMessage);
     scheduleRestart(kRestartDelayMs);
     request->send(200, "application/json", (std::string("{\"status\":\"ok\",\"message\":\"") + successMessage + "\"}").c_str());

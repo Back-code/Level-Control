@@ -11,7 +11,6 @@
   let statusCard = null;
   let appFileInput = null;
   let webUiFileInput = null;
-  let manifestFileInput = null;
 
   let manifest = null;
   let manifestError = '';
@@ -107,10 +106,11 @@
     return target === 'app' || target === 'full';
   }
 
-  function uploadFileWithProgress(target, formData) {
+  function uploadFileWithProgress(target, formData, options = {}) {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      xhr.open('POST', `/api/update/upload/${target}`);
+      const deferReboot = options.deferReboot ? '?deferReboot=1' : '';
+      xhr.open('POST', `/api/update/upload/${target}${deferReboot}`);
       xhr.responseType = 'text';
       xhr.timeout = 0;
 
@@ -406,75 +406,64 @@
     return '';
   }
 
-  function validateManifestFile(file) {
-    if (!file) {
-      return 'Bitte zuerst eine manifest.json auswählen.';
-    }
+  async function uploadLocalStep(target, fileToUpload, options = {}) {
+    const formData = new FormData();
+    formData.append('file', fileToUpload);
+    const previousVersion = displayedVersion;
+    const label = target === 'app' ? 'App' : 'Web-UI';
 
-    const lowerName = file.name.toLowerCase();
-    if (!lowerName.endsWith('.json')) {
-      return 'Es wird nur eine manifest.json akzeptiert.';
-    }
+    localUpload = { active: true, target, received: 0, total: fileToUpload.size };
 
-    if (!lowerName.includes('manifest')) {
-      return 'Bitte die signierte manifest.json aus dem Release wählen.';
-    }
-
-    return '';
-  }
-
-  async function uploadLocalManifest(file) {
-    if (isBusy()) {
-      return;
-    }
-
-    const error = validateManifestFile(file);
-    if (error) {
-      showNotice('error', error);
-      return;
-    }
-
+    let payload;
     try {
-      const rawManifest = await file.text();
-      const response = await fetch('/api/update/manifest/local', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: rawManifest
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        showNotice('error', payload.error || 'Offline-Manifest konnte nicht geladen werden');
-        return;
+      payload = await uploadFileWithProgress(target, formData, options);
+    } catch (errorReason) {
+      const isTransportFailure = errorReason?.message === 'Netzwerkfehler beim Upload'
+        || errorReason?.message === 'Upload-Request hat ein Timeout erreicht';
+      if (isTransportFailure && !options.deferReboot) {
+        const recovery = await recoverAfterUploadTransportError(target, previousVersion);
+        if (!recovery.ok) {
+          throw new Error(recovery.message);
+        }
+        return { status: 'ok', message: recovery.message };
       }
 
       await loadStatus();
-      showNotice('success', payload.message || `Offline-Manifest v${payload.version} wurde geladen.`);
-    } catch (_) {
-      showNotice('error', 'Offline-Manifest konnte nicht geladen werden');
+      throw new Error(status.message || errorReason.message || `${label}-Upload fehlgeschlagen`);
     }
+
+    return payload;
   }
 
-  async function uploadLocal(target, fileToUpload = null) {
+  async function startLocalUpdate() {
     if (isBusy()) {
       return;
     }
 
-    // Wenn fileToUpload nicht übergeben wird, aus appFile/webUiFile lesen
-    if (!fileToUpload) {
-      fileToUpload = target === 'app' ? appFile : webUiFile;
-    }
+    const plan = [];
+    if (webUiFile) plan.push({ target: 'webui', file: webUiFile });
+    if (appFile) plan.push({ target: 'app', file: appFile });
 
-    const error = validateLocalFile(target, fileToUpload);
-    if (error) {
-      showNotice('error', error);
+    if (plan.length === 0) {
+      showNotice('error', 'Bitte App.bin und/oder Web-UI.bin auswählen.');
       return;
     }
 
-    const label = target === 'app' ? 'App' : 'Web-UI';
+    for (const step of plan) {
+      const error = validateLocalFile(step.target, step.file);
+      if (error) {
+        showNotice('error', error);
+        return;
+      }
+    }
+
+    const scope = plan.length === 2
+      ? 'App und Web-UI'
+      : plan[0].target === 'app' ? 'App' : 'Web-UI';
     const confirmed = await confirmAction({
-      title: 'Lokales Update installieren?',
-      message: `Soll die lokale ${label}-Datei jetzt installiert werden?`,
-      confirmLabel: `${label} installieren`,
+      title: 'Lokales Update starten?',
+      message: `Soll das lokale Update für ${scope} jetzt gestartet werden?`,
+      confirmLabel: 'Update starten',
       cancelLabel: 'Abbrechen'
     });
 
@@ -482,42 +471,29 @@
       return;
     }
 
-    const formData = new FormData();
-    formData.append('file', fileToUpload);
-    const previousVersion = displayedVersion;
-
-    localUpload = { active: true, target, received: 0, total: fileToUpload.size };
-
-    // Zur Status-Card scrollen
     if (statusCard) {
       statusCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
-    let payload;
     try {
-      payload = await uploadFileWithProgress(target, formData);
-    } catch (errorReason) {
-      const isTransportFailure = errorReason?.message === 'Netzwerkfehler beim Upload'
-        || errorReason?.message === 'Upload-Request hat ein Timeout erreicht';
-      if (isTransportFailure) {
-        const recovery = await recoverAfterUploadTransportError(target, previousVersion);
-        showNotice(recovery.ok ? 'success' : 'error', recovery.message);
-        return;
+      for (let index = 0; index < plan.length; index += 1) {
+        const step = plan[index];
+        const isLast = index === plan.length - 1;
+        await uploadLocalStep(step.target, step.file, { deferReboot: !isLast });
+        await loadStatus();
       }
 
-      await loadStatus();
-      showNotice('error', status.message || errorReason.message || `${label}-Upload fehlgeschlagen`);
-      return;
+      const endLabel = plan.length === 2 ? 'App und Web-UI' : (plan[0].target === 'app' ? 'App' : 'Web-UI');
+      showNotice('success', `${endLabel} wurden erfolgreich geprüft und installiert. Gerät startet neu.`);
+      appFile = null;
+      webUiFile = null;
+    } catch (error) {
+      showNotice('error', error?.message || 'Lokales Update fehlgeschlagen');
     }
-
-    showNotice('success', payload.message || `${label} wurde erfolgreich hochgeladen. Gerät startet neu.`);
-    await loadStatus();
   }
 
   function triggerFileSelect(target) {
-    if (target === 'manifest') {
-      manifestFileInput?.click();
-    } else if (target === 'app') {
+    if (target === 'app') {
       appFileInput?.click();
     } else {
       webUiFileInput?.click();
@@ -531,17 +507,13 @@
         return;
       }
 
-      if (target === 'manifest') {
-        uploadLocalManifest(file);
-        event.currentTarget.value = '';
-        return;
-      }
-
       // Speichern für spätere Verwendung
       if (target === 'app') {
         appFile = file;
+        showNotice('success', `App-Datei ausgewählt: ${file.name}`);
       } else {
         webUiFile = file;
+        showNotice('success', `Web-UI-Datei ausgewählt: ${file.name}`);
       }
 
       // Zur Status-Card scrollen
@@ -549,8 +521,7 @@
         statusCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
 
-      // Direkt mit der ausgewählten Datei uploadLocal aufrufen
-      uploadLocal(target, file);
+      event.currentTarget.value = '';
     };
   }
 
@@ -564,6 +535,10 @@
   $: repoStatus = getRepoUpdateStatus(manifest, displayedVersion);
   $: currentReleaseUrl = `https://github.com/Back-code/Level-Control/releases/tag/v${displayedVersion}`;
   $: anyBusy = status.inProgress || localUpload.active;
+  $: localStartDisabled = anyBusy || (!appFile && !webUiFile);
+  $: localSelectionLabel = [appFile ? `App: ${appFile.name}` : '', webUiFile ? `Web-UI: ${webUiFile.name}` : '']
+    .filter(Boolean)
+    .join(' | ');
   $: showResetAction = status.canReset && !localUpload.active;
   $: pendingVersionLabel = status.pendingVersion && isFirmwareLikeTarget(status.target) ? status.pendingVersion : '';
 
@@ -675,16 +650,9 @@
   <article class="action-card upload-card">
     <span class="eyebrow">2. Lokal</span>
     <h3>Updates hochladen</h3>
-    <p>Laden Sie zuerst die signierte manifest.json aus dem Release. Danach können App- und Web-UI-Binaries ohne Internetverbindung lokal geprüft und installiert werden.</p>
+    <p>Wählen Sie App.bin und/oder Web-UI.bin aus und starten Sie das lokale Update einmalig. Beide Artefakte werden geprüft und danach in einem Durchlauf installiert.</p>
     
     <!-- Hidden file inputs -->
-    <input 
-      type="file" 
-      accept=".json,application/json" 
-      bind:this={manifestFileInput}
-      style="display:none"
-      on:change={handleFileSelected('manifest')}
-    />
     <input 
       type="file" 
       accept=".bin" 
@@ -702,21 +670,21 @@
     
     <!-- Action buttons -->
     <div class="button-group">
-      <button on:click={() => triggerFileSelect('manifest')} disabled={anyBusy}>
-        manifest.json laden
-      </button>
       <button on:click={() => triggerFileSelect('app')} disabled={anyBusy}>
         App.bin wählen
       </button>
       <button on:click={() => triggerFileSelect('webui')} disabled={anyBusy}>
         Web-UI.bin wählen
       </button>
+      <button on:click={startLocalUpdate} disabled={localStartDisabled}>
+        Lokales Update starten
+      </button>
     </div>
 
-    {#if status.localManifestLoaded}
-      <div class="status-badge success">✓ Offline-Manifest v{status.localManifestVersion} geladen: {localManifestTargetsLabel()}</div>
+    {#if localSelectionLabel}
+      <div class="status-badge success">✓ Auswahl: {localSelectionLabel}</div>
     {:else}
-      <div class="status-badge info">⊘ Noch kein Offline-Manifest geladen</div>
+      <div class="status-badge info">⊘ Noch keine Datei ausgewählt</div>
     {/if}
     
     <!-- Upload progress indicators -->

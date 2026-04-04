@@ -130,14 +130,16 @@ Terminal → Run Task → Level-Control: Release
 
 Oder im Chat: `*release`
 
-**Voraussetzung:** `*deploy` wurde bereits erfolgreich durchgeführt oder der gepushte Stand wurde direkt danach frisch gebaut.
+**Voraussetzung:** `*push` wurde bereits erfolgreich durchgeführt.
 
 **Was passiert:**
+- Web-UI frisch bauen (`npm --prefix ui run build`)
+- Firmware und LittleFS frisch bauen (`platformio run` + `platformio run -t buildfs`)
 - Release-Artefakte packen (`node scripts/prepare-release.js`)
 - GitHub Release erstellen mit allen Binaries (`gh release create vX.Y.Z`)
 - Lokalen `release/`-Ordner wieder aufräumen
 
-**Wichtig:** `*release` baut nicht selbst neu. Es verpackt nur die vorhandenen Artefakte aus `.pio/build`. Nach `*push` muss daher vor `*release` mindestens einmal `*deploy` oder ein gleichwertiger frischer Build des gepushten Stands gelaufen sein.
+**Wichtig:** `*release` baut die benötigten Artefakte jetzt selbst neu und nutzt dadurch immer den aktuellen Versionsstand aus `version.json`.
 
 **Artefakte im Release:**
 - `level-control-vX.Y.Z-app.bin` — Firmware

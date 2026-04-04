@@ -7,11 +7,21 @@ Push-Location $repoRoot
 
 try {
     # Level-Control: Release
-    # Erstellt Release-Artefakte aus den zuletzt gebauten Binaries und veröffentlicht ein GitHub-Release.
-    # Voraussetzung: Schritt "Deploy" wurde bereits erfolgreich ausgeführt (Firmware gebaut und geflasht).
+    # Baut Firmware + LittleFS frisch fuer die aktuelle Version,
+    # erstellt dann Release-Artefakte und veröffentlicht ein GitHub-Release.
     $version = Get-Content version.json | ConvertFrom-Json
     $versionStr = "$($version.major).$($version.minor).$($version.commit)"
     Write-Host "Erstelle GitHub-Release v$versionStr..." -ForegroundColor Cyan
+
+    $venvPython = Join-Path $repoRoot ".venv\Scripts\python.exe"
+    if (-not (Test-Path $venvPython)) {
+        throw "Python aus .venv nicht gefunden: $venvPython"
+    }
+
+    Write-Host "Baue Release-Artefakte frisch fuer v$versionStr..." -ForegroundColor Cyan
+    npm --prefix ui run build
+    & $venvPython -m platformio run
+    & $venvPython -m platformio run -t buildfs
 
     node scripts/prepare-release.js
 

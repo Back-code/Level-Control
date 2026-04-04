@@ -5,6 +5,7 @@
 #include <AsyncWebSocket.h>
 #include <string>
 #include <esp_partition.h>
+#include <mbedtls/sha256.h>
 #include "SensorManager.h"
 #include "DebugLogger.h"
 
@@ -68,8 +69,11 @@ private:
     bool uploadFailed_ = false;
     bool restartScheduled_ = false;
     bool littleFsMounted_ = false;
+    bool uploadShaActive_ = false;
     String uploadTarget_;
     String uploadFilename_;
+    std::string uploadExpectedSha_;
+    mbedtls_sha256_context uploadShaContext_;
     const esp_partition_t* uploadTargetPartition_ = nullptr;
 
     void setupRoutes();

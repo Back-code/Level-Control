@@ -100,7 +100,7 @@
       const xhr = new XMLHttpRequest();
       xhr.open('POST', `/api/update/upload/${target}`);
       xhr.responseType = 'text';
-      xhr.timeout = 300000;
+      xhr.timeout = 0;
 
       xhr.upload.onprogress = (event) => {
         if (!event.lengthComputable) {
@@ -607,7 +607,7 @@
   <article class="action-card upload-card">
     <span class="eyebrow">2. Lokal</span>
     <h3>Updates hochladen</h3>
-    <p>Wählen Sie eine gültige Binärdatei (.bin).<br />Bootloader- und Partitionsdateien sind nicht erlaubt.</p>
+    <p>Wählen Sie eine gültige Binärdatei (.bin).<br />Die Datei wird gegen das signierte Release-Manifest geprüft. Nur signierte App-/Web-UI-Artefakte sind erlaubt.</p>
     
     <!-- Hidden file inputs -->
     <input 

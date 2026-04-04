@@ -1312,8 +1312,13 @@ void WebServerDashboard::clearUploadSession(bool abortUpdate) {
     uploadFailed_ = false;
     uploadTarget_ = "";
     uploadFilename_ = "";
+    uploadExpectedSha_.clear();
     uploadTargetPartition_ = nullptr;
     uploadLastChunkMs_ = 0;
+    if (uploadShaActive_) {
+        mbedtls_sha256_free(&uploadShaContext_);
+        uploadShaActive_ = false;
+    }
 
     if (shouldRemountFs) {
         ensureLittleFsMounted();
@@ -2010,13 +2015,44 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
             LittleFS.end();
         }
 
+        // Erwartete SHA aus signiertem Manifest laden: nur offiziell signierte Artefakte erlauben.
+        std::string manifestErr;
+        if (!refreshManifestCache(false, manifestErr)) {
+            uploadFailed_ = true;
+            markUpdateFailed(std::string("Signiertes Manifest konnte nicht geladen werden: ") + manifestErr);
+            request->send(503, "application/json", (std::string("{\"error\":\"") + updateState_.message + "\"}").c_str());
+            return;
+        }
+
+        uploadExpectedSha_ = target == "app" ? cachedManifest_.app.sha256 : cachedManifest_.webui.sha256;
+        if (uploadExpectedSha_.empty()) {
+            uploadFailed_ = true;
+            markUpdateFailed(target == "app"
+                ? "Kein signiertes App-Asset im Manifest gefunden"
+                : "Kein signiertes Web-UI-Asset im Manifest gefunden");
+            request->send(400, "application/json", (std::string("{\"error\":\"") + updateState_.message + "\"}").c_str());
+            return;
+        }
+
+        mbedtls_sha256_init(&uploadShaContext_);
+        if (mbedtls_sha256_starts_ret(&uploadShaContext_, 0) != 0) {
+            uploadFailed_ = true;
+            mbedtls_sha256_free(&uploadShaContext_);
+            markUpdateFailed("SHA256-Kontext konnte nicht initialisiert werden");
+            request->send(500, "application/json", (std::string("{\"error\":\"") + updateState_.message + "\"}").c_str());
+            return;
+        }
+        uploadShaActive_ = true;
+
         // Für App-Uploads die Ziel-OTA-Partition bereits vor Beginn ermitteln
         uploadTargetPartition_ = nullptr;
         if (target == "app") {
             uploadTargetPartition_ = esp_ota_get_next_update_partition(nullptr);
         }
 
-        if (!Update.begin(UPDATE_SIZE_UNKNOWN, target == "app" ? U_FLASH : U_SPIFFS)) {
+        const size_t uploadSize = request->contentLength();
+        const size_t beginSize = uploadSize > 0 ? uploadSize : UPDATE_SIZE_UNKNOWN;
+        if (!Update.begin(beginSize, target == "app" ? U_FLASH : U_SPIFFS)) {
             uploadFailed_ = true;
             markUpdateFailed(Update.errorString());
             request->send(500, "application/json", (std::string("{\"error\":\"") + Update.errorString() + "\"}").c_str());
@@ -2058,6 +2094,19 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
 
     if (!uploadFailed_ && len > 0) {
         uploadLastChunkMs_ = millis();
+        if (uploadShaActive_ && mbedtls_sha256_update_ret(&uploadShaContext_, data, len) != 0) {
+            uploadFailed_ = true;
+            Update.abort();
+            uploadTargetPartition_ = nullptr;
+            if (target == "webui") {
+                LittleFS.begin();
+            }
+            markUpdateFailed("SHA256-Berechnung fehlgeschlagen");
+        }
+    }
+
+    if (!uploadFailed_ && len > 0) {
+        uploadLastChunkMs_ = millis();
         if (Update.write(data, len) != len) {
             uploadFailed_ = true;
             Update.abort();
@@ -2091,6 +2140,37 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
         markUpdateFailed(target == "app"
             ? "App-Datei ist für ein ESP32-Image unplausibel klein"
             : "Web-UI-Datei ist unplausibel klein");
+        request->send(400, "application/json", (std::string("{\"error\":\"") + updateState_.message + "\"}").c_str());
+        return;
+    }
+
+    setUpdatePhase("verifying", "Signatur wird geprüft", finalSize, request->contentLength());
+    unsigned char uploadSha[32];
+    if (!uploadShaActive_ || mbedtls_sha256_finish_ret(&uploadShaContext_, uploadSha) != 0) {
+        if (uploadShaActive_) {
+            mbedtls_sha256_free(&uploadShaContext_);
+            uploadShaActive_ = false;
+        }
+        Update.abort();
+        uploadTargetPartition_ = nullptr;
+        if (target == "webui") {
+            LittleFS.begin();
+        }
+        markUpdateFailed("Signaturprüfung fehlgeschlagen");
+        request->send(400, "application/json", (std::string("{\"error\":\"") + updateState_.message + "\"}").c_str());
+        return;
+    }
+    mbedtls_sha256_free(&uploadShaContext_);
+    uploadShaActive_ = false;
+
+    const std::string uploadShaHex = bytesToHex(uploadSha, sizeof(uploadSha));
+    if (!uploadExpectedSha_.empty() && uploadShaHex != uploadExpectedSha_) {
+        Update.abort();
+        uploadTargetPartition_ = nullptr;
+        if (target == "webui") {
+            LittleFS.begin();
+        }
+        markUpdateFailed("Signaturprüfung fehlgeschlagen: Datei passt nicht zum signierten Manifest");
         request->send(400, "application/json", (std::string("{\"error\":\"") + updateState_.message + "\"}").c_str());
         return;
     }

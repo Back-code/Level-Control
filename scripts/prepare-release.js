@@ -12,42 +12,35 @@ const version = JSON.parse(readFileSync(join(root, 'version.json'), 'utf8'));
 const versionStr = `${Number(version.major) || 0}.${Number(version.minor) || 0}.${Number(version.commit) || 0}`;
 const releaseDir = join(root, 'release', `v${versionStr}`);
 const privateKeyPath = process.env.RELEASE_SIGNING_PRIVATE_KEY || join(root, 'signing', 'release_private.pem');
+const EMBEDDED_SIG_MAGIC = Buffer.from('LCSIGV1!', 'ascii');
+const EMBEDDED_SIG_BYTES = 72;
 
-function buildManifestSigningPayload(manifest) {
-  const app = manifest.assets.app;
-  const webui = manifest.assets.webui;
-  return [
-    `version=${manifest.version}`,
-    `releaseUrl=${manifest.releaseUrl}`,
-    `app.name=${app.name}`,
-    `app.url=${app.url}`,
-    `app.sha256=${app.sha256}`,
-    `app.size=${app.size}`,
-    `webui.name=${webui.name}`,
-    `webui.url=${webui.url}`,
-    `webui.sha256=${webui.sha256}`,
-    `webui.size=${webui.size}`
-  ].join('\n');
-}
-
-function signManifest(manifest) {
+function loadPrivateKeyPem() {
   if (!existsSync(privateKeyPath)) {
     throw new Error(
       `Signatur-Schlüssel fehlt: ${privateKeyPath}\n` +
       'Bitte zuerst ausführen: node scripts/generate-release-signing-keys.js'
     );
   }
+  return readFileSync(privateKeyPath, 'utf8');
+}
 
-  const privateKeyPem = readFileSync(privateKeyPath, 'utf8');
-  const payload = buildManifestSigningPayload(manifest);
+function signBinaryPayload(buffer, privateKeyPem) {
   const signer = createSign('SHA256');
-  signer.update(payload);
+  signer.update(buffer);
   signer.end();
 
-  return {
-    algorithm: 'ECDSA_P256_SHA256',
-    value: signer.sign(privateKeyPem, 'base64')
-  };
+  const signature = signer.sign(privateKeyPem);
+  if (signature.length === 0 || signature.length > EMBEDDED_SIG_BYTES) {
+    throw new Error(`Signatur-Länge ${signature.length} Byte ist ungültig (max ${EMBEDDED_SIG_BYTES})`);
+  }
+
+  const trailer = Buffer.alloc(EMBEDDED_SIG_MAGIC.length + 1 + EMBEDDED_SIG_BYTES, 0);
+  EMBEDDED_SIG_MAGIC.copy(trailer, 0);
+  trailer.writeUInt8(signature.length, EMBEDDED_SIG_MAGIC.length);
+  signature.copy(trailer, EMBEDDED_SIG_MAGIC.length + 1);
+
+  return Buffer.concat([buffer, trailer]);
 }
 
 function runGit(args) {
@@ -102,6 +95,7 @@ const assets = [
 ];
 
 mkdirSync(releaseDir, { recursive: true });
+const privateKeyPem = loadPrivateKeyPem();
 
 const copiedAssets = assets.map((asset) => {
   const sourcePath = join(buildDir, asset.source);
@@ -109,8 +103,15 @@ const copiedAssets = assets.map((asset) => {
   if (!existsSync(sourcePath)) {
     throw new Error(`Fehlendes Build-Artefakt: ${asset.source}`);
   }
+
   copyFileSync(sourcePath, targetPath);
-  const buffer = readFileSync(targetPath);
+  let buffer = readFileSync(targetPath);
+
+  if (asset.kind === 'app' || asset.kind === 'webui') {
+    buffer = signBinaryPayload(buffer, privateKeyPem);
+    writeFileSync(targetPath, buffer);
+  }
+
   const sha256 = createHash('sha256').update(buffer).digest('hex');
   return {
     ...asset,
@@ -125,35 +126,11 @@ const sums = copiedAssets
   .join('\n') + '\n';
 writeFileSync(join(releaseDir, 'SHA256SUMS.txt'), sums);
 
-const app = copiedAssets.find((asset) => asset.kind === 'app');
-const webui = copiedAssets.find((asset) => asset.kind === 'webui');
 const currentTag = `v${versionStr}`;
 const previousTag = getPreviousTag(currentTag);
 const changelogLines = getChangelogLines(previousTag);
-
-const manifest = {
-  version: versionStr,
-  releaseUrl: `https://github.com/Back-code/Level-Control/releases/tag/v${versionStr}`,
-  assets: {
-    app: {
-      name: app.target,
-      url: `https://github.com/Back-code/Level-Control/releases/download/v${versionStr}/${app.target}`,
-      sha256: app.sha256,
-      size: app.size
-    },
-    webui: {
-      name: webui.target,
-      url: `https://github.com/Back-code/Level-Control/releases/download/v${versionStr}/${webui.target}`,
-      sha256: webui.sha256,
-      size: webui.size
-    }
-  },
-  signature: null
-};
-
-manifest.signature = signManifest(manifest);
-
-writeFileSync(join(releaseDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
+const app = copiedAssets.find((asset) => asset.kind === 'app');
+const webui = copiedAssets.find((asset) => asset.kind === 'webui');
 
 const releaseNotes = [
   `## Level-Control v${versionStr}`,
@@ -168,16 +145,15 @@ const releaseNotes = [
   `- ${webui.target}`,
   `- ${copiedAssets.find((asset) => asset.kind === 'bootloader').target}`,
   `- ${copiedAssets.find((asset) => asset.kind === 'partitions').target}`,
-  '- manifest.json',
   '- SHA256SUMS.txt',
   '',
   'Hinweis:',
-  'Für OTA werden app.bin, web-ui.bin und manifest.json verwendet.',
+  `App/Web-UI enthalten einen eingebetteten Signatur-Trailer (${EMBEDDED_SIG_MAGIC.toString('ascii')}, ${EMBEDDED_SIG_BYTES} Bytes Signaturfeld).`,
+  'Die Firmware prüft diese Signatur direkt am Dateiinhalt vor dem Flashen.',
   'Für vollständiges Recovery per Kabel stehen zusätzlich bootloader.bin und partitions.bin bereit.',
   '',
   'Standard-Checks vor Veröffentlichung:',
   '- App und LittleFS erfolgreich gebaut',
-  '- manifest.json verweist auf denselben Tag',
   '- SHA256SUMS.txt liegt bei',
   '- OTA-Test aus der Web-UI gegen das veröffentlichte Release durchgeführt'
 ].join('\n') + '\n';

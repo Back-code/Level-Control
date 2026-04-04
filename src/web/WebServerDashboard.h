@@ -4,6 +4,7 @@
 #include <ESPAsyncWebServer.h>
 #include <AsyncWebSocket.h>
 #include <string>
+#include <vector>
 #include <esp_partition.h>
 #include <mbedtls/sha256.h>
 #include "SensorManager.h"
@@ -30,7 +31,6 @@ private:
     struct ManifestAsset {
         std::string name;
         std::string url;
-        std::string sha256;
         size_t size = 0;
     };
 
@@ -39,8 +39,6 @@ private:
         std::string releaseUrl;
         ManifestAsset app;
         ManifestAsset webui;
-        std::string signatureAlgorithm;
-        std::string signatureValue;
         bool valid = false;
     };
 
@@ -63,7 +61,6 @@ private:
     AsyncWebSocket ws_;
     UpdateState updateState_;
     ReleaseManifest cachedManifest_;
-    ReleaseManifest localManifest_;
     std::string manifestError_;
     unsigned long lastManifestCheckMs_ = 0;
     bool uploadActive_ = false;
@@ -73,8 +70,8 @@ private:
     bool uploadShaActive_ = false;
     String uploadTarget_;
     String uploadFilename_;
-    std::string uploadExpectedSha_;
     mbedtls_sha256_context uploadShaContext_;
+    std::vector<uint8_t> uploadTailBuffer_;
     const esp_partition_t* uploadTargetPartition_ = nullptr;
 
     void setupRoutes();
@@ -93,12 +90,9 @@ private:
     void sendUpdateStatus(AsyncWebServerRequest *request);
     void sendUpdateManifest(AsyncWebServerRequest *request);
     bool fetchLatestManifest(ReleaseManifest& manifest, std::string& rawManifest, std::string& error);
-    bool parseReleaseManifest(const std::string& rawManifest, ReleaseManifest& manifest, std::string& error) const;
-    bool importLocalManifest(const std::string& rawManifest, std::string& error);
-    const ReleaseManifest* resolveUploadManifest(std::string& error);
+    bool parseLatestReleaseInfo(const std::string& rawJson, ReleaseManifest& manifest, std::string& error) const;
     bool refreshManifestCache(bool forceRefresh, std::string& error);
-    std::string buildManifestSigningPayload(const ReleaseManifest& manifest) const;
-    bool verifyManifestSignature(const ReleaseManifest& manifest, std::string& error) const;
+    bool verifyDetachedFileSignature(const unsigned char* hash, size_t hashLen, const uint8_t* signature, size_t signatureLen, std::string& error) const;
     std::string resolveUpdateTarget(const ReleaseManifest& manifest, const std::string& requestedTarget, std::string& error) const;
     void startRemoteUpdateTask(const std::string& target);
     void runRemoteUpdateTask(const std::string& target);

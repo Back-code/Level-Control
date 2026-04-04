@@ -32,10 +32,6 @@
     appMaxSize: 0,
     firmwareMaxSize: 0,
     webuiMaxSize: 0,
-    localManifestLoaded: false,
-    localManifestVersion: '',
-    localManifestHasApp: false,
-    localManifestHasWebui: false,
     lastResetReason: '',
     lastResetReasonCode: 0
   };
@@ -89,13 +85,6 @@
 
   function isBusy() {
     return status.inProgress || localUpload.active;
-  }
-
-  function localManifestTargetsLabel() {
-    const targets = [];
-    if (status.localManifestHasApp) targets.push('App');
-    if (status.localManifestHasWebui) targets.push('Web-UI');
-    return targets.length ? targets.join(' + ') : 'keine Assets';
   }
 
   function delay(ms) {

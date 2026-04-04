@@ -17,7 +17,6 @@
 #include <esp_ota_ops.h>
 #include <esp_partition.h>
 #include <esp_system.h>
-#include <mbedtls/base64.h>
 #include <mbedtls/md.h>
 #include <mbedtls/pk.h>
 #include <mbedtls/sha256.h>
@@ -32,7 +31,7 @@
 #include "WifiManager.h"
 
 namespace {
-constexpr char kLatestManifestUrl[] = "https://github.com/Back-code/Level-Control/releases/latest/download/manifest.json";
+constexpr char kLatestReleaseApiUrl[] = "https://api.github.com/repos/Back-code/Level-Control/releases/latest";
 constexpr char kLatestReleaseUrl[] = "https://github.com/Back-code/Level-Control/releases/latest";
 constexpr char kUpdateUserAgent[] = "Level-Control-OTA/1.0";
 constexpr char kPasswordMask[] = "*****";
@@ -41,7 +40,9 @@ constexpr uint32_t kRestartDelayMs = 2500;
 constexpr size_t kUploadBufferSize = 4096;
 constexpr unsigned long kManifestCacheTtlMs = 300000;
 constexpr unsigned long kUploadStallTimeoutMs = 300000;
-constexpr char kManifestSignatureAlgorithm[] = "ECDSA_P256_SHA256";
+constexpr size_t kEmbeddedSigBytes = 72;
+constexpr size_t kEmbeddedSigTrailerSize = 8 + 1 + kEmbeddedSigBytes;
+const uint8_t kEmbeddedSigMagic[8] = { 'L', 'C', 'S', 'I', 'G', 'V', '1', '!' };
 
 bool mountLittleFsWithKnownLabels() {
     // Custom partitions often use label "littlefs"; Arduino default is "spiffs".
@@ -83,6 +84,13 @@ bool parseVersion(const std::string& version, int& major, int& minor, int& patch
 
 bool isHttpsUrl(const std::string& url) {
     return url.rfind("https://", 0) == 0;
+}
+
+std::string normalizeVersionTag(std::string value) {
+    if (!value.empty() && (value[0] == 'v' || value[0] == 'V')) {
+        value.erase(0, 1);
+    }
+    return value;
 }
 
 std::string bytesToHex(const unsigned char *data, size_t length) {
@@ -1198,54 +1206,6 @@ void WebServerDashboard::setupUpdateRoutes() {
         sendUpdateManifest(request);
     });
 
-    server_.on("/api/update/manifest/local", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL,
-        [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-        auto *body = static_cast<std::string*>(request->_tempObject);
-        if (index == 0) {
-            delete body;
-            body = new std::string();
-            body->reserve(total);
-            request->_tempObject = body;
-        }
-        if (body == nullptr) {
-            body = new std::string();
-            request->_tempObject = body;
-        }
-        body->append(reinterpret_cast<const char*>(data), len);
-
-        if (index + len != total) {
-            return;
-        }
-
-        recoverStuckUploadIfNeeded();
-        if (updateState_.inProgress || uploadActive_) {
-            request->send(409, "application/json", "{\"error\":\"Update läuft bereits\"}");
-            delete body;
-            request->_tempObject = nullptr;
-            return;
-        }
-
-        std::string error;
-        if (!importLocalManifest(*body, error)) {
-            request->send(400, "application/json", (std::string("{\"error\":\"") + error + "\"}").c_str());
-            delete body;
-            request->_tempObject = nullptr;
-            return;
-        }
-
-        DynamicJsonDocument doc(256);
-        doc["status"] = "ok";
-        doc["message"] = "Offline-Manifest wurde geprüft und lokal gespeichert";
-        doc["version"] = localManifest_.version;
-        doc["hasApp"] = !localManifest_.app.sha256.empty();
-        doc["hasWebui"] = !localManifest_.webui.sha256.empty();
-        std::string json;
-        serializeJson(doc, json);
-        request->send(200, "application/json", json.c_str());
-        delete body;
-        request->_tempObject = nullptr;
-    });
-
     server_.on("/api/update/repo", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL,
         [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
         auto *body = static_cast<std::string*>(request->_tempObject);
@@ -1360,7 +1320,7 @@ void WebServerDashboard::clearUploadSession(bool abortUpdate) {
     uploadFailed_ = false;
     uploadTarget_ = "";
     uploadFilename_ = "";
-    uploadExpectedSha_.clear();
+    uploadTailBuffer_.clear();
     uploadTargetPartition_ = nullptr;
     uploadLastChunkMs_ = 0;
     if (uploadShaActive_) {
@@ -1471,11 +1431,7 @@ void WebServerDashboard::sendUpdateStatus(AsyncWebServerRequest *request) {
     doc["appMaxSize"] = getAppPartitionSize();
     doc["firmwareMaxSize"] = getAppPartitionSize();
     doc["webuiMaxSize"] = getFilesystemPartitionSize();
-    doc["manifestUrl"] = kLatestManifestUrl;
-    doc["localManifestLoaded"] = localManifest_.valid;
-    doc["localManifestVersion"] = localManifest_.valid ? localManifest_.version : "";
-    doc["localManifestHasApp"] = localManifest_.valid && !localManifest_.app.sha256.empty();
-    doc["localManifestHasWebui"] = localManifest_.valid && !localManifest_.webui.sha256.empty();
+    doc["manifestUrl"] = kLatestReleaseApiUrl;
 
     const esp_partition_t* runningPartition = esp_ota_get_running_partition();
     const esp_partition_t* bootPartition = esp_ota_get_boot_partition();
@@ -1516,7 +1472,7 @@ void WebServerDashboard::sendUpdateManifest(AsyncWebServerRequest *request) {
         lastManifestCheckMs_ = millis();
         DynamicJsonDocument doc(256);
         doc["error"] = error;
-        doc["manifestUrl"] = kLatestManifestUrl;
+        doc["manifestUrl"] = kLatestReleaseApiUrl;
         std::string json;
         serializeJson(doc, json);
         request->send(502, "application/json", json.c_str());
@@ -1535,20 +1491,14 @@ void WebServerDashboard::sendUpdateManifest(AsyncWebServerRequest *request) {
         JsonObject app = assets.createNestedObject("app");
         app["name"] = cachedManifest_.app.name;
         app["url"] = cachedManifest_.app.url;
-        app["sha256"] = cachedManifest_.app.sha256;
         app["size"] = cachedManifest_.app.size;
     }
     if (!cachedManifest_.webui.url.empty()) {
         JsonObject webui = assets.createNestedObject("webui");
         webui["name"] = cachedManifest_.webui.name;
         webui["url"] = cachedManifest_.webui.url;
-        webui["sha256"] = cachedManifest_.webui.sha256;
         webui["size"] = cachedManifest_.webui.size;
     }
-
-    JsonObject signature = doc.createNestedObject("signature");
-    signature["algorithm"] = cachedManifest_.signatureAlgorithm;
-    signature["value"] = cachedManifest_.signatureValue;
 
     std::string json;
     serializeJson(doc, json);
@@ -1556,8 +1506,8 @@ void WebServerDashboard::sendUpdateManifest(AsyncWebServerRequest *request) {
 }
 
 bool WebServerDashboard::fetchLatestManifest(ReleaseManifest& manifest, std::string& rawManifest, std::string& error) {
-    if (!isHttpsUrl(kLatestManifestUrl)) {
-        error = "Manifest-URL muss HTTPS verwenden";
+    if (!isHttpsUrl(kLatestReleaseApiUrl)) {
+        error = "Release-API-URL muss HTTPS verwenden";
         return false;
     }
 
@@ -1567,8 +1517,8 @@ bool WebServerDashboard::fetchLatestManifest(ReleaseManifest& manifest, std::str
     HTTPClient http;
     http.setTimeout(15000);
     http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-    if (!http.begin(client, kLatestManifestUrl)) {
-        error = "Manifest konnte nicht geladen werden";
+    if (!http.begin(client, kLatestReleaseApiUrl)) {
+        error = "Release-Information konnte nicht geladen werden";
         return false;
     }
 
@@ -1577,7 +1527,7 @@ bool WebServerDashboard::fetchLatestManifest(ReleaseManifest& manifest, std::str
 
     const int statusCode = http.GET();
     if (statusCode != HTTP_CODE_OK) {
-        error = "Manifest-Request fehlgeschlagen (HTTP " + std::to_string(statusCode) + ")";
+        error = "Release-Request fehlgeschlagen (HTTP " + std::to_string(statusCode) + ")";
         http.end();
         return false;
     }
@@ -1585,125 +1535,47 @@ bool WebServerDashboard::fetchLatestManifest(ReleaseManifest& manifest, std::str
     rawManifest = http.getString().c_str();
     http.end();
 
-    return parseReleaseManifest(rawManifest, manifest, error);
+    return parseLatestReleaseInfo(rawManifest, manifest, error);
 }
 
-bool WebServerDashboard::parseReleaseManifest(const std::string& rawManifest, ReleaseManifest& manifest, std::string& error) const {
+bool WebServerDashboard::parseLatestReleaseInfo(const std::string& rawManifest, ReleaseManifest& manifest, std::string& error) const {
     manifest = {};
-    DynamicJsonDocument doc(2048);
+    DynamicJsonDocument doc(16384);
     if (deserializeJson(doc, rawManifest) != DeserializationError::Ok) {
-        error = "Manifest ist kein gültiges JSON";
+        error = "Release-Antwort ist kein gültiges JSON";
         return false;
     }
 
-    manifest.version = doc["version"] | "";
-    manifest.releaseUrl = doc["releaseUrl"] | kLatestReleaseUrl;
-    manifest.app.name = doc["assets"]["app"]["name"] | "";
-    manifest.app.url = doc["assets"]["app"]["url"] | "";
-    manifest.app.sha256 = toLowerCopy(doc["assets"]["app"]["sha256"] | "");
-    manifest.app.size = doc["assets"]["app"]["size"] | 0;
-    if (manifest.app.url.empty()) {
-        manifest.app.name = doc["assets"]["firmware"]["name"] | "";
-        manifest.app.url = doc["assets"]["firmware"]["url"] | "";
-        manifest.app.sha256 = toLowerCopy(doc["assets"]["firmware"]["sha256"] | "");
-        manifest.app.size = doc["assets"]["firmware"]["size"] | 0;
+    manifest.version = normalizeVersionTag(doc["tag_name"] | "");
+    manifest.releaseUrl = doc["html_url"] | kLatestReleaseUrl;
+
+    JsonArray assets = doc["assets"].as<JsonArray>();
+    for (JsonObject asset : assets) {
+        const std::string name = asset["name"] | "";
+        const std::string url = asset["browser_download_url"] | "";
+        const size_t size = asset["size"] | 0;
+
+        if (name.size() >= 8 && name.rfind("-app.bin") == name.size() - 8) {
+            manifest.app.name = name;
+            manifest.app.url = url;
+            manifest.app.size = size;
+        } else if (name.size() >= 11 && name.rfind("-web-ui.bin") == name.size() - 11) {
+            manifest.webui.name = name;
+            manifest.webui.url = url;
+            manifest.webui.size = size;
+        }
     }
-    manifest.webui.name = doc["assets"]["webui"]["name"] | "";
-    manifest.webui.url = doc["assets"]["webui"]["url"] | "";
-    manifest.webui.sha256 = toLowerCopy(doc["assets"]["webui"]["sha256"] | "");
-    manifest.webui.size = doc["assets"]["webui"]["size"] | 0;
-    manifest.signatureAlgorithm = doc["signature"]["algorithm"] | "";
-    manifest.signatureValue = doc["signature"]["value"] | "";
+
     manifest.valid = !manifest.version.empty() && (!manifest.app.url.empty() || !manifest.webui.url.empty());
 
     if (!manifest.valid) {
-        error = "Manifest enthält keine Update-Assets";
-        return false;
-    }
-
-    if (!verifyManifestSignature(manifest, error)) {
+        error = "Release enthält keine unterstützten OTA-Assets";
         return false;
     }
 
     return true;
 }
-
-bool WebServerDashboard::importLocalManifest(const std::string& rawManifest, std::string& error) {
-    ReleaseManifest manifest;
-    if (!parseReleaseManifest(rawManifest, manifest, error)) {
-        return false;
-    }
-
-    localManifest_ = manifest;
-    DebugLogger::getInstance().log(
-        LogLevel::INFO,
-        std::string("Offline manifest imported: version=") + localManifest_.version
-            + ", app=" + (localManifest_.app.sha256.empty() ? "no" : "yes")
-            + ", webui=" + (localManifest_.webui.sha256.empty() ? "no" : "yes"));
-    return true;
-}
-
-const WebServerDashboard::ReleaseManifest* WebServerDashboard::resolveUploadManifest(std::string& error) {
-    if (localManifest_.valid) {
-        return &localManifest_;
-    }
-
-    if (!refreshManifestCache(false, error)) {
-        return nullptr;
-    }
-
-    return cachedManifest_.valid ? &cachedManifest_ : nullptr;
-}
-
-std::string WebServerDashboard::buildManifestSigningPayload(const ReleaseManifest& manifest) const {
-    return
-        "version=" + manifest.version + "\n" +
-        "releaseUrl=" + manifest.releaseUrl + "\n" +
-        "app.name=" + manifest.app.name + "\n" +
-        "app.url=" + manifest.app.url + "\n" +
-        "app.sha256=" + manifest.app.sha256 + "\n" +
-        "app.size=" + std::to_string(manifest.app.size) + "\n" +
-        "webui.name=" + manifest.webui.name + "\n" +
-        "webui.url=" + manifest.webui.url + "\n" +
-        "webui.sha256=" + manifest.webui.sha256 + "\n" +
-        "webui.size=" + std::to_string(manifest.webui.size);
-}
-
-bool WebServerDashboard::verifyManifestSignature(const ReleaseManifest& manifest, std::string& error) const {
-    if (manifest.signatureAlgorithm != kManifestSignatureAlgorithm) {
-        error = "Manifest-Signaturalgorithmus wird nicht unterstützt";
-        return false;
-    }
-    if (manifest.signatureValue.empty()) {
-        error = "Manifest enthält keine Signatur";
-        return false;
-    }
-
-    const std::string payload = buildManifestSigningPayload(manifest);
-
-    unsigned char hash[32];
-    if (mbedtls_sha256_ret(
-            reinterpret_cast<const unsigned char*>(payload.data()),
-            payload.size(),
-            hash,
-            0) != 0) {
-        error = "SHA256 für Manifest-Signatur fehlgeschlagen";
-        return false;
-    }
-
-    const size_t maxSigLen = (manifest.signatureValue.size() * 3) / 4 + 4;
-    std::vector<unsigned char> signature(maxSigLen);
-    size_t signatureLen = 0;
-    if (mbedtls_base64_decode(
-            signature.data(),
-            signature.size(),
-            &signatureLen,
-            reinterpret_cast<const unsigned char*>(manifest.signatureValue.data()),
-            manifest.signatureValue.size()) != 0) {
-        error = "Manifest-Signatur ist kein gültiges Base64";
-        return false;
-    }
-
+bool WebServerDashboard::verifyDetachedFileSignature(const unsigned char* hash, size_t hashLen, const uint8_t* signature, size_t signatureLen, std::string& error) const {
     mbedtls_pk_context publicKey;
     mbedtls_pk_init(&publicKey);
 
@@ -1721,13 +1593,13 @@ bool WebServerDashboard::verifyManifestSignature(const ReleaseManifest& manifest
         &publicKey,
         MBEDTLS_MD_SHA256,
         hash,
-        sizeof(hash),
-        signature.data(),
+        hashLen,
+        signature,
         signatureLen);
     mbedtls_pk_free(&publicKey);
 
     if (verifyResult != 0) {
-        error = "Manifest-Signatur ungültig";
+        error = "Dateisignatur ungültig";
         return false;
     }
 
@@ -1839,7 +1711,7 @@ void WebServerDashboard::runRemoteUpdateTask(const std::string& target) {
     std::string rawManifest;
     std::string error;
 
-    setUpdatePhase("manifest", "Manifest wird geladen");
+    setUpdatePhase("release", "Release-Informationen werden geladen");
     if (!fetchLatestManifest(manifest, rawManifest, error)) {
         manifestError_ = error;
         lastManifestCheckMs_ = millis();
@@ -1908,12 +1780,14 @@ bool WebServerDashboard::applyRemoteAsset(const ManifestAsset& asset, int comman
     }
 
     const int contentLength = http.getSize();
-    const size_t expectedSize = asset.size > 0 ? asset.size : (contentLength > 0 ? static_cast<size_t>(contentLength) : UPDATE_SIZE_UNKNOWN);
-    if (asset.size > 0 && contentLength > 0 && asset.size != static_cast<size_t>(contentLength)) {
-        error = "Download-Größe passt nicht zum Manifest";
+    if (contentLength > 0 && static_cast<size_t>(contentLength) <= kEmbeddedSigTrailerSize) {
+        error = "Asset ist zu klein oder enthält keinen Signatur-Trailer";
         http.end();
         return false;
     }
+    const size_t expectedSize = contentLength > 0
+        ? static_cast<size_t>(contentLength) - kEmbeddedSigTrailerSize
+        : UPDATE_SIZE_UNKNOWN;
 
     if (command == U_SPIFFS) {
         LittleFS.end();
@@ -1936,11 +1810,20 @@ bool WebServerDashboard::applyRemoteAsset(const ManifestAsset& asset, int comman
     WiFiClient *stream = http.getStreamPtr();
     uint8_t buffer[kUploadBufferSize];
     size_t received = 0;
-    bool firstChunk = true;
+    bool firstPayloadChunk = true;
+    std::vector<uint8_t> tailBuffer;
+    tailBuffer.reserve(kEmbeddedSigTrailerSize + kUploadBufferSize);
 
     mbedtls_sha256_context shaContext;
     mbedtls_sha256_init(&shaContext);
-    mbedtls_sha256_starts_ret(&shaContext, 0);
+    if (mbedtls_sha256_starts_ret(&shaContext, 0) != 0) {
+        error = "SHA256-Kontext konnte nicht initialisiert werden";
+        if (command == U_SPIFFS) {
+            LittleFS.begin();
+        }
+        http.end();
+        return false;
+    }
 
     setUpdatePhase(phase, "Download läuft", 0, expectedSize);
 
@@ -1956,47 +1839,122 @@ bool WebServerDashboard::applyRemoteAsset(const ManifestAsset& asset, int comman
             continue;
         }
 
-        if (firstChunk) {
-            if ((command == U_FLASH && buffer[0] != 0xE9) || (command == U_SPIFFS && buffer[0] == 0xE9)) {
+        tailBuffer.insert(tailBuffer.end(), buffer, buffer + chunkSize);
+
+        while (tailBuffer.size() > kEmbeddedSigTrailerSize) {
+            const size_t processLen = tailBuffer.size() - kEmbeddedSigTrailerSize;
+            std::vector<uint8_t> payloadChunk(tailBuffer.begin(), tailBuffer.begin() + processLen);
+            tailBuffer.erase(tailBuffer.begin(), tailBuffer.begin() + processLen);
+
+            if (firstPayloadChunk && !payloadChunk.empty()) {
+                if ((command == U_FLASH && payloadChunk[0] != 0xE9) || (command == U_SPIFFS && payloadChunk[0] == 0xE9)) {
+                    Update.abort();
+                    if (command == U_SPIFFS) {
+                        LittleFS.begin();
+                    }
+                    http.end();
+                    error = command == U_FLASH ? "App-Asset ist kein gültiges ESP32-Image" : "Web-UI-Asset sieht wie eine App aus";
+                    mbedtls_sha256_free(&shaContext);
+                    return false;
+                }
+                firstPayloadChunk = false;
+            }
+
+            if (mbedtls_sha256_update_ret(&shaContext, payloadChunk.data(), payloadChunk.size()) != 0) {
                 Update.abort();
                 if (command == U_SPIFFS) {
                     LittleFS.begin();
                 }
                 http.end();
-                error = command == U_FLASH ? "App-Asset ist kein gültiges ESP32-Image" : "Web-UI-Asset sieht wie eine App aus";
+                error = "SHA256-Berechnung fehlgeschlagen";
                 mbedtls_sha256_free(&shaContext);
                 return false;
             }
-            firstChunk = false;
-        }
-
-        mbedtls_sha256_update_ret(&shaContext, buffer, chunkSize);
-        if (Update.write(buffer, chunkSize) != chunkSize) {
-            Update.abort();
-            if (command == U_SPIFFS) {
-                LittleFS.begin();
+            if (Update.write(payloadChunk.data(), payloadChunk.size()) != payloadChunk.size()) {
+                Update.abort();
+                if (command == U_SPIFFS) {
+                    LittleFS.begin();
+                }
+                http.end();
+                error = Update.errorString();
+                mbedtls_sha256_free(&shaContext);
+                return false;
             }
-            http.end();
-            error = Update.errorString();
-            mbedtls_sha256_free(&shaContext);
-            return false;
+
+            received += payloadChunk.size();
         }
 
-        received += chunkSize;
         setUpdatePhase(phase, "Download läuft", received, expectedSize);
     }
 
-    unsigned char shaResult[32];
-    mbedtls_sha256_finish_ret(&shaContext, shaResult);
-    mbedtls_sha256_free(&shaContext);
-    const std::string actualSha = bytesToHex(shaResult, sizeof(shaResult));
-    if (!asset.sha256.empty() && actualSha != asset.sha256) {
+    if (tailBuffer.size() != kEmbeddedSigTrailerSize) {
         Update.abort();
         if (command == U_SPIFFS) {
             LittleFS.begin();
         }
         http.end();
-        error = "SHA256-Prüfsumme stimmt nicht mit dem Manifest überein";
+        mbedtls_sha256_free(&shaContext);
+        error = "Signatur-Trailer fehlt oder ist unvollständig";
+        return false;
+    }
+
+    if ((command == U_FLASH && received < 65536) || (command == U_SPIFFS && received < 4096)) {
+        Update.abort();
+        if (command == U_SPIFFS) {
+            LittleFS.begin();
+        }
+        http.end();
+        mbedtls_sha256_free(&shaContext);
+        error = command == U_FLASH ? "App-Asset ist unplausibel klein" : "Web-UI-Asset ist unplausibel klein";
+        return false;
+    }
+
+    if (memcmp(tailBuffer.data(), kEmbeddedSigMagic, sizeof(kEmbeddedSigMagic)) != 0) {
+        Update.abort();
+        if (command == U_SPIFFS) {
+            LittleFS.begin();
+        }
+        http.end();
+        mbedtls_sha256_free(&shaContext);
+        error = "Asset-Signatur-Trailer ist ungültig";
+        return false;
+    }
+    const size_t sigLen = tailBuffer[sizeof(kEmbeddedSigMagic)];
+    if (sigLen == 0 || sigLen > kEmbeddedSigBytes) {
+        Update.abort();
+        if (command == U_SPIFFS) {
+            LittleFS.begin();
+        }
+        http.end();
+        mbedtls_sha256_free(&shaContext);
+        error = "Asset-Signaturlänge ist ungültig";
+        return false;
+    }
+
+    unsigned char shaResult[32];
+    if (mbedtls_sha256_finish_ret(&shaContext, shaResult) != 0) {
+        Update.abort();
+        if (command == U_SPIFFS) {
+            LittleFS.begin();
+        }
+        http.end();
+        mbedtls_sha256_free(&shaContext);
+        error = "SHA256-Abschluss fehlgeschlagen";
+        return false;
+    }
+    mbedtls_sha256_free(&shaContext);
+
+    if (!verifyDetachedFileSignature(
+            shaResult,
+            sizeof(shaResult),
+            tailBuffer.data() + sizeof(kEmbeddedSigMagic) + 1,
+            sigLen,
+            error)) {
+        Update.abort();
+        if (command == U_SPIFFS) {
+            LittleFS.begin();
+        }
+        http.end();
         return false;
     }
 
@@ -2084,6 +2042,8 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
         uploadFailed_ = false;
         uploadTarget_ = target;
         uploadFilename_ = filename;
+        uploadTailBuffer_.clear();
+        uploadTailBuffer_.reserve(kEmbeddedSigTrailerSize + kUploadBufferSize);
         uploadLastChunkMs_ = millis();
         resetUpdateState("upload", target.c_str());
         updateState_.inProgress = true;
@@ -2097,27 +2057,6 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
 
         if (target == "webui") {
             LittleFS.end();
-        }
-
-        // Erwartete SHA aus verifiziertem Manifest laden: lokal importiert oder online gecacht.
-        std::string manifestErr;
-        const ReleaseManifest* uploadManifest = resolveUploadManifest(manifestErr);
-        if (uploadManifest == nullptr) {
-            uploadFailed_ = true;
-            markUpdateFailed(std::string("Kein verifiziertes Manifest verfügbar: ") + manifestErr);
-            request->send(503, "application/json", (std::string("{\"error\":\"") + updateState_.message + "\"}").c_str());
-            return;
-        }
-
-        updateState_.availableVersion = uploadManifest->version;
-        uploadExpectedSha_ = target == "app" ? uploadManifest->app.sha256 : uploadManifest->webui.sha256;
-        if (uploadExpectedSha_.empty()) {
-            uploadFailed_ = true;
-            markUpdateFailed(target == "app"
-                ? "Kein verifiziertes App-Asset im Manifest gefunden"
-                : "Kein verifiziertes Web-UI-Asset im Manifest gefunden");
-            request->send(400, "application/json", (std::string("{\"error\":\"") + updateState_.message + "\"}").c_str());
-            return;
         }
 
         mbedtls_sha256_init(&uploadShaContext_);
@@ -2137,7 +2076,13 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
         }
 
         const size_t uploadSize = request->contentLength();
-        const size_t beginSize = uploadSize > 0 ? uploadSize : UPDATE_SIZE_UNKNOWN;
+        if (uploadSize > 0 && uploadSize <= kEmbeddedSigTrailerSize) {
+            uploadFailed_ = true;
+            markUpdateFailed("Datei ist zu klein oder enthält keinen Signatur-Trailer");
+            request->send(400, "application/json", (std::string("{\"error\":\"") + updateState_.message + "\"}").c_str());
+            return;
+        }
+        const size_t beginSize = uploadSize > 0 ? uploadSize - kEmbeddedSigTrailerSize : UPDATE_SIZE_UNKNOWN;
         if (!Update.begin(beginSize, target == "app" ? U_FLASH : U_SPIFFS)) {
             uploadFailed_ = true;
             markUpdateFailed(Update.errorString());
@@ -2163,47 +2108,50 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
 
     if (!uploadFailed_ && len > 0) {
         uploadLastChunkMs_ = millis();
-        const size_t nextReceived = index + len;
         const size_t limit = target == "app" ? getAppPartitionSize() : getFilesystemPartitionSize();
-        if (limit > 0 && nextReceived > limit) {
-            uploadFailed_ = true;
-            Update.abort();
-            uploadTargetPartition_ = nullptr;
-            if (target == "webui") {
-                LittleFS.begin();
-            }
-            markUpdateFailed(target == "app"
-                ? "App-Datei überschreitet die verfügbare App-Partition"
-                : "Web-UI-Datei überschreitet die LittleFS-Partition");
-        }
-    }
+        uploadTailBuffer_.insert(uploadTailBuffer_.end(), data, data + len);
+        while (!uploadFailed_ && uploadTailBuffer_.size() > kEmbeddedSigTrailerSize) {
+            const size_t processLen = uploadTailBuffer_.size() - kEmbeddedSigTrailerSize;
+            std::vector<uint8_t> payloadChunk(uploadTailBuffer_.begin(), uploadTailBuffer_.begin() + processLen);
+            uploadTailBuffer_.erase(uploadTailBuffer_.begin(), uploadTailBuffer_.begin() + processLen);
 
-    if (!uploadFailed_ && len > 0) {
-        uploadLastChunkMs_ = millis();
-        if (uploadShaActive_ && mbedtls_sha256_update_ret(&uploadShaContext_, data, len) != 0) {
-            uploadFailed_ = true;
-            Update.abort();
-            uploadTargetPartition_ = nullptr;
-            if (target == "webui") {
-                LittleFS.begin();
+            const size_t nextPayloadSize = updateState_.received + payloadChunk.size();
+            if (limit > 0 && nextPayloadSize > limit) {
+                uploadFailed_ = true;
+                Update.abort();
+                uploadTargetPartition_ = nullptr;
+                if (target == "webui") {
+                    LittleFS.begin();
+                }
+                markUpdateFailed(target == "app"
+                    ? "App-Datei überschreitet die verfügbare App-Partition"
+                    : "Web-UI-Datei überschreitet die LittleFS-Partition");
+                break;
             }
-            markUpdateFailed("SHA256-Berechnung fehlgeschlagen");
-        }
-    }
 
-    if (!uploadFailed_ && len > 0) {
-        uploadLastChunkMs_ = millis();
-        if (Update.write(data, len) != len) {
-            uploadFailed_ = true;
-            Update.abort();
-            uploadTargetPartition_ = nullptr;
-            if (target == "webui") {
-                LittleFS.begin();
+            if (uploadShaActive_ && mbedtls_sha256_update_ret(&uploadShaContext_, payloadChunk.data(), payloadChunk.size()) != 0) {
+                uploadFailed_ = true;
+                Update.abort();
+                uploadTargetPartition_ = nullptr;
+                if (target == "webui") {
+                    LittleFS.begin();
+                }
+                markUpdateFailed("SHA256-Berechnung fehlgeschlagen");
+                break;
             }
-            markUpdateFailed(Update.errorString());
-        } else {
-            const size_t received = index + len;
-            setUpdatePhase("uploading", "Upload läuft", received, request->contentLength());
+
+            if (Update.write(payloadChunk.data(), payloadChunk.size()) != payloadChunk.size()) {
+                uploadFailed_ = true;
+                Update.abort();
+                uploadTargetPartition_ = nullptr;
+                if (target == "webui") {
+                    LittleFS.begin();
+                }
+                markUpdateFailed(Update.errorString());
+                break;
+            }
+
+            setUpdatePhase("uploading", "Upload läuft", nextPayloadSize, request->contentLength() > 0 ? request->contentLength() - kEmbeddedSigTrailerSize : 0);
         }
     }
 
@@ -2216,8 +2164,8 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
         return;
     }
 
-    const size_t finalSize = index + len;
-    if ((target == "app" && finalSize < 65536) || (target == "webui" && finalSize < 4096)) {
+    const size_t payloadSize = updateState_.received;
+    if ((target == "app" && payloadSize < 65536) || (target == "webui" && payloadSize < 4096)) {
         Update.abort();
         uploadTargetPartition_ = nullptr;
         if (target == "webui") {
@@ -2230,7 +2178,30 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
         return;
     }
 
-    setUpdatePhase("verifying", "Signatur wird geprüft", finalSize, request->contentLength());
+    if (uploadTailBuffer_.size() != kEmbeddedSigTrailerSize
+        || memcmp(uploadTailBuffer_.data(), kEmbeddedSigMagic, sizeof(kEmbeddedSigMagic)) != 0) {
+        Update.abort();
+        uploadTargetPartition_ = nullptr;
+        if (target == "webui") {
+            LittleFS.begin();
+        }
+        markUpdateFailed("Signatur-Trailer fehlt oder ist ungültig");
+        request->send(400, "application/json", (std::string("{\"error\":\"") + updateState_.message + "\"}").c_str());
+        return;
+    }
+    const size_t sigLen = uploadTailBuffer_[sizeof(kEmbeddedSigMagic)];
+    if (sigLen == 0 || sigLen > kEmbeddedSigBytes) {
+        Update.abort();
+        uploadTargetPartition_ = nullptr;
+        if (target == "webui") {
+            LittleFS.begin();
+        }
+        markUpdateFailed("Signaturlänge im Trailer ist ungültig");
+        request->send(400, "application/json", (std::string("{\"error\":\"") + updateState_.message + "\"}").c_str());
+        return;
+    }
+
+    setUpdatePhase("verifying", "Signatur wird geprüft", payloadSize, request->contentLength() > 0 ? request->contentLength() - kEmbeddedSigTrailerSize : 0);
     unsigned char uploadSha[32];
     if (!uploadShaActive_ || mbedtls_sha256_finish_ret(&uploadShaContext_, uploadSha) != 0) {
         if (uploadShaActive_) {
@@ -2249,14 +2220,19 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
     mbedtls_sha256_free(&uploadShaContext_);
     uploadShaActive_ = false;
 
-    const std::string uploadShaHex = bytesToHex(uploadSha, sizeof(uploadSha));
-    if (!uploadExpectedSha_.empty() && uploadShaHex != uploadExpectedSha_) {
+    std::string signatureError;
+    if (!verifyDetachedFileSignature(
+            uploadSha,
+            sizeof(uploadSha),
+            uploadTailBuffer_.data() + sizeof(kEmbeddedSigMagic) + 1,
+            sigLen,
+            signatureError)) {
         Update.abort();
         uploadTargetPartition_ = nullptr;
         if (target == "webui") {
             LittleFS.begin();
         }
-        markUpdateFailed("Signaturprüfung fehlgeschlagen: Datei passt nicht zum signierten Manifest");
+        markUpdateFailed(std::string("Signaturprüfung fehlgeschlagen: ") + signatureError);
         request->send(400, "application/json", (std::string("{\"error\":\"") + updateState_.message + "\"}").c_str());
         return;
     }

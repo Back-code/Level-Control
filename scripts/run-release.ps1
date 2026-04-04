@@ -31,7 +31,6 @@ try {
         "release/v$versionStr/level-control-v$versionStr-web-ui.bin",
         "release/v$versionStr/level-control-v$versionStr-bootloader.bin",
         "release/v$versionStr/level-control-v$versionStr-partitions.bin",
-        "release/v$versionStr/manifest.json",
         "release/v$versionStr/SHA256SUMS.txt",
         '--repo', 'Back-code/Level-Control',
         '--title', "Level-Control v$versionStr",

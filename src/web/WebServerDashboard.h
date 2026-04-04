@@ -63,6 +63,7 @@ private:
     AsyncWebSocket ws_;
     UpdateState updateState_;
     ReleaseManifest cachedManifest_;
+    ReleaseManifest localManifest_;
     std::string manifestError_;
     unsigned long lastManifestCheckMs_ = 0;
     bool uploadActive_ = false;
@@ -92,6 +93,9 @@ private:
     void sendUpdateStatus(AsyncWebServerRequest *request);
     void sendUpdateManifest(AsyncWebServerRequest *request);
     bool fetchLatestManifest(ReleaseManifest& manifest, std::string& rawManifest, std::string& error);
+    bool parseReleaseManifest(const std::string& rawManifest, ReleaseManifest& manifest, std::string& error) const;
+    bool importLocalManifest(const std::string& rawManifest, std::string& error);
+    const ReleaseManifest* resolveUploadManifest(std::string& error);
     bool refreshManifestCache(bool forceRefresh, std::string& error);
     std::string buildManifestSigningPayload(const ReleaseManifest& manifest) const;
     bool verifyManifestSignature(const ReleaseManifest& manifest, std::string& error) const;

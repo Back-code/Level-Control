@@ -11,6 +11,7 @@
   let statusCard = null;
   let appFileInput = null;
   let webUiFileInput = null;
+  let manifestFileInput = null;
 
   let manifest = null;
   let manifestError = '';
@@ -32,6 +33,10 @@
     appMaxSize: 0,
     firmwareMaxSize: 0,
     webuiMaxSize: 0,
+    localManifestLoaded: false,
+    localManifestVersion: '',
+    localManifestHasApp: false,
+    localManifestHasWebui: false,
     lastResetReason: '',
     lastResetReasonCode: 0
   };
@@ -85,6 +90,13 @@
 
   function isBusy() {
     return status.inProgress || localUpload.active;
+  }
+
+  function localManifestTargetsLabel() {
+    const targets = [];
+    if (status.localManifestHasApp) targets.push('App');
+    if (status.localManifestHasWebui) targets.push('Web-UI');
+    return targets.length ? targets.join(' + ') : 'keine Assets';
   }
 
   function delay(ms) {
@@ -394,6 +406,54 @@
     return '';
   }
 
+  function validateManifestFile(file) {
+    if (!file) {
+      return 'Bitte zuerst eine manifest.json auswählen.';
+    }
+
+    const lowerName = file.name.toLowerCase();
+    if (!lowerName.endsWith('.json')) {
+      return 'Es wird nur eine manifest.json akzeptiert.';
+    }
+
+    if (!lowerName.includes('manifest')) {
+      return 'Bitte die signierte manifest.json aus dem Release wählen.';
+    }
+
+    return '';
+  }
+
+  async function uploadLocalManifest(file) {
+    if (isBusy()) {
+      return;
+    }
+
+    const error = validateManifestFile(file);
+    if (error) {
+      showNotice('error', error);
+      return;
+    }
+
+    try {
+      const rawManifest = await file.text();
+      const response = await fetch('/api/update/manifest/local', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: rawManifest
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        showNotice('error', payload.error || 'Offline-Manifest konnte nicht geladen werden');
+        return;
+      }
+
+      await loadStatus();
+      showNotice('success', payload.message || `Offline-Manifest v${payload.version} wurde geladen.`);
+    } catch (_) {
+      showNotice('error', 'Offline-Manifest konnte nicht geladen werden');
+    }
+  }
+
   async function uploadLocal(target, fileToUpload = null) {
     if (isBusy()) {
       return;
@@ -455,7 +515,9 @@
   }
 
   function triggerFileSelect(target) {
-    if (target === 'app') {
+    if (target === 'manifest') {
+      manifestFileInput?.click();
+    } else if (target === 'app') {
       appFileInput?.click();
     } else {
       webUiFileInput?.click();
@@ -466,6 +528,12 @@
     return (event) => {
       const file = event.currentTarget.files?.[0] || null;
       if (!file) {
+        return;
+      }
+
+      if (target === 'manifest') {
+        uploadLocalManifest(file);
+        event.currentTarget.value = '';
         return;
       }
 
@@ -607,9 +675,16 @@
   <article class="action-card upload-card">
     <span class="eyebrow">2. Lokal</span>
     <h3>Updates hochladen</h3>
-    <p>Wählen Sie eine gültige Binärdatei (.bin).<br />Die Datei wird gegen das signierte Release-Manifest geprüft. Nur signierte App-/Web-UI-Artefakte sind erlaubt.</p>
+    <p>Laden Sie zuerst die signierte manifest.json aus dem Release. Danach können App- und Web-UI-Binaries ohne Internetverbindung lokal geprüft und installiert werden.</p>
     
     <!-- Hidden file inputs -->
+    <input 
+      type="file" 
+      accept=".json,application/json" 
+      bind:this={manifestFileInput}
+      style="display:none"
+      on:change={handleFileSelected('manifest')}
+    />
     <input 
       type="file" 
       accept=".bin" 
@@ -627,6 +702,9 @@
     
     <!-- Action buttons -->
     <div class="button-group">
+      <button on:click={() => triggerFileSelect('manifest')} disabled={anyBusy}>
+        manifest.json laden
+      </button>
       <button on:click={() => triggerFileSelect('app')} disabled={anyBusy}>
         App.bin wählen
       </button>
@@ -634,6 +712,12 @@
         Web-UI.bin wählen
       </button>
     </div>
+
+    {#if status.localManifestLoaded}
+      <div class="status-badge success">✓ Offline-Manifest v{status.localManifestVersion} geladen: {localManifestTargetsLabel()}</div>
+    {:else}
+      <div class="status-badge info">⊘ Noch kein Offline-Manifest geladen</div>
+    {/if}
     
     <!-- Upload progress indicators -->
     {#if isUploadProgress('app')}

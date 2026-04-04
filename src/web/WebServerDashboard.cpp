@@ -1198,6 +1198,54 @@ void WebServerDashboard::setupUpdateRoutes() {
         sendUpdateManifest(request);
     });
 
+    server_.on("/api/update/manifest/local", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL,
+        [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+        auto *body = static_cast<std::string*>(request->_tempObject);
+        if (index == 0) {
+            delete body;
+            body = new std::string();
+            body->reserve(total);
+            request->_tempObject = body;
+        }
+        if (body == nullptr) {
+            body = new std::string();
+            request->_tempObject = body;
+        }
+        body->append(reinterpret_cast<const char*>(data), len);
+
+        if (index + len != total) {
+            return;
+        }
+
+        recoverStuckUploadIfNeeded();
+        if (updateState_.inProgress || uploadActive_) {
+            request->send(409, "application/json", "{\"error\":\"Update läuft bereits\"}");
+            delete body;
+            request->_tempObject = nullptr;
+            return;
+        }
+
+        std::string error;
+        if (!importLocalManifest(*body, error)) {
+            request->send(400, "application/json", (std::string("{\"error\":\"") + error + "\"}").c_str());
+            delete body;
+            request->_tempObject = nullptr;
+            return;
+        }
+
+        DynamicJsonDocument doc(256);
+        doc["status"] = "ok";
+        doc["message"] = "Offline-Manifest wurde geprüft und lokal gespeichert";
+        doc["version"] = localManifest_.version;
+        doc["hasApp"] = !localManifest_.app.sha256.empty();
+        doc["hasWebui"] = !localManifest_.webui.sha256.empty();
+        std::string json;
+        serializeJson(doc, json);
+        request->send(200, "application/json", json.c_str());
+        delete body;
+        request->_tempObject = nullptr;
+    });
+
     server_.on("/api/update/repo", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL,
         [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
         auto *body = static_cast<std::string*>(request->_tempObject);
@@ -1424,6 +1472,10 @@ void WebServerDashboard::sendUpdateStatus(AsyncWebServerRequest *request) {
     doc["firmwareMaxSize"] = getAppPartitionSize();
     doc["webuiMaxSize"] = getFilesystemPartitionSize();
     doc["manifestUrl"] = kLatestManifestUrl;
+    doc["localManifestLoaded"] = localManifest_.valid;
+    doc["localManifestVersion"] = localManifest_.valid ? localManifest_.version : "";
+    doc["localManifestHasApp"] = localManifest_.valid && !localManifest_.app.sha256.empty();
+    doc["localManifestHasWebui"] = localManifest_.valid && !localManifest_.webui.sha256.empty();
 
     const esp_partition_t* runningPartition = esp_ota_get_running_partition();
     const esp_partition_t* bootPartition = esp_ota_get_boot_partition();
@@ -1533,6 +1585,11 @@ bool WebServerDashboard::fetchLatestManifest(ReleaseManifest& manifest, std::str
     rawManifest = http.getString().c_str();
     http.end();
 
+    return parseReleaseManifest(rawManifest, manifest, error);
+}
+
+bool WebServerDashboard::parseReleaseManifest(const std::string& rawManifest, ReleaseManifest& manifest, std::string& error) const {
+    manifest = {};
     DynamicJsonDocument doc(2048);
     if (deserializeJson(doc, rawManifest) != DeserializationError::Ok) {
         error = "Manifest ist kein gültiges JSON";
@@ -1569,6 +1626,33 @@ bool WebServerDashboard::fetchLatestManifest(ReleaseManifest& manifest, std::str
     }
 
     return true;
+}
+
+bool WebServerDashboard::importLocalManifest(const std::string& rawManifest, std::string& error) {
+    ReleaseManifest manifest;
+    if (!parseReleaseManifest(rawManifest, manifest, error)) {
+        return false;
+    }
+
+    localManifest_ = manifest;
+    DebugLogger::getInstance().log(
+        LogLevel::INFO,
+        std::string("Offline manifest imported: version=") + localManifest_.version
+            + ", app=" + (localManifest_.app.sha256.empty() ? "no" : "yes")
+            + ", webui=" + (localManifest_.webui.sha256.empty() ? "no" : "yes"));
+    return true;
+}
+
+const WebServerDashboard::ReleaseManifest* WebServerDashboard::resolveUploadManifest(std::string& error) {
+    if (localManifest_.valid) {
+        return &localManifest_;
+    }
+
+    if (!refreshManifestCache(false, error)) {
+        return nullptr;
+    }
+
+    return cachedManifest_.valid ? &cachedManifest_ : nullptr;
 }
 
 std::string WebServerDashboard::buildManifestSigningPayload(const ReleaseManifest& manifest) const {
@@ -2015,21 +2099,23 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
             LittleFS.end();
         }
 
-        // Erwartete SHA aus signiertem Manifest laden: nur offiziell signierte Artefakte erlauben.
+        // Erwartete SHA aus verifiziertem Manifest laden: lokal importiert oder online gecacht.
         std::string manifestErr;
-        if (!refreshManifestCache(false, manifestErr)) {
+        const ReleaseManifest* uploadManifest = resolveUploadManifest(manifestErr);
+        if (uploadManifest == nullptr) {
             uploadFailed_ = true;
-            markUpdateFailed(std::string("Signiertes Manifest konnte nicht geladen werden: ") + manifestErr);
+            markUpdateFailed(std::string("Kein verifiziertes Manifest verfügbar: ") + manifestErr);
             request->send(503, "application/json", (std::string("{\"error\":\"") + updateState_.message + "\"}").c_str());
             return;
         }
 
-        uploadExpectedSha_ = target == "app" ? cachedManifest_.app.sha256 : cachedManifest_.webui.sha256;
+        updateState_.availableVersion = uploadManifest->version;
+        uploadExpectedSha_ = target == "app" ? uploadManifest->app.sha256 : uploadManifest->webui.sha256;
         if (uploadExpectedSha_.empty()) {
             uploadFailed_ = true;
             markUpdateFailed(target == "app"
-                ? "Kein signiertes App-Asset im Manifest gefunden"
-                : "Kein signiertes Web-UI-Asset im Manifest gefunden");
+                ? "Kein verifiziertes App-Asset im Manifest gefunden"
+                : "Kein verifiziertes Web-UI-Asset im Manifest gefunden");
             request->send(400, "application/json", (std::string("{\"error\":\"") + updateState_.message + "\"}").c_str());
             return;
         }

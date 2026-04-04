@@ -2047,7 +2047,7 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
         uploadLastChunkMs_ = millis();
         resetUpdateState("upload", target.c_str());
         updateState_.inProgress = true;
-        setUpdatePhase("validating", "Upload wird geprüft", 0, request->contentLength());
+        setUpdatePhase("validating", "Upload wird geprüft", 0, 0);
         EventBus::getInstance().publish({ EventType::OTA_STARTED, std::string(target.c_str()) });
         DebugLogger::getInstance().log(
             LogLevel::INFO,
@@ -2075,14 +2075,8 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
             uploadTargetPartition_ = esp_ota_get_next_update_partition(nullptr);
         }
 
-        const size_t uploadSize = request->contentLength();
-        if (uploadSize > 0 && uploadSize <= kEmbeddedSigTrailerSize) {
-            uploadFailed_ = true;
-            markUpdateFailed("Datei ist zu klein oder enthält keinen Signatur-Trailer");
-            request->send(400, "application/json", (std::string("{\"error\":\"") + updateState_.message + "\"}").c_str());
-            return;
-        }
-        const size_t beginSize = uploadSize > 0 ? uploadSize - kEmbeddedSigTrailerSize : UPDATE_SIZE_UNKNOWN;
+        const size_t partitionLimit = target == "app" ? getAppPartitionSize() : getFilesystemPartitionSize();
+        const size_t beginSize = partitionLimit > 0 ? partitionLimit : UPDATE_SIZE_UNKNOWN;
         if (!Update.begin(beginSize, target == "app" ? U_FLASH : U_SPIFFS)) {
             uploadFailed_ = true;
             markUpdateFailed(Update.errorString());
@@ -2151,7 +2145,7 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
                 break;
             }
 
-            setUpdatePhase("uploading", "Upload läuft", nextPayloadSize, request->contentLength() > 0 ? request->contentLength() - kEmbeddedSigTrailerSize : 0);
+            setUpdatePhase("uploading", "Upload läuft", nextPayloadSize, 0);
         }
     }
 
@@ -2201,7 +2195,7 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
         return;
     }
 
-    setUpdatePhase("verifying", "Signatur wird geprüft", payloadSize, request->contentLength() > 0 ? request->contentLength() - kEmbeddedSigTrailerSize : 0);
+    setUpdatePhase("verifying", "Signatur wird geprüft", payloadSize, 0);
     unsigned char uploadSha[32];
     if (!uploadShaActive_ || mbedtls_sha256_finish_ret(&uploadShaContext_, uploadSha) != 0) {
         if (uploadShaActive_) {

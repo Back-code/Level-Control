@@ -38,6 +38,7 @@
 
   let appFile = null;
   let webUiFile = null;
+  const embeddedSignatureTrailerSize = 81;
   let localUpload = {
     active: false,
     target: '',
@@ -369,13 +370,15 @@
     }
 
     const maxAppSize = status.appMaxSize || status.firmwareMaxSize;
+    const appFitsPartition = !maxAppSize || file.size <= (maxAppSize + embeddedSignatureTrailerSize);
+    const webUiFitsPartition = !status.webuiMaxSize || file.size <= (status.webuiMaxSize + embeddedSignatureTrailerSize);
 
     if (target === 'app') {
       if (lowerName.includes('littlefs') || lowerName.includes('web-ui')) {
         return 'Diese Datei sieht nach einer Web-UI-Datei aus. Bitte die App-BIN wählen.';
       }
-      if (maxAppSize && file.size > maxAppSize) {
-        return 'Die Datei ist größer als die verfügbare App-Partition.';
+      if (!appFitsPartition) {
+        return 'Die Datei ist größer als die verfügbare App-Partition (auch mit Signatur-Trailer).';
       }
       if (file.size < 65536) {
         return 'Die Datei ist für eine App unplausibel klein.';
@@ -384,8 +387,8 @@
       if (lowerName.includes('firmware') || lowerName.includes('app')) {
         return 'Diese Datei sieht nach einer App aus. Bitte die Web-UI-BIN wählen.';
       }
-      if (status.webuiMaxSize && file.size > status.webuiMaxSize) {
-        return 'Die Datei ist größer als die LittleFS-Partition.';
+      if (!webUiFitsPartition) {
+        return 'Die Datei ist größer als die LittleFS-Partition (auch mit Signatur-Trailer).';
       }
       if (file.size < 4096) {
         return 'Die Datei ist für eine Web-UI unplausibel klein.';

@@ -38,8 +38,24 @@ try {
     )
     & gh @releaseArgs
 
+    # Behalte nur die letzten 5 Versionen lokal, lösche älter Versionen
     if (Test-Path $releaseRoot) {
-        Remove-Item -Path $releaseRoot -Recurse -Force
+        $versions = Get-ChildItem -Path $releaseRoot -Directory | 
+            Where-Object { $_.Name -match '^v\d+\.\d+\.\d+$' } |
+            Sort-Object -Property Name -Descending
+
+        if ($versions.Count -gt 5) {
+            $versionsToDelete = $versions[5..($versions.Count - 1)]
+            foreach ($version in $versionsToDelete) {
+                Write-Host "Lösche alte Version: $($version.Name)" -ForegroundColor Yellow
+                Remove-Item -Path $version.FullName -Recurse -Force
+            }
+        }
+
+        $retainedVersions = $versions[0..([Math]::Min(4, $versions.Count - 1))] | 
+            ForEach-Object { $_.Name } | 
+            Sort-Object
+        Write-Host "Behalten Versionen: $($retainedVersions -join ', ')" -ForegroundColor Cyan
     }
 
     Write-Host "Release v$versionStr erfolgreich veröffentlicht." -ForegroundColor Green

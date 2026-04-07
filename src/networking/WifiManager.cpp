@@ -1,6 +1,7 @@
 #include "WifiManager.h"
 #include "DebugLogger.h"
 #include <esp_sntp.h>
+#include <esp_netif.h>
 #include <algorithm>
 #include <cctype>
 
@@ -66,6 +67,36 @@ std::string normalizeDnsHostname(const std::string& deviceName) {
 std::string normalizeNtpServer(const std::string& value, const std::string& fallback) {
     const std::string trimmed = trimCopy(value);
     return trimmed.empty() ? fallback : trimmed;
+}
+
+bool applyStationHostname(const std::string& hostname, std::string& detail) {
+    bool ok = true;
+
+    if (!WiFi.setHostname(hostname.c_str())) {
+        ok = false;
+        detail += "WiFi.setHostname fehlgeschlagen";
+    }
+
+    esp_netif_t* staNetif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    if (staNetif == nullptr) {
+        ok = false;
+        if (!detail.empty()) {
+            detail += "; ";
+        }
+        detail += "STA-Netif nicht gefunden";
+        return false;
+    }
+
+    const esp_err_t setErr = esp_netif_set_hostname(staNetif, hostname.c_str());
+    if (setErr != ESP_OK) {
+        ok = false;
+        if (!detail.empty()) {
+            detail += "; ";
+        }
+        detail += std::string("esp_netif_set_hostname: ") + esp_err_to_name(setErr);
+    }
+
+    return ok;
 }
 }
 
@@ -202,8 +233,13 @@ bool WifiManager::beginConnectAsync() {
     const std::string hostname = getDnsHostname();
     WiFi.mode(WIFI_AP_STA);
     WiFi.setSleep(false);
-    WiFi.setHostname(hostname.c_str());
-    DebugLogger::getInstance().log(LogLevel::INFO, "WiFi hostname set to " + hostname + " (AP+STA)");
+    std::string hostnameDetail;
+    const bool hostnameOk = applyStationHostname(hostname, hostnameDetail);
+    if (hostnameOk) {
+        DebugLogger::getInstance().log(LogLevel::INFO, "WiFi hostname set to " + hostname + " (AP+STA)");
+    } else {
+        DebugLogger::getInstance().log(LogLevel::WARN, "WiFi hostname not fully applied: " + hostnameDetail);
+    }
     WiFi.begin(config_.ssid.c_str(), config_.password.c_str());
     return true;
 }
@@ -321,6 +357,11 @@ void WifiManager::applyStationIdentity() {
     const std::string hostname = getDnsHostname();
     WiFi.mode(WIFI_STA);
     WiFi.setSleep(false);
-    WiFi.setHostname(hostname.c_str());
-    DebugLogger::getInstance().log(LogLevel::INFO, "WiFi hostname set to " + hostname);
+    std::string hostnameDetail;
+    const bool hostnameOk = applyStationHostname(hostname, hostnameDetail);
+    if (hostnameOk) {
+        DebugLogger::getInstance().log(LogLevel::INFO, "WiFi hostname set to " + hostname);
+    } else {
+        DebugLogger::getInstance().log(LogLevel::WARN, "WiFi hostname not fully applied: " + hostnameDetail);
+    }
 }

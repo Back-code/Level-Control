@@ -527,7 +527,9 @@
   $: uploadWebUiProgress = localUpload.active && localUpload.target === 'webui' ? progressValue(localUpload.received, localUpload.total) : 0;
   $: displayedVersion = liveInstalledVersion || currentVersion;
   $: repoStatus = getRepoUpdateStatus(manifest, displayedVersion);
-  $: currentReleaseUrl = `https://github.com/Back-code/Level-Control/releases/tag/v${displayedVersion}`;
+  $: currentReleaseUrl = status.releaseTagBaseUrl
+    ? `${status.releaseTagBaseUrl}${displayedVersion}`
+    : `https://github.com/Back-code/Level-Control/releases/tag/v${displayedVersion}`;
   $: anyBusy = status.inProgress || localUpload.active;
   $: localStartDisabled = anyBusy || (!appFile && !webUiFile);
   $: localSelectionLabel = [appFile ? `App: ${appFile.name}` : '', webUiFile ? `Web-UI: ${webUiFile.name}` : '']

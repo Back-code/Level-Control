@@ -31,8 +31,9 @@
 #include "WifiManager.h"
 
 namespace {
-constexpr char kLatestReleaseApiUrl[] = "https://api.github.com/repos/Back-code/Level-Control/releases/latest";
-constexpr char kLatestReleaseUrl[] = "https://github.com/Back-code/Level-Control/releases/latest";
+constexpr char kLatestReleaseApiUrl[] = LEVEL_CONTROL_LATEST_RELEASE_API_URL;
+constexpr char kLatestReleaseUrl[] = LEVEL_CONTROL_LATEST_RELEASE_URL;
+constexpr char kReleaseTagBaseUrl[] = LEVEL_CONTROL_RELEASE_TAG_BASE_URL;
 constexpr char kUpdateUserAgent[] = "Level-Control-OTA/1.0";
 constexpr char kPasswordMask[] = "*****";
 constexpr unsigned long kMinSampleIntervalSeconds = 5UL;
@@ -1434,6 +1435,7 @@ void WebServerDashboard::sendUpdateStatus(AsyncWebServerRequest *request) {
     doc["firmwareMaxSize"] = getAppPartitionSize();
     doc["webuiMaxSize"] = getFilesystemPartitionSize();
     doc["manifestUrl"] = kLatestReleaseApiUrl;
+    doc["releaseTagBaseUrl"] = kReleaseTagBaseUrl;
 
     const esp_partition_t* runningPartition = esp_ota_get_running_partition();
     const esp_partition_t* bootPartition = esp_ota_get_boot_partition();

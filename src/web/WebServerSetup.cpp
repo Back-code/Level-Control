@@ -4,6 +4,17 @@
 #include <ArduinoJson.h>
 
 namespace {
+constexpr unsigned long kSetupConnectTimeoutMs = 45000UL;
+constexpr uint32_t kPostConnectRestartDelayMs = 4000U;
+
+struct SetupConnectState {
+  bool connectRequested = false;
+  unsigned long connectStartedMs = 0;
+  bool restartArmed = false;
+};
+
+SetupConnectState gSetupConnectState;
+
 bool isClientInSetupSubnet(AsyncWebServerRequest* request) {
   if (request == nullptr || request->client() == nullptr) {
     return false;
@@ -120,6 +131,10 @@ input:focus,select:focus{outline:none;border-color:#62b8dd}
 #msg{margin-top:12px;font-size:.85rem;padding:8px 10px;border-radius:8px;display:none}
 #msg.ok{background:rgba(55,180,100,.18);border:1px solid rgba(55,180,100,.4);color:#76e0a0;display:block}
 #msg.err{background:rgba(220,60,60,.18);border:1px solid rgba(220,60,60,.4);color:#f08080;display:block}
+#handover{margin-top:12px;padding:10px;border-radius:8px;border:1px solid rgba(112,146,198,.25);background:rgba(8,18,36,.8);display:none}
+#handover h3{font-size:.95rem;margin-bottom:6px;color:#e8f0ff}
+#handover p{font-size:.85rem;line-height:1.4;color:#c9d9f2}
+#handover .count{display:inline-block;margin-top:6px;font-weight:700;color:#76e0a0}
 </style>
 </head>
 <body>
@@ -156,11 +171,25 @@ input:focus,select:focus{outline:none;border-color:#62b8dd}
       </button>
     </div>
   </div>
+  <div class="field-row">
+    <span>Gerätename:</span>
+    <div class="input-wrap">
+      <input type="text" id="deviceName" name="deviceName" autocomplete="off" placeholder="level-control">
+    </div>
+  </div>
   <button class="save-btn" onclick="saveConfig()">Speichern &amp; Neustart</button>
   <p class="helper">Nach dem Speichern startet der ESP neu und verbindet sich mit dem angegebenen Netzwerk.</p>
   <div id="msg"></div>
+  <div id="handover"></div>
 </div>
 <script>
+var connectPollTimer=null;
+var redirectCountdownTimer=null;
+var redirectTargetIp='';
+var redirectTargetHostname='';
+var redirectSecondsLeft=15;
+var redirectRetryCount=0;
+
 function togglePw(){
   var i=document.getElementById('pw');
   i.type=i.type==='password'?'text':'password';
@@ -180,13 +209,118 @@ function scanWifi(btn){
 function saveConfig(){
   var ssid=document.getElementById('ssid').value.trim();
   var pw=document.getElementById('pw').value;
+  var deviceName=document.getElementById('deviceName').value.trim();
   if(!ssid){showMsg('err','Bitte eine SSID eingeben.');return;}
-  var fd=new FormData();fd.append('ssid',ssid);fd.append('password',pw);
+  var fd=new FormData();fd.append('ssid',ssid);fd.append('password',pw);fd.append('deviceName',deviceName);
   showMsg('ok','Speichere …');
-  fetch('/save',{method:'POST',body:fd}).then(r=>r.text()).then(function(){
-    showMsg('ok','Gespeichert. ESP startet neu …');
+  fetch('/save',{method:'POST',body:fd}).then(r=>r.json()).then(function(resp){
+    if(!resp.ok){throw new Error('save_failed');}
+    redirectTargetHostname=String(resp.dnsHostname||'').trim();
+    if(resp.staticIp){
+      redirectTargetIp=String(resp.staticIp).trim();
+    }
+    setSetupFormEnabled(false);
+    showMsg('ok','WLAN-Einstellungen gespeichert.');
+    startHandoverFlow();
+    pollConnectStatus();
   }).catch(function(){showMsg('err','Fehler beim Speichern.');});
 }
+
+function setSetupFormEnabled(enabled){
+  var controls=document.querySelectorAll('input,select,button');
+  controls.forEach(function(ctrl){
+    ctrl.disabled=!enabled;
+  });
+}
+
+function startHandoverFlow(){
+  if(!redirectTargetIp){redirectTargetIp='';}
+  redirectSecondsLeft=15;
+  redirectRetryCount=0;
+  renderHandoverBox(false,false);
+  if(redirectCountdownTimer){clearInterval(redirectCountdownTimer);}
+  redirectCountdownTimer=setInterval(function(){
+    redirectSecondsLeft-=1;
+    if(redirectSecondsLeft<=0){
+      clearInterval(redirectCountdownTimer);
+      redirectCountdownTimer=null;
+      tryRedirectToDevice();
+      return;
+    }
+    renderHandoverBox(false,false);
+  },1000);
+}
+
+function renderHandoverBox(isTimeout,isRedirecting){
+  var box=document.getElementById('handover');
+  if(!box){return;}
+  box.style.display='block';
+
+  if(isTimeout){
+    box.innerHTML=''
+      +'<h3>Verbindung konnte nicht aufgebaut werden</h3>'
+      +'<p>Bitte verbinde dich erneut mit deinem WLAN und öffne die Geräteseite manuell.</p>';
+    return;
+  }
+
+  if(isRedirecting){
+    var manualTarget=redirectTargetIp ? redirectTargetIp : (redirectTargetHostname || 'wird noch ermittelt');
+    box.innerHTML=''
+      +'<h3>Weiterleitung läuft …</h3>'
+      +'<p>Bitte stelle sicher, dass dein Laptop wieder mit dem WLAN verbunden ist. '
+      +'Falls nichts passiert, öffne das Gerät manuell unter: '+manualTarget+'</p>';
+    return;
+  }
+
+  var ipHint=redirectTargetIp?('Ermittelte Geräte-IP: '+redirectTargetIp+'. '):'';
+  var hostHint=redirectTargetHostname?('Gerätename im Netzwerk: '+redirectTargetHostname+'. '):'';
+  box.innerHTML=''
+    +'<h3>Setup abgeschlossen</h3>'
+    +'<p>Die WLAN-Einstellungen wurden gespeichert. Der Setup-Access-Point wird deaktiviert. '
+    +'Bitte verbinde dich wieder mit deinem WLAN (normalerweise automatisch, sofern nicht manuell deaktiviert). '
+    +ipHint+hostHint+'Die Seite leitet in <span class="count">'+redirectSecondsLeft+' Sekunden</span> auf das Gerät weiter.</p>';
+}
+
+function pollConnectStatus(){
+  fetch('/connect-status',{cache:'no-store'}).then(r=>r.json()).then(function(status){
+    if(status.connected && status.ip){
+      redirectTargetIp=status.ip;
+      renderHandoverBox(false,false);
+    }
+    if(status.timeout){
+      showMsg('err','WLAN-Verbindung fehlgeschlagen. Bitte Zugangsdaten prüfen.');
+      renderHandoverBox(true,false);
+      if(connectPollTimer){clearTimeout(connectPollTimer);connectPollTimer=null;}
+      return;
+    }
+    connectPollTimer=setTimeout(pollConnectStatus,1200);
+  }).catch(function(){
+    connectPollTimer=setTimeout(pollConnectStatus,1500);
+  });
+}
+
+function tryRedirectToDevice(){
+  renderHandoverBox(false,true);
+  if(redirectTargetIp){
+    window.location.href='http://'+redirectTargetIp+'/';
+    return;
+  }
+  if(redirectTargetHostname){
+    window.location.href='http://'+redirectTargetHostname+'/';
+    return;
+  }
+
+  redirectRetryCount+=1;
+  if(redirectRetryCount>=20){
+    showMsg('err','Automatische Weiterleitung nicht möglich. Bitte Gerät manuell aufrufen.');
+    renderHandoverBox(true,false);
+    return;
+  }
+
+  // Die Zieladresse ist noch nicht bekannt (oder AP-Link bereits weg) -> retry.
+  setTimeout(tryRedirectToDevice,2000);
+}
+
 function showMsg(cls,txt){
   var el=document.getElementById('msg');
   el.className=cls;el.textContent=txt;
@@ -222,15 +356,76 @@ function showMsg(cls,txt){
 
         std::string ssid = request->arg("ssid").c_str();
         std::string password = request->arg("password").c_str();
-        WifiConfig config;
-        config.ssid = ssid;
-        config.password = password;
-        WifiManager::getInstance().setConfig(config);
-        request->onDisconnect([]() {
-            delay(500);
-            ESP.restart();
-        });
-        request->send(200, "text/plain", "OK");
+        std::string deviceName = request->arg("deviceName").c_str();
+        if (ssid.empty()) {
+          request->send(400, "application/json", "{\"ok\":false,\"error\":\"ssid_required\"}");
+          return;
+        }
+
+        Config fullConfig;
+        ConfigStore::getInstance().load(fullConfig);
+
+        WifiConfig wifiConfig = fullConfig.wifi;
+        wifiConfig.ssid = ssid;
+        wifiConfig.password = password;
+        if (!deviceName.empty()) {
+          wifiConfig.deviceName = deviceName;
+        }
+        WifiManager::getInstance().setConfig(wifiConfig, fullConfig.staticIp);
+
+        gSetupConnectState.connectRequested = true;
+        gSetupConnectState.connectStartedMs = millis();
+        gSetupConnectState.restartArmed = false;
+
+        const bool connectStarted = WifiManager::getInstance().beginConnectAsync();
+
+        DynamicJsonDocument doc(256);
+        doc["ok"] = connectStarted;
+        doc["connecting"] = connectStarted;
+        doc["dnsHostname"] = WifiManager::getInstance().getDnsHostname();
+        doc["staticIp"] = fullConfig.staticIp.ip;
+        if (!connectStarted) {
+          doc["error"] = "wifi_connect_start_failed";
+          std::string json;
+          serializeJson(doc, json);
+          request->send(400, "application/json", json.c_str());
+          return;
+        }
+
+        std::string json;
+        serializeJson(doc, json);
+        request->send(200, "application/json", json.c_str());
+    });
+
+    server_.on("/connect-status", HTTP_GET, [](AsyncWebServerRequest *request) {
+      if (!requireSetupSubnet(request)) {
+        return;
+      }
+
+      const bool wifiConnected = WiFi.status() == WL_CONNECTED;
+      const String staIp = WiFi.localIP().toString();
+      const bool timeout = gSetupConnectState.connectRequested
+        && !wifiConnected
+        && (millis() - gSetupConnectState.connectStartedMs) > kSetupConnectTimeoutMs;
+
+      if (wifiConnected && !gSetupConnectState.restartArmed) {
+        WifiManager::getInstance().scheduleRestart(kPostConnectRestartDelayMs);
+        gSetupConnectState.restartArmed = true;
+      }
+
+      DynamicJsonDocument doc(256);
+      doc["connectRequested"] = gSetupConnectState.connectRequested;
+      doc["connecting"] = gSetupConnectState.connectRequested && !wifiConnected && !timeout;
+      doc["connected"] = wifiConnected;
+      doc["timeout"] = timeout;
+      doc["ip"] = wifiConnected ? staIp.c_str() : "";
+      doc["dnsHostname"] = WifiManager::getInstance().getDnsHostname();
+      doc["restartScheduled"] = WifiManager::getInstance().isRestartScheduled();
+      doc["restartInMs"] = WifiManager::getInstance().getRestartRemainingMs();
+
+      std::string json;
+      serializeJson(doc, json);
+      request->send(200, "application/json", json.c_str());
     });
 
       // Setup-Modus robust machen: Browser rufen haeufig /index.html oder alte Pfade auf.

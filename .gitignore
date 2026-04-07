@@ -9,7 +9,7 @@ release/
 *.log
 ToDo.md
 umbau.md
-SECURITY_FINDINGS.md
+clean.md
 signing/release_private.pem
 signing/release_public.pem
 _ERL/

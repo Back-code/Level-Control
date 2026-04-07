@@ -411,7 +411,7 @@ bool PushNotificationManager::sendEmailInternal(const std::string& subject, cons
     }
 
     if (!readSmtpResponse(*client, 220, error)) return false;
-    if (!sendSmtpCommand(*client, "EHLO level-control.local\r\n", 250, error)) return false;
+    if (!sendSmtpCommand(*client, "EHLO level-control\r\n", 250, error)) return false;
     if (!sendSmtpCommand(*client, "AUTH LOGIN\r\n", 334, error)) return false;
     if (!sendSmtpCommand(*client, toBase64(config.push.authUser) + "\r\n", 334, error)) return false;
     if (!sendSmtpCommand(*client, toBase64(config.push.authPassword) + "\r\n", 235, error)) return false;
@@ -613,7 +613,7 @@ SmtpDiagResult PushNotificationManager::smtpDiagnostic() {
     }
     result.steps.push_back({"SMTP-Greeting", true, "Server bereit (220)"});
 
-    if (!sendSmtpCommand(*client, "EHLO level-control.local\r\n", 250, error)) {
+    if (!sendSmtpCommand(*client, "EHLO level-control\r\n", 250, error)) {
         result.steps.push_back({"EHLO", false, error});
         client->stop();
         return result;

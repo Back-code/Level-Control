@@ -307,7 +307,7 @@
     return value === '***' || value === PASSWORD_MASK;
   }
 
-  function normalizeMdnsHostname(deviceName) {
+  function normalizeDnsHostname(deviceName) {
     const normalized = String(deviceName || '')
       .trim()
       .toLowerCase()
@@ -319,7 +319,7 @@
   }
 
   function getWifiLocalUrl() {
-    return `http://${normalizeMdnsHostname(wifiConfig.deviceName)}.local/`;
+    return `http://${normalizeDnsHostname(wifiConfig.deviceName)}/`;
   }
 
   function getUnitSeconds(unit) {
@@ -1033,7 +1033,7 @@
       <span>Gerätename:</span>
       <input bind:value={wifiConfig.deviceName} placeholder={t('config.deviceNamePlaceholder')} />
     </label>
-    <p class="helper-text">Im Netzwerk erreichbar unter {getWifiLocalUrl()}</p>
+    <p class="helper-text">Im Netzwerk erreichbar unter {getWifiLocalUrl()} (Router-DNS vorausgesetzt).</p>
 
     <div class="choice-grid" role="radiogroup" aria-label="IP-Konfiguration">
       <label class="choice-card">

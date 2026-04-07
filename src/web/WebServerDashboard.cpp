@@ -11,6 +11,7 @@
 #include <WiFiClientSecure.h>
 #include <algorithm>
 #include <cctype>
+#include <climits>
 #include <cstdio>
 #include <cstring>
 #include <vector>
@@ -69,6 +70,26 @@ bool isMaskedPassword(const std::string& value) {
     return value == "***" || value == kPasswordMask;
 }
 
+bool parseVersionNumberPart(const std::string& text, size_t& pos, int& value) {
+    if (pos >= text.size() || !isdigit(static_cast<unsigned char>(text[pos]))) {
+        return false;
+    }
+
+    int parsed = 0;
+    while (pos < text.size() && isdigit(static_cast<unsigned char>(text[pos]))) {
+        const int digit = text[pos] - '0';
+        // Prevent integer overflow while parsing malformed version strings.
+        if (parsed > (INT_MAX - digit) / 10) {
+            return false;
+        }
+        parsed = parsed * 10 + digit;
+        ++pos;
+    }
+
+    value = parsed;
+    return true;
+}
+
 bool parseVersion(const std::string& version, int& major, int& minor, int& patch) {
     major = 0;
     minor = 0;
@@ -77,10 +98,28 @@ bool parseVersion(const std::string& version, int& major, int& minor, int& patch
         return false;
     }
 
-    char separator1 = 0;
-    char separator2 = 0;
-    return sscanf(version.c_str(), "%d%c%d%c%d", &major, &separator1, &minor, &separator2, &patch) == 5
-        && separator1 == '.' && separator2 == '.';
+    size_t pos = 0;
+    if (!parseVersionNumberPart(version, pos, major)) {
+        return false;
+    }
+    if (pos >= version.size() || version[pos] != '.') {
+        return false;
+    }
+    ++pos;
+
+    if (!parseVersionNumberPart(version, pos, minor)) {
+        return false;
+    }
+    if (pos >= version.size() || version[pos] != '.') {
+        return false;
+    }
+    ++pos;
+
+    if (!parseVersionNumberPart(version, pos, patch)) {
+        return false;
+    }
+
+    return pos == version.size();
 }
 
 bool isHttpsUrl(const std::string& url) {
@@ -505,7 +544,7 @@ void WebServerDashboard::setupRoutes() {
         doc["deviceName"] = loaded ? config.wifi.deviceName : WifiManager::getInstance().getConfig().deviceName;
         doc["ntpServerPrimary"] = loaded ? config.wifi.ntpServerPrimary : WifiManager::getInstance().getConfig().ntpServerPrimary;
         doc["ntpServerSecondary"] = loaded ? config.wifi.ntpServerSecondary : WifiManager::getInstance().getConfig().ntpServerSecondary;
-        doc["mdnsHostname"] = WifiManager::getInstance().getMdnsHostname();
+        doc["dnsHostname"] = WifiManager::getInstance().getDnsHostname();
         doc["localUrl"] = WifiManager::getInstance().getLocalUrl();
         doc["useStaticIp"] = loaded && (!config.staticIp.ip.empty() || !config.staticIp.subnet.empty() || !config.staticIp.dns.empty());
         doc["staticIp"]["ip"] = loaded ? config.staticIp.ip : "";

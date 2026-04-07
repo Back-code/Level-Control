@@ -1,6 +1,5 @@
 #include "WifiManager.h"
 #include "DebugLogger.h"
-#include <ESPmDNS.h>
 #include <esp_sntp.h>
 #include <algorithm>
 #include <cctype>
@@ -27,7 +26,7 @@ std::string trimCopy(const std::string& value) {
     return value.substr(first, last - first + 1);
 }
 
-std::string normalizeMdnsHostname(const std::string& deviceName) {
+std::string normalizeDnsHostname(const std::string& deviceName) {
     std::string normalized;
     normalized.reserve(deviceName.size());
 
@@ -106,20 +105,29 @@ void WifiManager::init() {
             LogLevel::INFO,
             "NTP sync configured with primary=" + ntpPrimary + ", secondary=" + ntpSecondary
         );
-        startMdns();
         // Kein MQTT-Connect im WiFi-Event-Task: wird im main loop verarbeitet.
     }, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_GOT_IP);
 
     WiFi.onEvent([this](WiFiEvent_t event, WiFiEventInfo_t info) {
         int reason = info.wifi_sta_disconnected.reason;
         DebugLogger::getInstance().log(LogLevel::WARN, "WiFi disconnected (reason=" + std::to_string(reason) + ")");
-        stopMdns();
         EventBus::getInstance().publish({EventType::WIFI_DISCONNECTED, ""});
         scheduleReconnect();
     }, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
 }
 
 void WifiManager::process() {
+    if (restartScheduled_) {
+        const long remainingMs = static_cast<long>(restartAtMs_ - millis());
+        if (remainingMs <= 0) {
+            restartScheduled_ = false;
+            DebugLogger::getInstance().log(LogLevel::INFO, "Scheduled restart");
+            delay(50);
+            ESP.restart();
+            return;
+        }
+    }
+
     if (!reconnectPending_) {
         return;
     }
@@ -170,6 +178,48 @@ bool WifiManager::connect() {
         scheduleReconnect();
     }
     return connected;
+}
+
+bool WifiManager::beginConnectAsync() {
+    if (config_.ssid.empty()) {
+        return false;
+    }
+
+    reconnectPending_ = false;
+    resetReconnectBackoff();
+
+    if (hasStaticIpConfig(staticConfig_)) {
+        const IPAddress localIp = parseIpOrDefault(staticConfig_.ip);
+        const IPAddress gateway = parseIpOrDefault(staticConfig_.gateway);
+        const IPAddress subnet = parseIpOrDefault(staticConfig_.subnet);
+        const IPAddress dns = parseIpOrDefault(staticConfig_.dns);
+        WiFi.config(localIp, gateway, subnet, dns);
+    } else {
+        const IPAddress emptyIp(static_cast<uint32_t>(0U));
+        WiFi.config(emptyIp, emptyIp, emptyIp, emptyIp);
+    }
+
+    const std::string hostname = getDnsHostname();
+    WiFi.mode(WIFI_AP_STA);
+    WiFi.setSleep(false);
+    WiFi.setHostname(hostname.c_str());
+    DebugLogger::getInstance().log(LogLevel::INFO, "WiFi hostname set to " + hostname + " (AP+STA)");
+    WiFi.begin(config_.ssid.c_str(), config_.password.c_str());
+    return true;
+}
+
+void WifiManager::scheduleRestart(uint32_t delayMs) {
+    restartScheduled_ = true;
+    restartAtMs_ = millis() + delayMs;
+}
+
+unsigned long WifiManager::getRestartRemainingMs() const {
+    if (!restartScheduled_) {
+        return 0;
+    }
+
+    const long remainingMs = static_cast<long>(restartAtMs_ - millis());
+    return remainingMs > 0 ? static_cast<unsigned long>(remainingMs) : 0;
 }
 
 void WifiManager::scheduleReconnect() {
@@ -259,46 +309,18 @@ WifiConfig WifiManager::getConfig() const {
     return config_;
 }
 
-std::string WifiManager::getMdnsHostname() const {
-    return normalizeMdnsHostname(config_.deviceName);
+std::string WifiManager::getDnsHostname() const {
+    return normalizeDnsHostname(config_.deviceName);
 }
 
 std::string WifiManager::getLocalUrl() const {
-    return std::string("http://") + getMdnsHostname() + ".local/";
+    return std::string("http://") + getDnsHostname() + "/";
 }
 
 void WifiManager::applyStationIdentity() {
-    const std::string hostname = getMdnsHostname();
+    const std::string hostname = getDnsHostname();
     WiFi.mode(WIFI_STA);
     WiFi.setSleep(false);
     WiFi.setHostname(hostname.c_str());
     DebugLogger::getInstance().log(LogLevel::INFO, "WiFi hostname set to " + hostname);
-}
-
-void WifiManager::startMdns() {
-    const std::string hostname = getMdnsHostname();
-
-    if (mdnsRunning_) {
-        MDNS.end();
-        mdnsRunning_ = false;
-    }
-
-    if (!MDNS.begin(hostname.c_str())) {
-        DebugLogger::getInstance().log(LogLevel::WARN, "mDNS start failed for " + hostname + ".local");
-        return;
-    }
-
-    MDNS.addService("http", "tcp", 80);
-    mdnsRunning_ = true;
-    DebugLogger::getInstance().log(LogLevel::INFO, "mDNS active at http://" + hostname + ".local/");
-}
-
-void WifiManager::stopMdns() {
-    if (!mdnsRunning_) {
-        return;
-    }
-
-    MDNS.end();
-    mdnsRunning_ = false;
-    DebugLogger::getInstance().log(LogLevel::INFO, "mDNS stopped");
 }

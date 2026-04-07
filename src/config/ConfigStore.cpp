@@ -1,6 +1,9 @@
 #include "ConfigStore.h"
 #include <Preferences.h>
 #include <ArduinoJson.h>
+#include <cmath>
+#include <sstream>
+#include <vector>
 
 namespace {
 std::string trimCopy(const std::string& value) {
@@ -65,6 +68,28 @@ std::string normalizeNtpServer(const std::string& value, const std::string& fall
     const std::string trimmed = trimCopy(value);
     return trimmed.empty() ? fallback : trimmed;
 }
+
+bool isFiniteFloat(float value) {
+    return std::isfinite(static_cast<double>(value));
+}
+
+int normalizePort(int value, int fallback) {
+    if (value < 1 || value > 65535) {
+        return fallback;
+    }
+    return value;
+}
+
+std::string joinReasons(const std::vector<std::string>& reasons) {
+    std::ostringstream stream;
+    for (size_t index = 0; index < reasons.size(); ++index) {
+        if (index != 0) {
+            stream << "; ";
+        }
+        stream << reasons[index];
+    }
+    return stream.str();
+}
 }
 
 ConfigStore& ConfigStore::getInstance() {
@@ -84,7 +109,15 @@ bool ConfigStore::load(Config& config) {
     if (jsonStr.empty()) return false;
 
     DynamicJsonDocument doc(3072);
-    deserializeJson(doc, jsonStr);
+    const DeserializationError jsonError = deserializeJson(doc, jsonStr);
+    if (jsonError != DeserializationError::Ok) {
+        config = Config();
+        loadFallbackApplied_ = true;
+        loadFallbackMessage_ = "Konfiguration war ungueltig und wurde auf Defaults zurueckgesetzt";
+        return true;
+    }
+
+    std::vector<std::string> fallbackReasons;
 
     config.version = doc["version"] | 1;
     config.wifi.ssid = doc["wifi"]["ssid"] | "";
@@ -98,10 +131,10 @@ bool ConfigStore::load(Config& config) {
         doc["wifi"]["ntpServerSecondary"] | "time.cloudflare.com",
         "time.cloudflare.com"
     );
-    config.staticIp.ip = doc["staticIp"]["ip"] | "";
-    config.staticIp.gateway = doc["staticIp"]["gateway"] | "";
-    config.staticIp.subnet = doc["staticIp"]["subnet"] | "";
-    config.staticIp.dns = doc["staticIp"]["dns"] | "";
+    config.staticIp.ip = trimCopy(doc["staticIp"]["ip"] | "");
+    config.staticIp.gateway = trimCopy(doc["staticIp"]["gateway"] | "");
+    config.staticIp.subnet = trimCopy(doc["staticIp"]["subnet"] | "");
+    config.staticIp.dns = trimCopy(doc["staticIp"]["dns"] | "");
     config.mqtt.server = doc["mqtt"]["server"] | "";
     config.mqtt.port = doc["mqtt"]["port"] | 1883;
     config.mqtt.user = doc["mqtt"]["user"] | "";
@@ -164,10 +197,59 @@ bool ConfigStore::load(Config& config) {
     config.sampleIntervalSeconds = doc["sampleIntervalSeconds"] | 5UL;
     if (config.sampleIntervalSeconds < 5UL) {
         config.sampleIntervalSeconds = 5UL;
+        fallbackReasons.emplace_back("sampleIntervalSeconds < 5 auf 5 gesetzt");
     }
     config.sensorType = normalizeSensorType(doc["sensorType"] | "rcwl1670");
 
+    const bool hasAnyStaticIp = !config.staticIp.ip.empty()
+        || !config.staticIp.gateway.empty()
+        || !config.staticIp.subnet.empty()
+        || !config.staticIp.dns.empty();
+    const bool hasFullStaticIp = !config.staticIp.ip.empty()
+        && !config.staticIp.gateway.empty()
+        && !config.staticIp.subnet.empty()
+        && !config.staticIp.dns.empty();
+    if (hasAnyStaticIp && !hasFullStaticIp) {
+        config.staticIp = {};
+        fallbackReasons.emplace_back("unvollstaendige staticIp verworfen");
+    }
+
+    const int mqttPortBefore = config.mqtt.port;
+    config.mqtt.port = normalizePort(config.mqtt.port, 1883);
+    if (config.mqtt.port != mqttPortBefore) {
+        fallbackReasons.emplace_back("ungueltiger MQTT-Port auf 1883 gesetzt");
+    }
+
+    const int smtpPortBefore = config.push.smtpPort;
+    config.push.smtpPort = normalizePort(config.push.smtpPort, 587);
+    if (config.push.smtpPort != smtpPortBefore) {
+        fallbackReasons.emplace_back("ungueltiger SMTP-Port auf 587 gesetzt");
+    }
+
+    if (!isFiniteFloat(config.behaelterhoehe) || config.behaelterhoehe < 10.0f || config.behaelterhoehe > 500.0f) {
+        config.behaelterhoehe = 95.0f;
+        fallbackReasons.emplace_back("ungueltige Behaelterhoehe auf 95 gesetzt");
+    }
+
+    if (!isFiniteFloat(config.offset) || config.offset < -200.0f || config.offset > 200.0f) {
+        config.offset = 0.0f;
+        fallbackReasons.emplace_back("ungueltiger Offset auf 0 gesetzt");
+    }
+
+    if (!fallbackReasons.empty()) {
+        loadFallbackApplied_ = true;
+        loadFallbackMessage_ = joinReasons(fallbackReasons);
+    }
+
     return true;
+}
+
+bool ConfigStore::wasFallbackApplied() const {
+    return loadFallbackApplied_;
+}
+
+std::string ConfigStore::getFallbackMessage() const {
+    return loadFallbackMessage_;
 }
 
 bool ConfigStore::save(const Config& config) {

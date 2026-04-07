@@ -63,6 +63,7 @@ private:
     ReleaseManifest cachedManifest_;
     std::string manifestError_;
     unsigned long lastManifestCheckMs_ = 0;
+    volatile bool manifestFetchInProgress_ = false;
     bool uploadActive_ = false;
     bool uploadFailed_ = false;
     bool restartScheduled_ = false;
@@ -92,6 +93,8 @@ private:
     bool fetchLatestManifest(ReleaseManifest& manifest, std::string& rawManifest, std::string& error);
     bool parseLatestReleaseInfo(const std::string& rawJson, ReleaseManifest& manifest, std::string& error) const;
     bool refreshManifestCache(bool forceRefresh, std::string& error);
+    void startBackgroundManifestFetch();
+    void runManifestFetchTask();
     bool verifyDetachedFileSignature(const unsigned char* hash, size_t hashLen, const uint8_t* signature, size_t signatureLen, std::string& error) const;
     std::string resolveUpdateTarget(const ReleaseManifest& manifest, const std::string& requestedTarget, std::string& error) const;
     void startRemoteUpdateTask(const std::string& target);

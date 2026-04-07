@@ -1428,6 +1428,8 @@ void WebServerDashboard::sendUpdateStatus(AsyncWebServerRequest *request) {
     doc["canReset"] = !updateState_.rebootPending
         && updateState_.source == "upload"
         && (!updateState_.inProgress || updateState_.phase == "failed");
+    doc["configFallbackApplied"] = ConfigStore::getInstance().wasFallbackApplied();
+    doc["configFallbackMessage"] = ConfigStore::getInstance().getFallbackMessage();
     doc["appMaxSize"] = getAppPartitionSize();
     doc["firmwareMaxSize"] = getAppPartitionSize();
     doc["webuiMaxSize"] = getFilesystemPartitionSize();
@@ -1465,24 +1467,38 @@ void WebServerDashboard::sendUpdateStatus(AsyncWebServerRequest *request) {
 }
 
 void WebServerDashboard::sendUpdateManifest(AsyncWebServerRequest *request) {
-    std::string error;
+    // Non-blocking: Liefert Cache-Daten sofort und startet bei Bedarf einen Background-Fetch.
+    const unsigned long now = millis();
+    const bool cacheExpired = lastManifestCheckMs_ == 0 || (now - lastManifestCheckMs_) >= kManifestCacheTtlMs;
 
-    if (!refreshManifestCache(true, error)) {
-        manifestError_ = error;
-        lastManifestCheckMs_ = millis();
+    if (cacheExpired && !manifestFetchInProgress_) {
+        startBackgroundManifestFetch();
+    }
+
+    if (!cachedManifest_.valid && !manifestError_.empty()) {
         DynamicJsonDocument doc(256);
-        doc["error"] = error;
+        doc["error"] = manifestError_;
         doc["manifestUrl"] = kLatestReleaseApiUrl;
+        doc["fetching"] = manifestFetchInProgress_;
         std::string json;
         serializeJson(doc, json);
         request->send(502, "application/json", json.c_str());
         return;
     }
 
-    manifestError_.clear();
-    lastManifestCheckMs_ = millis();
+    if (!cachedManifest_.valid) {
+        DynamicJsonDocument doc(256);
+        doc["error"] = manifestFetchInProgress_ ? "Release-Informationen werden geladen" : "Kein Release-Manifest verfügbar";
+        doc["manifestUrl"] = kLatestReleaseApiUrl;
+        doc["fetching"] = manifestFetchInProgress_;
+        std::string json;
+        serializeJson(doc, json);
+        request->send(manifestFetchInProgress_ ? 202 : 502, "application/json", json.c_str());
+        return;
+    }
 
     DynamicJsonDocument doc(1024);
+    doc["fetching"] = manifestFetchInProgress_;
     doc["version"] = cachedManifest_.version;
     doc["releaseUrl"] = cachedManifest_.releaseUrl;
 
@@ -1634,6 +1650,42 @@ bool WebServerDashboard::refreshManifestCache(bool forceRefresh, std::string& er
     manifestError_.clear();
     lastManifestCheckMs_ = now;
     return true;
+}
+
+void WebServerDashboard::startBackgroundManifestFetch() {
+    if (manifestFetchInProgress_) {
+        return;
+    }
+    manifestFetchInProgress_ = true;
+
+    if (xTaskCreate([](void *param) {
+            auto *dashboard = static_cast<WebServerDashboard*>(param);
+            dashboard->runManifestFetchTask();
+            vTaskDelete(nullptr);
+        }, "manifest-fetch", 8192, this, 1, nullptr) != pdPASS) {
+        manifestFetchInProgress_ = false;
+        manifestError_ = "Manifest-Task konnte nicht gestartet werden";
+        DebugLogger::getInstance().log(LogLevel::ERROR, manifestError_);
+    }
+}
+
+void WebServerDashboard::runManifestFetchTask() {
+    ReleaseManifest manifest;
+    std::string rawManifest;
+    std::string error;
+
+    if (fetchLatestManifest(manifest, rawManifest, error)) {
+        cachedManifest_ = manifest;
+        manifestError_.clear();
+    } else {
+        if (!cachedManifest_.valid) {
+            cachedManifest_ = {};
+        }
+        manifestError_ = error;
+    }
+
+    lastManifestCheckMs_ = millis();
+    manifestFetchInProgress_ = false;
 }
 
 std::string WebServerDashboard::resolveUpdateTarget(const ReleaseManifest& manifest, const std::string& requestedTarget, std::string& error) const {

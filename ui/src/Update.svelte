@@ -29,6 +29,8 @@
     uploadActive: false,
     activityAgeMs: 0,
     canReset: false,
+    configFallbackApplied: false,
+    configFallbackMessage: '',
     appMaxSize: 0,
     firmwareMaxSize: 0,
     webuiMaxSize: 0,
@@ -599,6 +601,14 @@
       {/if}
       {#if status.lastResetReason}
         <small>Letzter Reset: {status.lastResetReason}</small>
+      {/if}
+      {#if status.configFallbackApplied}
+        <small style="color:#f59e0b;display:block;">
+          Hinweis: Konfiguration wurde auf sichere Defaults korrigiert.
+          {#if status.configFallbackMessage}
+            ({status.configFallbackMessage})
+          {/if}
+        </small>
       {/if}
       <div class="progress-track">
         <div class="progress-fill" style={`width:${progressPercent}%`}></div>

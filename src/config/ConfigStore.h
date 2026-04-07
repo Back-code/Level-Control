@@ -65,10 +65,14 @@ public:
 
     bool load(Config& config);
     bool save(const Config& config);
+    bool wasFallbackApplied() const;
+    std::string getFallbackMessage() const;
 
 private:
     ConfigStore();
     const char* nvsNamespace_ = "config";
+    bool loadFallbackApplied_ = false;
+    std::string loadFallbackMessage_;
 };
 
 #endif // CONFIG_STORE_H

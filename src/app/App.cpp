@@ -47,12 +47,19 @@ void App::init() {
         // #region agent log boot decision + config existence
         Config bootConfig;
         const bool bootCfgLoaded = ConfigStore::getInstance().load(bootConfig);
+        const bool cfgFallbackApplied = ConfigStore::getInstance().wasFallbackApplied();
+        const std::string cfgFallbackMessage = ConfigStore::getInstance().getFallbackMessage();
         DebugLogger::getInstance().log(
             LogLevel::INFO,
             std::string("DEBUG_BOOT H1/H2: determineState=") + (state == SystemState::SETUP_MODE ? "SETUP" : "NORMAL")
                 + ", ConfigStore.load=" + (bootCfgLoaded ? "true" : "false")
                 + ", ssid_len=" + std::to_string(bootConfig.wifi.ssid.size())
         );
+        if (cfgFallbackApplied) {
+            DebugLogger::getInstance().log(
+                LogLevel::WARN,
+                std::string("Config fallback aktiv: ") + cfgFallbackMessage);
+        }
         // #endregion
     }
 

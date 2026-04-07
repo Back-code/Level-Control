@@ -1954,6 +1954,7 @@ bool WebServerDashboard::applyRemoteAsset(const ManifestAsset& asset, int comman
     WiFiClient *stream = http.getStreamPtr();
     uint8_t buffer[kUploadBufferSize];
     size_t received = 0;
+    size_t streamReceived = 0;
     bool firstPayloadChunk = true;
     std::vector<uint8_t> tailBuffer;
     tailBuffer.reserve(kEmbeddedSigTrailerSize + kUploadBufferSize);
@@ -1971,7 +1972,7 @@ bool WebServerDashboard::applyRemoteAsset(const ManifestAsset& asset, int comman
 
     setUpdatePhase(phase, "Download läuft", 0, expectedSize);
 
-    while (http.connected() && (contentLength < 0 || received < static_cast<size_t>(contentLength))) {
+    while (http.connected() && (contentLength < 0 || streamReceived < static_cast<size_t>(contentLength))) {
         const size_t available = stream->available();
         if (available == 0) {
             delay(1);
@@ -1983,6 +1984,7 @@ bool WebServerDashboard::applyRemoteAsset(const ManifestAsset& asset, int comman
             continue;
         }
 
+        streamReceived += chunkSize;
         tailBuffer.insert(tailBuffer.end(), buffer, buffer + chunkSize);
 
         while (tailBuffer.size() > kEmbeddedSigTrailerSize) {

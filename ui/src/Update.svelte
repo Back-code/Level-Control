@@ -48,6 +48,7 @@
     total: 0
   };
   let otaReloadScheduled = false;
+  let rebootFallbackTriggered = false;
 
   function compareVersions(left, right) {
     const leftParts = left.split('.').map(part => Number(part) || 0);
@@ -188,10 +189,9 @@
           liveInstalledVersion = status.installedVersion;
         }
 
-        // After a successful OTA the device reboots. Wait until device is back up, then reload.
-        if (!otaReloadScheduled && status.success && status.rebootPending && !status.inProgress) {
+        // After a successful OTA the device should reboot. Poll until device is reachable and reload.
+        if (!otaReloadScheduled && status.success && !status.inProgress && (status.rebootPending || isFirmwareLikeTarget(status.target))) {
           otaReloadScheduled = true;
-          // Give the ESP32 time to start rebooting, then poll until it responds.
           setTimeout(async () => {
             let attempts = 0;
             while (attempts < 24) {
@@ -207,6 +207,19 @@
             }
             window.location.reload(); // Fallback nach ~12 s
           }, 3000);
+        }
+
+        // Safety net: if reboot is still pending for too long, request a restart explicitly once.
+        if (
+          !rebootFallbackTriggered
+          && status.success
+          && status.rebootPending
+          && !status.inProgress
+          && isFirmwareLikeTarget(status.target)
+          && (status.activityAgeMs || 0) > 15000
+        ) {
+          rebootFallbackTriggered = true;
+          fetch('/api/restart', { method: 'POST' }).catch(() => {});
         }
 
         return status;

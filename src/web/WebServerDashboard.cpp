@@ -94,6 +94,35 @@ std::string normalizeVersionTag(std::string value) {
     return value;
 }
 
+bool hasBinSuffix(const std::string& name) {
+    return name.size() >= 4 && name.rfind(".bin") == name.size() - 4;
+}
+
+bool isAppAssetName(const std::string& lowerName) {
+    if (!hasBinSuffix(lowerName)) {
+        return false;
+    }
+    if (lowerName.find("bootloader") != std::string::npos
+        || lowerName.find("partition") != std::string::npos
+        || lowerName.find("web-ui") != std::string::npos
+        || lowerName.find("webui") != std::string::npos
+        || lowerName.find("littlefs") != std::string::npos) {
+        return false;
+    }
+    return lowerName.find("-app.bin") != std::string::npos
+        || lowerName.find("firmware") != std::string::npos
+        || lowerName.find("app") != std::string::npos;
+}
+
+bool isWebUiAssetName(const std::string& lowerName) {
+    if (!hasBinSuffix(lowerName)) {
+        return false;
+    }
+    return lowerName.find("-web-ui.bin") != std::string::npos
+        || lowerName.find("webui") != std::string::npos
+        || lowerName.find("littlefs") != std::string::npos;
+}
+
 std::string bytesToHex(const unsigned char *data, size_t length) {
     static const char hexChars[] = "0123456789abcdef";
     std::string result;
@@ -197,6 +226,27 @@ const char* resetReasonToString(esp_reset_reason_t reason) {
         case ESP_RST_SDIO:      return "sdio";
         default:                return "other";
     }
+}
+
+bool ensureConfiguredBootPartition(const esp_partition_t* targetPartition, std::string& error) {
+    if (!targetPartition) {
+        error = "Keine OTA-Zielpartition gefunden";
+        return false;
+    }
+
+    esp_err_t setErr = esp_ota_set_boot_partition(targetPartition);
+    if (setErr != ESP_OK) {
+        error = std::string("Boot-Partition konnte nicht gesetzt werden: ") + esp_err_to_name(setErr);
+        return false;
+    }
+
+    const esp_partition_t* configuredBoot = esp_ota_get_boot_partition();
+    if (!configuredBoot || configuredBoot->address != targetPartition->address) {
+        error = "Boot-Partition wurde nach OTA nicht korrekt übernommen";
+        return false;
+    }
+
+    return true;
 }
 }
 
@@ -1570,14 +1620,15 @@ bool WebServerDashboard::parseLatestReleaseInfo(const std::string& rawManifest, 
     JsonArray assets = doc["assets"].as<JsonArray>();
     for (JsonObject asset : assets) {
         const std::string name = asset["name"] | "";
+        const std::string lowerName = toLowerCopy(name);
         const std::string url = asset["browser_download_url"] | "";
         const size_t size = asset["size"] | 0;
 
-        if (name.size() >= 8 && name.rfind("-app.bin") == name.size() - 8) {
+        if (isAppAssetName(lowerName)) {
             manifest.app.name = name;
             manifest.app.url = url;
             manifest.app.size = size;
-        } else if (name.size() >= 11 && name.rfind("-web-ui.bin") == name.size() - 11) {
+        } else if (isWebUiAssetName(lowerName)) {
             manifest.webui.name = name;
             manifest.webui.url = url;
             manifest.webui.size = size;
@@ -2022,14 +2073,10 @@ bool WebServerDashboard::applyRemoteAsset(const ManifestAsset& asset, int comman
     }
 
     if (command == U_FLASH) {
-        // Nach erfolgreichem Flashen die neue Partition als Boot-Partition setzen
-        if (targetPartition) {
-            esp_err_t err = esp_ota_set_boot_partition(targetPartition);
-            if (err != ESP_OK) {
-                error = std::string("Boot-Partition konnte nicht gesetzt werden: ") + esp_err_to_name(err);
-                http.end();
-                return false;
-            }
+        // Nach erfolgreichem Flashen die neue Partition als Boot-Partition setzen und verifizieren.
+        if (!ensureConfiguredBootPartition(targetPartition, error)) {
+            http.end();
+            return false;
         }
     }
 
@@ -2297,17 +2344,15 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
 
     if (target == "app") {
         // Falls wir vor dem Upload die Ziel-Partition ermittelt haben, diese jetzt als Boot-Partition setzen.
-        if (uploadTargetPartition_) {
-            esp_err_t err = esp_ota_set_boot_partition(uploadTargetPartition_);
-            if (err != ESP_OK) {
-                uploadTargetPartition_ = nullptr;
-                if (target == "webui") {
-                    LittleFS.begin();
-                }
-                markUpdateFailed(std::string("Boot-Partition konnte nicht gesetzt werden: ") + esp_err_to_name(err));
-                request->send(500, "application/json", (std::string("{\"error\":\"") + updateState_.message + "\"}").c_str());
-                return;
+        std::string bootPartitionError;
+        if (!ensureConfiguredBootPartition(uploadTargetPartition_, bootPartitionError)) {
+            uploadTargetPartition_ = nullptr;
+            if (target == "webui") {
+                LittleFS.begin();
             }
+            markUpdateFailed(bootPartitionError);
+            request->send(500, "application/json", (std::string("{\"error\":\"") + updateState_.message + "\"}").c_str());
+            return;
         }
         uploadTargetPartition_ = nullptr;
     }

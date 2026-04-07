@@ -10,12 +10,7 @@ DebugLogger& DebugLogger::getInstance() {
 DebugLogger::DebugLogger() {}
 
 void DebugLogger::log(LogLevel level, const std::string& message) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    LogEntry entry{level, message, millis()};
-    entries_.push_back(entry);
-    if (entries_.size() > maxEntries_) {
-        entries_.erase(entries_.begin());
-    }
+    const unsigned long timestamp = millis();
 
     // Serial output
     std::string levelStr;
@@ -25,7 +20,9 @@ void DebugLogger::log(LogLevel level, const std::string& message) {
         case LogLevel::INFO: levelStr = "INFO"; break;
         case LogLevel::DEBUG: levelStr = "DEBUG"; break;
     }
+#ifndef NDEBUG
     Serial.printf("[%s] %s\n", levelStr.c_str(), message.c_str());
+#endif
 
     // WebSocket if set
     if (wsHandler_) {
@@ -33,17 +30,11 @@ void DebugLogger::log(LogLevel level, const std::string& message) {
         doc["type"] = "log";
         doc["level"] = levelStr;
         doc["message"] = message;
-        doc["timestamp"] = entry.timestamp;
+        doc["timestamp"] = timestamp;
         std::string json;
         serializeJson(doc, json);
         wsHandler_(json);
     }
-}
-
-std::vector<LogEntry> DebugLogger::getLastEntries(int count) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    int start = std::max(0, (int)entries_.size() - count);
-    return std::vector<LogEntry>(entries_.begin() + start, entries_.end());
 }
 
 void DebugLogger::setWebSocketHandler(std::function<void(const std::string&)> handler) {

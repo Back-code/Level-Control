@@ -11,7 +11,6 @@
 #include "MqttManager.h"
 #include "PushNotificationManager.h"
 #include "DebugLogger.h"
-#include "EventBus.h"
 #include "ConfigStore.h"
 #include "HistoryManager.h"
 
@@ -23,7 +22,9 @@ App& App::getInstance() {
 void App::init() {
     Serial.begin(115200);
     delay(100);
+#ifndef NDEBUG
     Serial.println("[Level-Control] Starting...");
+#endif
     DebugLogger::getInstance().log(LogLevel::INFO, "Starting Level-Control Sensor");
 
     // OTA-Rollback-Validierung so frueh wie moeglich ausfuehren.
@@ -43,46 +44,12 @@ void App::init() {
 
     WifiManager::getInstance().init();
 
-    {
-        // #region agent log boot decision + config existence
-        Config bootConfig;
-        const bool bootCfgLoaded = ConfigStore::getInstance().load(bootConfig);
-        const bool cfgFallbackApplied = ConfigStore::getInstance().wasFallbackApplied();
-        const std::string cfgFallbackMessage = ConfigStore::getInstance().getFallbackMessage();
-        DebugLogger::getInstance().log(
-            LogLevel::INFO,
-            std::string("DEBUG_BOOT H1/H2: determineState=") + (state == SystemState::SETUP_MODE ? "SETUP" : "NORMAL")
-                + ", ConfigStore.load=" + (bootCfgLoaded ? "true" : "false")
-                + ", ssid_len=" + std::to_string(bootConfig.wifi.ssid.size())
-        );
-        if (cfgFallbackApplied) {
-            DebugLogger::getInstance().log(
-                LogLevel::WARN,
-                std::string("Config fallback aktiv: ") + cfgFallbackMessage);
-        }
-        // #endregion
-    }
-
     if (state == SystemState::SETUP_MODE) {
-        // #region agent log boot setup-mode wifi config
-        const WifiConfig wifiCfg = WifiManager::getInstance().getConfig();
-        DebugLogger::getInstance().log(
-            LogLevel::WARN,
-            std::string("DEBUG_BOOT H1/H3: entering SETUP_MODE, wifiCfg.ssid_len=") + std::to_string(wifiCfg.ssid.size())
-        );
-        // #endregion
         WifiManager::getInstance().startAP("Level-Control-Setup", "");
         WebServerSetup::getInstance().init();
         WebServerSetup::getInstance().start();
     } else {
         const bool connected = WifiManager::getInstance().connect();
-        // #region agent log boot wifi connect result
-        DebugLogger::getInstance().log(
-            LogLevel::INFO,
-            std::string("DEBUG_BOOT H2: WiFi connect returned=") + (connected ? "true" : "false")
-                + ", wifiCfg.ssid_len=" + std::to_string(WifiManager::getInstance().getConfig().ssid.size())
-        );
-        // #endregion
 
         if (connected) {
             WebServerDashboard::getInstance().init();
@@ -108,20 +75,6 @@ void App::init() {
     PushNotificationManager::getInstance().init();
     // HistoryManager nach dem LittleFS-Mount (WebServerDashboard::init) initialisieren
     HistoryManager::getInstance().init();
-
-    // Sensor Test beim Start
-    Serial.println("[Level-Control] Starting sensor test...");
-    for (int i = 0; i < 5; i++) {
-        SensorManager::getInstance().measure();
-        delay(500);
-        float raw = SensorManager::getInstance().getRawDistance();
-        float cm = SensorManager::getInstance().getDistanceCm();
-        float pct = SensorManager::getInstance().getDistancePercent();
-        unsigned int ping = SensorManager::getInstance().getLastPingUs();
-        bool valid = SensorManager::getInstance().hasValidReading();
-        Serial.printf("[Test %d] raw=%.3fm cm=%.1f pct=%.1f valid=%d ping=%uus\n", i+1, raw, cm, pct, valid ? 1 : 0, ping);
-    }
-    Serial.println("[Level-Control] Sensor test complete");
 }
 
 void App::loop() {
@@ -132,11 +85,6 @@ void App::loop() {
     const bool updateInProgress = WebServerDashboard::getInstance().isUpdateInProgress();
 
     if (updateInProgress) {
-        if (now - lastSerial_ > 10000) {
-            lastSerial_ = now;
-            Serial.println("[Level-Control] Update aktiv, nicht-kritische Laufzeitjobs pausiert");
-        }
-
         delay(10);
         return;
     }
@@ -202,15 +150,6 @@ void App::loop() {
         WebServerDashboard::getInstance().broadcastWifiData();
         WebServerDashboard::getInstance().broadcastUptime();
         WebServerDashboard::getInstance().broadcastMqttState();
-    }
-
-    // Serielle Diagnose alle 10 s
-    if (now - lastSerial_ > 10000) {
-        lastSerial_ = now;
-        SensorManager& s = SensorManager::getInstance();
-        Serial.printf("[Level-Control] raw=%.3fm cm=%.1f pct=%.1f valid=%d ping=%uus\n",
-            s.getRawDistance(), s.getDistanceCm(), s.getDistancePercent(),
-            s.hasValidReading() ? 1 : 0, s.getLastPingUs());
     }
 
     delay(100);

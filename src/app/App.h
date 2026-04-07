@@ -12,7 +12,6 @@ private:
     App() = default;
 
     unsigned long lastBroadcast_     = 0;
-    unsigned long lastSerial_        = 0;
     unsigned long lastMeasurement_   = 0;
     unsigned long lastMqttReconnect_ = 0;
     unsigned long lastMqttPublish_   = 0;

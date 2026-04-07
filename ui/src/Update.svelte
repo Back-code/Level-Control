@@ -625,9 +625,9 @@
   <article class="action-card repo-card">
     <span class="eyebrow">1. OTA</span>
     {#if repoStatus.hasUpdate}
-      <div class="status-badge success">✓ {repoStatus.label}</div>
+      <div class="status-badge repo-status-badge success">✓ {repoStatus.label}</div>
     {:else}
-      <div class="status-badge info">⊘ {repoStatus.label}</div>
+      <div class="status-badge repo-status-badge info">⊘ {repoStatus.label}</div>
     {/if}
     <h3>Repo-Update (automatisch erkannt)</h3>
     <p>Erkennt automatisch, welche Updates verfügbar sind und installiert diese aus dem neuesten GitHub-Release.</p>
@@ -653,6 +653,12 @@
     <span class="eyebrow">2. Lokal</span>
     <h3>Updates hochladen</h3>
     <p>Wählen Sie App.bin und/oder Web-UI.bin aus und starten Sie das lokale Update einmalig. Beide Artefakte werden geprüft und danach in einem Durchlauf installiert.</p>
+
+    {#if localSelectionLabel}
+      <div class="status-badge local-selection-badge success">✓ Auswahl: {localSelectionLabel}</div>
+    {:else}
+      <div class="status-badge local-selection-badge info">⊘ Noch keine Datei ausgewählt</div>
+    {/if}
     
     <!-- Hidden file inputs -->
     <input 
@@ -682,12 +688,6 @@
         Lokales Update starten
       </button>
     </div>
-
-    {#if localSelectionLabel}
-      <div class="status-badge success">✓ Auswahl: {localSelectionLabel}</div>
-    {:else}
-      <div class="status-badge info">⊘ Noch keine Datei ausgewählt</div>
-    {/if}
     
     <!-- Upload progress indicators -->
     {#if isUploadProgress('app')}
@@ -860,14 +860,21 @@
   }
 
   .status-badge {
-    position: absolute;
-    top: 18px;
-    right: 18px;
     padding: 6px 12px;
     border-radius: 6px;
     font-size: 0.8rem;
     font-weight: 600;
     background: rgba(255, 255, 255, 0.08);
+  }
+
+  .repo-status-badge {
+    position: absolute;
+    top: 18px;
+    right: 18px;
+  }
+
+  .local-selection-badge {
+    justify-self: start;
   }
 
   .status-badge.success {

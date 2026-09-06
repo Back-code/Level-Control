@@ -32,7 +32,7 @@
   }
 
   function formatDateLabel(timestamp) {
-    return new Intl.DateTimeFormat('de-DE', {
+    return new Intl.DateTimeFormat(lang === 'en' ? 'en-US' : 'de-DE', {
       day: '2-digit',
       month: '2-digit',
       year: '2-digit'
@@ -40,7 +40,7 @@
   }
 
   function formatDateTimeLabel(timestamp) {
-    return new Intl.DateTimeFormat('de-DE', {
+    return new Intl.DateTimeFormat(lang === 'en' ? 'en-US' : 'de-DE', {
       day: '2-digit',
       month: '2-digit',
       year: '2-digit',

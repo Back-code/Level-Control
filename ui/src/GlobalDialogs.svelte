@@ -1,6 +1,39 @@
 <script>
+  import { tick } from 'svelte';
   import { activeConfirmation, activeNotice, closeNotice, resolveConfirmation } from './dialogStore.js';
+
+  let dialogCard;
+  let lastDialog = null;
+
+  $: if ($activeConfirmation && $activeConfirmation !== lastDialog) {
+    lastDialog = $activeConfirmation;
+    tick().then(() => dialogCard?.querySelector('button')?.focus());
+  }
+
+  function handleDialogKeydown(event) {
+    if (!$activeConfirmation || !dialogCard) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      resolveConfirmation(false);
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const focusable = [...dialogCard.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+      .filter((element) => !element.disabled);
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
 </script>
+
+<svelte:window on:keydown={handleDialogKeydown} />
 
 {#if $activeNotice}
   <div class="notice-overlay" role="alert" aria-live="assertive">
@@ -23,7 +56,7 @@
 
 {#if $activeConfirmation}
   <div class="dialog-backdrop" role="presentation">
-    <div class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
+    <div class="dialog-card" bind:this={dialogCard} role="dialog" aria-modal="true" aria-labelledby="dialog-title" aria-describedby="dialog-message">
       <div class="dialog-icon" class:danger={$activeConfirmation.tone === 'danger'} aria-hidden="true">
         {#if $activeConfirmation.tone === 'danger'}
           <svg viewBox="0 0 24 24"><path d="M12 3 2 21h20zm0 4.4L18.6 19H5.4zM11 10h2v5h-2zm0 6.5h2v2h-2z"/></svg>
@@ -33,7 +66,7 @@
       </div>
       <div class="dialog-copy">
         <strong id="dialog-title">{$activeConfirmation.title}</strong>
-        <p>{$activeConfirmation.message}</p>
+        <p id="dialog-message">{$activeConfirmation.message}</p>
       </div>
       <div class="dialog-actions">
         <button class="dialog-btn secondary" type="button" on:click={() => resolveConfirmation(false)}>{$activeConfirmation.cancelLabel}</button>

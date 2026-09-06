@@ -1,12 +1,9 @@
 <script>
-  import { activeAdminLogin, adminSessionActive, changeAdminPassword, logoutAdmin } from './adminAuth.js';
+  import { activeAdminLogin, adminSessionActive, logoutAdmin } from './adminAuth.js';
 
   let password = '';
   let confirmation = '';
   let error = '';
-  let changeOpen = false;
-  let newPassword = '';
-  let newConfirmation = '';
 
   function close() {
     const request = $activeAdminLogin;
@@ -37,26 +34,10 @@
     request.resolve({ password: submittedPassword });
   }
 
-  async function submitChange() {
-    error = '';
-    if (newPassword.length < 8 || newPassword !== newConfirmation) {
-      error = 'Passwörter müssen übereinstimmen und mindestens 8 Zeichen enthalten.';
-      return;
-    }
-    try {
-      await changeAdminPassword(newPassword);
-      newPassword = '';
-      newConfirmation = '';
-      changeOpen = false;
-    } catch (changeError) {
-      error = changeError?.message || 'Passwort konnte nicht geändert werden';
-    }
-  }
 </script>
 
 {#if $adminSessionActive && !$activeAdminLogin}
   <div class="admin-session-tools">
-    <button type="button" on:click={() => (changeOpen = true)}>Admin-Passwort ändern</button>
     <button type="button" on:click={logoutAdmin}>Abmelden</button>
   </div>
 {/if}
@@ -74,21 +55,6 @@
       <div class="admin-login-actions">
         <button type="button" on:click={close}>Abbrechen</button>
         <button class="primary" type="submit">Fortfahren</button>
-      </div>
-    </form>
-  </div>
-{/if}
-
-{#if changeOpen}
-  <div class="admin-login-backdrop" role="presentation">
-    <form class="admin-login" on:submit|preventDefault={submitChange}>
-      <h2>Admin-Passwort ändern</h2>
-      <label>Neues Passwort<input type="password" bind:value={newPassword} autocomplete="new-password" /></label>
-      <label>Passwort wiederholen<input type="password" bind:value={newConfirmation} autocomplete="new-password" /></label>
-      {#if error}<p class="admin-login-error" role="alert">{error}</p>{/if}
-      <div class="admin-login-actions">
-        <button type="button" on:click={() => (changeOpen = false)}>Abbrechen</button>
-        <button class="primary" type="submit">Speichern</button>
       </div>
     </form>
   </div>

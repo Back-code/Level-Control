@@ -34,8 +34,20 @@ export const TRANSLATIONS = {
         mqtt_ha: 'MQTT & HA',
         push: 'Push Nachrichten',
         backup: 'Sicherung',
+        password: 'Admin-Passwort',
         update: 'Update'
-      }
+      },
+      passwordEyebrow: 'Zugangsschutz',
+      passwordTitle: 'Admin-Passwort ändern',
+      passwordSubtitle: 'Ändere das Passwort für alle geschützten Geräteaktionen.',
+      newPassword: 'Neues Passwort',
+      repeatPassword: 'Passwort wiederholen',
+      passwordSave: 'Passwort speichern',
+      passwordSaving: 'Wird gespeichert …',
+      passwordTooShort: 'Das Passwort muss mindestens 8 Zeichen enthalten.',
+      passwordMismatch: 'Die Passwörter stimmen nicht überein.',
+      passwordChanged: 'Admin-Passwort wurde geändert.',
+      passwordChangeFailed: 'Admin-Passwort konnte nicht geändert werden.'
     },
     restartDialogTitle: 'ESP neu starten?',
     restartDialogMessage: 'Das Gerät wird sofort neu gestartet. Die Weboberfläche ist für kurze Zeit nicht erreichbar.',
@@ -121,8 +133,20 @@ export const TRANSLATIONS = {
         mqtt_ha: 'MQTT & HA',
         push: 'Push messages',
         backup: 'Backup',
+        password: 'Admin password',
         update: 'Update'
-      }
+      },
+      passwordEyebrow: 'Access protection',
+      passwordTitle: 'Change admin password',
+      passwordSubtitle: 'Change the password for all protected device actions.',
+      newPassword: 'New password',
+      repeatPassword: 'Repeat password',
+      passwordSave: 'Save password',
+      passwordSaving: 'Saving …',
+      passwordTooShort: 'The password must contain at least 8 characters.',
+      passwordMismatch: 'The passwords do not match.',
+      passwordChanged: 'Admin password changed.',
+      passwordChangeFailed: 'Admin password could not be changed.'
     },
     restartDialogTitle: 'Restart ESP?',
     restartDialogMessage: 'The device restarts immediately. The web UI will be unavailable for a short moment.',

@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import Config from './Config.svelte';
   import Update from './Update.svelte';
+  import AdminPassword from './AdminPassword.svelte';
   import { ensureAdminSession } from './adminAuth.js';
   import { showNotice } from './dialogStore.js';
   import { createTranslator } from './i18n.js';
@@ -23,6 +24,7 @@
     { id: 'mqtt_ha', key: 'mqtt_ha' },
     { id: 'push', key: 'push' },
     { id: 'backup', key: 'backup' },
+    { id: 'password', key: 'password' },
     { id: 'update', key: 'update' }
   ];
 
@@ -72,6 +74,8 @@
     <div class="admin-module-content">
       {#if activeModule === 'update'}
         <Update currentVersion={currentVersion} />
+      {:else if activeModule === 'password'}
+        <AdminPassword {lang} />
       {:else}
         <Config bind:data {loadConfig} module={activeModule} {lang} />
       {/if}

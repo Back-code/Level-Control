@@ -2,14 +2,13 @@
 
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
-import { basename, dirname, join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const version = JSON.parse(readFileSync(join(root, 'version.json'), 'utf8'));
 const versionStr = `${Number(version.major) || 0}.${Number(version.minor) || 0}.${Number(version.commit) || 0}`;
-const releaseDir = join(root, 'release', `v${versionStr}`);
 const pythonPath = join(root, '.venv', 'Scripts', 'python.exe');
 const defaultHost = 'http://stand.local';
 const host = (process.env.OTA_TEST_HOST || defaultHost).replace(/\/$/, '');
@@ -46,18 +45,15 @@ async function request(path, options = {}) {
   return { response, payload };
 }
 
-async function upload(target, filePath, deferReboot) {
-  const formData = new FormData();
-  formData.append('file', new Blob([readFileSync(filePath)]), basename(filePath));
-  const query = deferReboot ? '?deferReboot=1' : '';
-  const { response, payload } = await request(`/api/update/upload/${target}${query}`, {
+async function startRepoUpdate() {
+  const { response, payload } = await request('/api/update/repo', {
     method: 'POST',
-    body: formData,
-    timeoutMs: 120000
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ target: 'full' }),
+    timeoutMs: 15000
   });
-  assert.ok(response.ok, `${target}-OTA fehlgeschlagen: ${payload.error || response.status}`);
-  assert.equal(payload.status, 'ok', `${target}-OTA meldet keinen Erfolg`);
-  console.log(`Hardware OTA OK: ${target} akzeptiert`);
+  assert.equal(response.status, 202, `Repo-OTA konnte nicht gestartet werden: ${payload.error || response.status}`);
+  console.log('Hardware OTA gestartet: Repo-Update full');
 }
 
 async function waitForVersion() {
@@ -81,11 +77,6 @@ if (devices.length === 0) {
   process.exit(0);
 }
 
-const appPath = join(releaseDir, `level-control-v${versionStr}-app.bin`);
-const webUiPath = join(releaseDir, `level-control-v${versionStr}-web-ui.bin`);
-assert.ok(existsSync(appPath), `Release-App fehlt: ${appPath}`);
-assert.ok(existsSync(webUiPath), `Release-Web-UI fehlt: ${webUiPath}`);
-
 let initialStatus;
 try {
   ({ payload: initialStatus } = await request('/api/update/status'));
@@ -96,7 +87,6 @@ try {
 assert.ok(initialStatus.installedVersion, 'OTA-Status enthaelt keine installierte Version');
 assert.notEqual(initialStatus.installedVersion, versionStr, `Geraet laeuft bereits mit v${versionStr}; fuer einen HIL-Upgrade-Test muss die Zielversion neu sein`);
 
-await upload('webui', webUiPath, true);
-await upload('app', appPath, false);
+await startRepoUpdate();
 const finalStatus = await waitForVersion();
 console.log(`Hardware OTA Regression erfolgreich: ${initialStatus.installedVersion} -> ${finalStatus.installedVersion}`);

@@ -391,9 +391,9 @@ Hinweis zur Speicheraufteilung auf ESP32-C3:
 
 ### Signierte OTA-Releases
 
-Das OTA-Manifest wird kryptografisch signiert (ECDSA P-256, SHA-256).
-Die Firmware verifiziert diese Signatur vor jedem Repo-OTA-Update mit einem fest eingebetteten Public Key.
-Zusaetzlich werden Manifest- und Asset-Downloads jetzt per TLS-Zertifikatskette (Root-CA-Pruefung) validiert.
+Die OTA-Payloads werden mit ECDSA P-256 und SHA-256 signiert. Neue Firmware lädt die Binärdatei und die separate `.sig`-Datei und verifiziert die Signatur vor dem Flashen mit dem fest eingebetteten Public Key.
+Für ältere Firmware bleiben zusätzlich Legacy-Assets mit eingebettetem Signatur-Trailer erhalten. Dadurch kann auch ein altes Gerät ohne manuellen Zwischenschritt auf die neue OTA-Implementierung aktualisiert werden.
+Manifest- und Asset-Downloads werden per TLS-Zertifikatskette (Root-CA-Pruefung) validiert.
 
 Einmalig Schluessel erzeugen:
 
@@ -423,9 +423,9 @@ Vor dem GitHub-Upload prueft `scripts/run-release.ps1` automatisch beide Release
 node scripts/test-ota-release.mjs
 ```
 
-Der Regressionstest prueft die exakte Build-Nutzlast, den Signatur-Trailer, die ECDSA-Signatur und den vollstaendigen Stream-Fortschritt des OTA-Empfaengers. Ein Release mit abweichenden oder unvollstaendigen Assets wird dadurch vor der Veroeffentlichung abgebrochen.
+Der Regressionstest prueft die exakte Build-Nutzlast, Detached- und Legacy-Signaturen sowie den vollstaendigen Stream-Fortschritt beider OTA-Empfaenger. Ein Release mit abweichenden oder unvollstaendigen Assets wird dadurch vor der Veroeffentlichung abgebrochen.
 
-Wenn ein ESP32 per USB verbunden ist, fuehrt der Release-Workflow zusaetzlich einen echten OTA-Test gegen das Geraet aus. Der Host wird ueber `OTA_TEST_HOST` gesetzt; standardmaessig wird `http://stand.local` verwendet:
+Wenn ein ESP32 per USB verbunden ist, fuehrt der Release-Workflow nach dem GitHub-Upload zusaetzlich einen echten Repo-OTA-Test gegen das Geraet aus. Der Host wird ueber `OTA_TEST_HOST` gesetzt; standardmaessig wird `http://stand.local` verwendet:
 
 ```powershell
 $env:OTA_TEST_HOST = 'http://192.168.1.123'

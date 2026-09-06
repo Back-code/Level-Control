@@ -25,7 +25,6 @@ try {
 
     node scripts/prepare-release.js
     node scripts/test-ota-release.mjs
-    node scripts/test-ota-hardware.mjs
 
     $ghCommand = Get-Command gh -ErrorAction SilentlyContinue
     if (-not $ghCommand) {
@@ -44,10 +43,14 @@ try {
 
     $releaseArgs = @(
         'release', 'create', "v$versionStr",
-        "release/v$versionStr/level-control-v$versionStr-app.bin",
-        "release/v$versionStr/level-control-v$versionStr-web-ui.bin",
+        "release/v$versionStr/level-control-v$versionStr-image.bin",
+        "release/v$versionStr/level-control-v$versionStr-image.sig",
+        "release/v$versionStr/level-control-v$versionStr-filesystem.bin",
+        "release/v$versionStr/level-control-v$versionStr-filesystem.sig",
         "release/v$versionStr/level-control-v$versionStr-bootloader.bin",
         "release/v$versionStr/level-control-v$versionStr-partitions.bin",
+        "release/v$versionStr/level-control-v$versionStr-app.bin",
+        "release/v$versionStr/level-control-v$versionStr-web-ui.bin",
         "release/v$versionStr/SHA256SUMS.txt",
         '--repo', 'Back-code/Level-Control',
         '--title', "Level-Control v$versionStr",
@@ -57,6 +60,8 @@ try {
     if ($LASTEXITCODE -ne 0) {
         throw "GitHub-Release konnte nicht veröffentlicht werden (Exitcode $LASTEXITCODE)."
     }
+
+    node scripts/test-ota-hardware.mjs
 
     # Behalte nur die letzten 5 Versionen lokal, lösche älter Versionen
     if (Test-Path $releaseRoot) {

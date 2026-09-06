@@ -1656,6 +1656,16 @@ bool WebServerDashboard::parseLatestReleaseInfo(const std::string& rawManifest, 
     manifest.version = normalizeVersionTag(doc["tag_name"] | "");
     manifest.releaseUrl = doc["html_url"] | kLatestReleaseUrl;
 
+    ManifestAsset detachedApp;
+    ManifestAsset detachedWebUi;
+    ManifestAsset legacyApp;
+    ManifestAsset legacyWebUi;
+    const auto hasSuffix = [](const std::string& value, const char* suffix) {
+        const size_t suffixLength = strlen(suffix);
+        return value.size() >= suffixLength
+            && value.compare(value.size() - suffixLength, suffixLength, suffix) == 0;
+    };
+
     JsonArray assets = doc["assets"].as<JsonArray>();
     for (JsonObject asset : assets) {
         const std::string name = asset["name"] | "";
@@ -1663,16 +1673,35 @@ bool WebServerDashboard::parseLatestReleaseInfo(const std::string& rawManifest, 
         const std::string url = asset["browser_download_url"] | "";
         const size_t size = asset["size"] | 0;
 
-        if (isAppAssetName(lowerName)) {
-            manifest.app.name = name;
-            manifest.app.url = url;
-            manifest.app.size = size;
+        if (hasSuffix(lowerName, "-image.bin")) {
+            detachedApp.name = name;
+            detachedApp.url = url;
+            detachedApp.size = size;
+        } else if (hasSuffix(lowerName, "-image.sig")) {
+            detachedApp.signatureUrl = url;
+        } else if (hasSuffix(lowerName, "-filesystem.bin")) {
+            detachedWebUi.name = name;
+            detachedWebUi.url = url;
+            detachedWebUi.size = size;
+        } else if (hasSuffix(lowerName, "-filesystem.sig")) {
+            detachedWebUi.signatureUrl = url;
+        } else if (isAppAssetName(lowerName)) {
+            legacyApp.name = name;
+            legacyApp.url = url;
+            legacyApp.size = size;
         } else if (isWebUiAssetName(lowerName)) {
-            manifest.webui.name = name;
-            manifest.webui.url = url;
-            manifest.webui.size = size;
+            legacyWebUi.name = name;
+            legacyWebUi.url = url;
+            legacyWebUi.size = size;
         }
     }
+
+    manifest.app = !detachedApp.url.empty() && !detachedApp.signatureUrl.empty()
+        ? detachedApp
+        : legacyApp;
+    manifest.webui = !detachedWebUi.url.empty() && !detachedWebUi.signatureUrl.empty()
+        ? detachedWebUi
+        : legacyWebUi;
 
     manifest.valid = !manifest.version.empty() && (!manifest.app.url.empty() || !manifest.webui.url.empty());
 
@@ -1894,7 +1923,176 @@ void WebServerDashboard::runRemoteUpdateTask(const std::string& target) {
     scheduleRestart(kRestartDelayMs);
 }
 
+bool WebServerDashboard::applyDetachedRemoteAsset(const ManifestAsset& asset, int command, const std::string& phase, const std::string& version, std::string& error) {
+    if (!isHttpsUrl(asset.url) || !isHttpsUrl(asset.signatureUrl)) {
+        error = "Asset- und Signatur-URL müssen HTTPS verwenden";
+        return false;
+    }
+
+    WiFiClientSecure signatureClient;
+    signatureClient.setCACert(kOtaTrustedRootCAs);
+    HTTPClient signatureHttp;
+    signatureHttp.setTimeout(15000);
+    signatureHttp.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+    if (!signatureHttp.begin(signatureClient, asset.signatureUrl.c_str())) {
+        error = "Signatur konnte nicht geöffnet werden";
+        return false;
+    }
+    signatureHttp.addHeader("User-Agent", kUpdateUserAgent);
+    if (signatureHttp.GET() != HTTP_CODE_OK) {
+        error = "Signatur-Download fehlgeschlagen";
+        signatureHttp.end();
+        return false;
+    }
+    const String signatureBody = signatureHttp.getString();
+    signatureHttp.end();
+    const size_t signatureLength = signatureBody.length();
+    if (signatureLength == 0 || signatureLength > kEmbeddedSigBytes) {
+        error = "Signatur hat eine ungültige Länge";
+        return false;
+    }
+    std::vector<uint8_t> signature(
+        reinterpret_cast<const uint8_t*>(signatureBody.c_str()),
+        reinterpret_cast<const uint8_t*>(signatureBody.c_str()) + signatureLength);
+
+    WiFiClientSecure client;
+    client.setCACert(kOtaTrustedRootCAs);
+    HTTPClient http;
+    http.setTimeout(20000);
+    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+    if (!http.begin(client, asset.url.c_str())) {
+        error = "Asset konnte nicht geöffnet werden";
+        return false;
+    }
+    http.addHeader("User-Agent", kUpdateUserAgent);
+    if (http.GET() != HTTP_CODE_OK) {
+        error = "Asset-Download fehlgeschlagen";
+        http.end();
+        return false;
+    }
+
+    const int contentLength = http.getSize();
+    if (contentLength <= 0) {
+        error = "Asset liefert keine gültige Dateigröße";
+        http.end();
+        return false;
+    }
+    const size_t expectedSize = static_cast<size_t>(contentLength);
+    if (command == U_SPIFFS) {
+        LittleFS.end();
+    }
+
+    if (!Update.begin(expectedSize, command)) {
+        error = Update.errorString();
+        if (command == U_SPIFFS) {
+            LittleFS.begin();
+        }
+        http.end();
+        return false;
+    }
+
+    mbedtls_sha256_context shaContext;
+    mbedtls_sha256_init(&shaContext);
+    if (mbedtls_sha256_starts_ret(&shaContext, 0) != 0) {
+        error = "SHA256-Kontext konnte nicht initialisiert werden";
+        Update.abort();
+        if (command == U_SPIFFS) {
+            LittleFS.begin();
+        }
+        http.end();
+        return false;
+    }
+
+    setUpdatePhase(phase, "Download läuft", 0, expectedSize);
+    WiFiClient *stream = http.getStreamPtr();
+    uint8_t buffer[kUploadBufferSize];
+    size_t received = 0;
+    while (received < expectedSize) {
+        const size_t available = stream->available();
+        if (available == 0) {
+            if (!http.connected()) {
+                break;
+            }
+            delay(1);
+            continue;
+        }
+
+        const size_t chunkSize = stream->readBytes(buffer, std::min<size_t>(available, sizeof(buffer)));
+        if (chunkSize == 0) {
+            continue;
+        }
+        if (received + chunkSize > expectedSize
+            || mbedtls_sha256_update_ret(&shaContext, buffer, chunkSize) != 0
+            || Update.write(buffer, chunkSize) != chunkSize) {
+            error = Update.errorString();
+            Update.abort();
+            mbedtls_sha256_free(&shaContext);
+            if (command == U_SPIFFS) {
+                LittleFS.begin();
+            }
+            http.end();
+            return false;
+        }
+        received += chunkSize;
+        setUpdatePhase(phase, "Download läuft", received, expectedSize);
+    }
+
+    if (received != expectedSize) {
+        error = "Asset-Download wurde vorzeitig beendet";
+        Update.abort();
+        mbedtls_sha256_free(&shaContext);
+        if (command == U_SPIFFS) {
+            LittleFS.begin();
+        }
+        http.end();
+        return false;
+    }
+
+    unsigned char shaResult[32];
+    if (mbedtls_sha256_finish_ret(&shaContext, shaResult) != 0
+        || !verifyDetachedFileSignature(shaResult, sizeof(shaResult), signature.data(), signature.size(), error)) {
+        if (error.empty()) {
+            error = "Signaturprüfung fehlgeschlagen";
+        }
+        Update.abort();
+        mbedtls_sha256_free(&shaContext);
+        if (command == U_SPIFFS) {
+            LittleFS.begin();
+        }
+        http.end();
+        return false;
+    }
+    mbedtls_sha256_free(&shaContext);
+    setUpdatePhase(phase, "Signatur geprüft", received, expectedSize);
+
+    if (!Update.end(true)) {
+        error = Update.errorString();
+        if (command == U_SPIFFS) {
+            LittleFS.begin();
+        }
+        http.end();
+        return false;
+    }
+
+    if (command == U_FLASH) {
+        const esp_partition_t* targetPartition = esp_ota_get_next_update_partition(nullptr);
+        if (!ensureConfiguredBootPartition(targetPartition, error)) {
+            http.end();
+            return false;
+        }
+    }
+    if (command == U_SPIFFS) {
+        ensureLittleFsMounted();
+    }
+    http.end();
+    return true;
+}
+
 bool WebServerDashboard::applyRemoteAsset(const ManifestAsset& asset, int command, const std::string& phase, const std::string& version, std::string& error) {
+    if (!asset.signatureUrl.empty()) {
+        return applyDetachedRemoteAsset(asset, command, phase, version, error);
+    }
+
     if (!isHttpsUrl(asset.url)) {
         error = "Asset-URL muss HTTPS verwenden";
         return false;

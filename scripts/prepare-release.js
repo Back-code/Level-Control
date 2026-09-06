@@ -26,6 +26,10 @@ function loadPrivateKeyPem() {
 }
 
 function signBinaryPayload(buffer, privateKeyPem) {
+  return Buffer.concat([buffer, createEmbeddedSignatureTrailer(createSignature(buffer, privateKeyPem))]);
+}
+
+function createSignature(buffer, privateKeyPem) {
   const signer = createSign('SHA256');
   signer.update(buffer);
   signer.end();
@@ -35,12 +39,16 @@ function signBinaryPayload(buffer, privateKeyPem) {
     throw new Error(`Signatur-Länge ${signature.length} Byte ist ungültig (max ${EMBEDDED_SIG_BYTES})`);
   }
 
+  return signature;
+}
+
+function createEmbeddedSignatureTrailer(signature) {
   const trailer = Buffer.alloc(EMBEDDED_SIG_MAGIC.length + 1 + EMBEDDED_SIG_BYTES, 0);
   EMBEDDED_SIG_MAGIC.copy(trailer, 0);
   trailer.writeUInt8(signature.length, EMBEDDED_SIG_MAGIC.length);
   signature.copy(trailer, EMBEDDED_SIG_MAGIC.length + 1);
 
-  return Buffer.concat([buffer, trailer]);
+  return trailer;
 }
 
 function runGit(args) {
@@ -89,9 +97,24 @@ fetchTags();
 
 const assets = [
   { source: 'bootloader.bin', target: `level-control-v${versionStr}-bootloader.bin`, kind: 'bootloader' },
-  { source: 'partitions.bin', target: `level-control-v${versionStr}-partitions.bin`, kind: 'partitions' },
-  { source: 'firmware.bin', target: `level-control-v${versionStr}-app.bin`, kind: 'app' },
-  { source: 'littlefs.bin', target: `level-control-v${versionStr}-web-ui.bin`, kind: 'webui' }
+  { source: 'partitions.bin', target: `level-control-v${versionStr}-partitions.bin`, kind: 'partitions' }
+];
+
+const otaAssets = [
+  {
+    source: 'firmware.bin',
+    target: `level-control-v${versionStr}-image.bin`,
+    legacyTarget: `level-control-v${versionStr}-app.bin`,
+    signatureTarget: `level-control-v${versionStr}-image.sig`,
+    kind: 'app'
+  },
+  {
+    source: 'littlefs.bin',
+    target: `level-control-v${versionStr}-filesystem.bin`,
+    legacyTarget: `level-control-v${versionStr}-web-ui.bin`,
+    signatureTarget: `level-control-v${versionStr}-filesystem.sig`,
+    kind: 'webui'
+  }
 ];
 
 mkdirSync(releaseDir, { recursive: true });
@@ -105,12 +128,7 @@ const copiedAssets = assets.map((asset) => {
   }
 
   copyFileSync(sourcePath, targetPath);
-  let buffer = readFileSync(targetPath);
-
-  if (asset.kind === 'app' || asset.kind === 'webui') {
-    buffer = signBinaryPayload(buffer, privateKeyPem);
-    writeFileSync(targetPath, buffer);
-  }
+  const buffer = readFileSync(targetPath);
 
   const sha256 = createHash('sha256').update(buffer).digest('hex');
   return {
@@ -121,6 +139,36 @@ const copiedAssets = assets.map((asset) => {
   };
 });
 
+for (const asset of otaAssets) {
+  const sourcePath = join(buildDir, asset.source);
+  if (!existsSync(sourcePath)) {
+    throw new Error(`Fehlendes Build-Artefakt: ${asset.source}`);
+  }
+
+  const payload = readFileSync(sourcePath);
+  const signature = createSignature(payload, privateKeyPem);
+  const payloadPath = join(releaseDir, asset.target);
+  const signaturePath = join(releaseDir, asset.signatureTarget);
+  const legacyPath = join(releaseDir, asset.legacyTarget);
+  writeFileSync(payloadPath, payload);
+  writeFileSync(signaturePath, signature);
+  writeFileSync(legacyPath, Buffer.concat([payload, createEmbeddedSignatureTrailer(signature)]));
+
+  for (const [target, buffer] of [
+    [asset.target, payload],
+    [asset.signatureTarget, signature],
+    [asset.legacyTarget, readFileSync(legacyPath)]
+  ]) {
+    copiedAssets.push({
+      ...asset,
+      target,
+      size: buffer.length,
+      sha256: createHash('sha256').update(buffer).digest('hex'),
+      targetPath: join(releaseDir, target)
+    });
+  }
+}
+
 const sums = copiedAssets
   .map((asset) => `${asset.sha256}  ${asset.target}`)
   .join('\n') + '\n';
@@ -129,8 +177,12 @@ writeFileSync(join(releaseDir, 'SHA256SUMS.txt'), sums);
 const currentTag = `v${versionStr}`;
 const previousTag = getPreviousTag(currentTag);
 const changelogLines = getChangelogLines(previousTag);
-const app = copiedAssets.find((asset) => asset.kind === 'app');
-const webui = copiedAssets.find((asset) => asset.kind === 'webui');
+const app = copiedAssets.find((asset) => asset.kind === 'app' && asset.target.endsWith('-image.bin'));
+const webui = copiedAssets.find((asset) => asset.kind === 'webui' && asset.target.endsWith('-filesystem.bin'));
+const appLegacy = copiedAssets.find((asset) => asset.kind === 'app' && asset.target.endsWith('-app.bin'));
+const webuiLegacy = copiedAssets.find((asset) => asset.kind === 'webui' && asset.target.endsWith('-web-ui.bin'));
+const appSignature = copiedAssets.find((asset) => asset.kind === 'app' && asset.target.endsWith('-image.sig'));
+const webuiSignature = copiedAssets.find((asset) => asset.kind === 'webui' && asset.target.endsWith('-filesystem.sig'));
 
 const releaseNotes = [
   `## Level-Control v${versionStr}`,
@@ -142,14 +194,19 @@ const releaseNotes = [
   '',
   'Enthalten:',
   `- ${app.target}`,
+  `- ${appSignature.target}`,
+  `- ${appLegacy.target} (Legacy-OTA)`,
   `- ${webui.target}`,
+  `- ${webuiSignature.target}`,
+  `- ${webuiLegacy.target} (Legacy-OTA)`,
   `- ${copiedAssets.find((asset) => asset.kind === 'bootloader').target}`,
   `- ${copiedAssets.find((asset) => asset.kind === 'partitions').target}`,
   '- SHA256SUMS.txt',
   '',
   'Hinweis:',
-  `App/Web-UI enthalten einen eingebetteten Signatur-Trailer (${EMBEDDED_SIG_MAGIC.toString('ascii')}, ${EMBEDDED_SIG_BYTES} Bytes Signaturfeld).`,
-  'Die Firmware prüft diese Signatur direkt am Dateiinhalt vor dem Flashen.',
+  'App/Web-UI werden als unveränderte Payloads mit separaten .sig-Dateien veröffentlicht.',
+  `Zusätzlich enthalten die Legacy-Assets einen eingebetteten Signatur-Trailer (${EMBEDDED_SIG_MAGIC.toString('ascii')}, ${EMBEDDED_SIG_BYTES} Bytes Signaturfeld).`,
+  'Neue Firmware prüft die Detached Signature; ältere Firmware verwendet das Legacy-Asset.',
   'Für vollständiges Recovery per Kabel stehen zusätzlich bootloader.bin und partitions.bin bereit.',
   '',
   'Standard-Checks vor Veröffentlichung:',

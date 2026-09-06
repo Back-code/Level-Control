@@ -31,6 +31,7 @@ private:
     struct ManifestAsset {
         std::string name;
         std::string url;
+        std::string signatureUrl;
         size_t size = 0;
     };
 
@@ -96,6 +97,7 @@ private:
     void startBackgroundManifestFetch();
     void runManifestFetchTask();
     bool verifyDetachedFileSignature(const unsigned char* hash, size_t hashLen, const uint8_t* signature, size_t signatureLen, std::string& error) const;
+    bool applyDetachedRemoteAsset(const ManifestAsset& asset, int command, const std::string& phase, const std::string& version, std::string& error);
     std::string resolveUpdateTarget(const ReleaseManifest& manifest, const std::string& requestedTarget, std::string& error) const;
     void startRemoteUpdateTask(const std::string& target);
     void runRemoteUpdateTask(const std::string& target);

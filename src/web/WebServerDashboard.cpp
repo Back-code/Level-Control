@@ -509,7 +509,12 @@ void WebServerDashboard::setupRoutes() {
             const std::string newSensorType = doc["sensorType"] | config.sensorType.c_str();
             const bool sensorTypeChanged = newSensorType != config.sensorType;
             config.sensorType = (newSensorType == "vl53l1x") ? "vl53l1x" : "rcwl1670";
-            ConfigStore::getInstance().save(config);
+            if (!ConfigStore::getInstance().save(config)) {
+                request->send(500, "application/json", "{\"error\":\"sensor_config_save_failed\"}");
+                delete body;
+                request->_tempObject = nullptr;
+                return;
+            }
             SensorManager::getInstance().setBehaelterhoehe(config.behaelterhoehe);
             SensorManager::getInstance().setOffset(config.offset);
             SensorManager::getInstance().setSampleIntervalSeconds(config.sampleIntervalSeconds);
@@ -644,7 +649,12 @@ void WebServerDashboard::setupRoutes() {
                 config.staticIp = {};
             }
 
-            WifiManager::getInstance().setConfig(config.wifi, config.staticIp);
+            if (!WifiManager::getInstance().setConfig(config.wifi, config.staticIp)) {
+                request->send(500, "application/json", "{\"error\":\"wifi_config_save_failed\"}");
+                delete body;
+                request->_tempObject = nullptr;
+                return;
+            }
             request->send(200, "application/json", "{\"status\":\"ok\"}");
             delete body;
             request->_tempObject = nullptr;
@@ -705,7 +715,12 @@ void WebServerDashboard::setupRoutes() {
                 config.mqtt.password = newMqttPassword;
             }
             config.mqtt.discovery = doc["discovery"] | true;
-            ConfigStore::getInstance().save(config);
+            if (!ConfigStore::getInstance().save(config)) {
+                request->send(500, "application/json", "{\"error\":\"mqtt_config_save_failed\"}");
+                delete body;
+                request->_tempObject = nullptr;
+                return;
+            }
 
             // Re-init/connect MQTT with the new settings
             if (!config.mqtt.server.empty()) {
@@ -967,6 +982,7 @@ void WebServerDashboard::setupRoutes() {
         cfgDoc["behaelterhoehe"] = config.behaelterhoehe;
         cfgDoc["offset"] = config.offset;
         cfgDoc["sampleIntervalSeconds"] = config.sampleIntervalSeconds;
+        cfgDoc["sensorType"] = config.sensorType;
         JsonObject wifiJ = cfgDoc.createNestedObject("wifi");
         wifiJ["ssid"] = config.wifi.ssid;
         wifiJ["password"] = config.wifi.password;
@@ -1071,6 +1087,7 @@ void WebServerDashboard::setupRoutes() {
             config.behaelterhoehe = cfg["behaelterhoehe"] | config.behaelterhoehe;
             config.offset = cfg["offset"] | config.offset;
             config.sampleIntervalSeconds = cfg["sampleIntervalSeconds"] | config.sampleIntervalSeconds;
+            config.sensorType = cfg["sensorType"] | config.sensorType.c_str();
 
             if (cfg.containsKey("wifi")) {
                 const JsonObjectConst w = cfg["wifi"];
@@ -1120,6 +1137,12 @@ void WebServerDashboard::setupRoutes() {
                 if (p.containsKey("bodyTemplate"))       config.push.bodyTemplate = p["bodyTemplate"].as<std::string>();
             }
             configRestored = ConfigStore::getInstance().save(config);
+            if (configRestored) {
+                SensorManager::getInstance().setBehaelterhoehe(config.behaelterhoehe);
+                SensorManager::getInstance().setOffset(config.offset);
+                SensorManager::getInstance().setSampleIntervalSeconds(config.sampleIntervalSeconds);
+                SensorManager::getInstance().setSensorType(config.sensorType);
+            }
         }
 
         if (doc["history"].is<JsonArrayConst>()) {
@@ -1134,7 +1157,14 @@ void WebServerDashboard::setupRoutes() {
             historyRestored = true;
         }
 
-        char respBuf[80];
+        if (doc.containsKey("config") && !configRestored) {
+            request->send(500, "application/json", "{\"error\":\"config_restore_failed\",\"configRestored\":false}");
+            delete body;
+            request->_tempObject = nullptr;
+            return;
+        }
+
+        char respBuf[100];
         snprintf(respBuf, sizeof(respBuf),
             "{\"status\":\"ok\",\"configRestored\":%s,\"historyRestored\":%s}",
             configRestored ? "true" : "false",

@@ -327,7 +327,7 @@ std::vector<WifiNetwork> WifiManager::scanNetworks() {
     return networks;
 }
 
-void WifiManager::setConfig(const WifiConfig& config, const StaticIpConfig& staticConfig) {
+bool WifiManager::setConfig(const WifiConfig& config, const StaticIpConfig& staticConfig) {
     config_ = config;
     staticConfig_ = staticConfig;
     Config fullConfig;
@@ -338,7 +338,7 @@ void WifiManager::setConfig(const WifiConfig& config, const StaticIpConfig& stat
     }
     fullConfig.wifi = config_;
     fullConfig.staticIp = staticConfig_;
-    ConfigStore::getInstance().save(fullConfig);
+    return ConfigStore::getInstance().save(fullConfig);
 }
 
 WifiConfig WifiManager::getConfig() const {

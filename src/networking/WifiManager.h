@@ -26,7 +26,7 @@ public:
     void startAP(const std::string& ssid, const std::string& password, uint8_t maxConnections = 1);
     void stopAP();
     std::vector<WifiNetwork> scanNetworks();
-    void setConfig(const WifiConfig& config, const StaticIpConfig& staticConfig = {});
+    bool setConfig(const WifiConfig& config, const StaticIpConfig& staticConfig = {});
     WifiConfig getConfig() const;
     std::string getDnsHostname() const;
     std::string getLocalUrl() const;

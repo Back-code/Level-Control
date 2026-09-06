@@ -103,6 +103,7 @@
   let smtpDiagResult = null;
   let smtpDiagLoading = false;
   let lastReportedDirtyState = null;
+  let savePending = false;
   $: t = createTranslator(lang);
 
   // Backup-Modul
@@ -469,6 +470,16 @@
 
     loadAllConfig();
     reportDirtyState(true);
+  }
+
+  async function handleSaveCurrentModule() {
+    if (savePending || !isCurrentModuleDirty()) return;
+    savePending = true;
+    try {
+      await saveCurrentModule();
+    } finally {
+      savePending = false;
+    }
   }
 
   function enableStaticIp() {
@@ -951,6 +962,18 @@
   });
 </script>
 
+{#if ['sensor', 'wifi', 'mqtt_ha', 'push'].includes(module)}
+  <div class="save-bar" class:save-bar--dirty={isCurrentModuleDirty()}>
+    <span>{isCurrentModuleDirty() ? 'Ungespeicherte Änderungen' : 'Alle Änderungen gespeichert'}</span>
+    <div class="save-bar-actions">
+      <button type="button" class="save-bar-discard" disabled={!isCurrentModuleDirty() || savePending} on:click={discardCurrentModuleChanges}>Verwerfen</button>
+      <button type="button" class="save-bar-save" disabled={!isCurrentModuleDirty() || savePending} on:click={handleSaveCurrentModule}>
+        {savePending ? 'Wird gespeichert …' : 'Speichern'}
+      </button>
+    </div>
+  </div>
+{/if}
+
 {#if module === 'sensor'}
   <div class="config-section" on:input={markSensorConfigDirty} on:change={markSensorConfigDirty}>
     <h2>{t('config.sensorTitle')}</h2>
@@ -1365,6 +1388,58 @@
     color: var(--text-main);
     font-weight: 600;
   }
+  .save-bar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: -4px 0 14px;
+    padding: 10px 12px;
+    border: 1px solid var(--surface-border);
+    border-radius: 10px;
+    background: var(--surface-2);
+    color: var(--text-muted);
+    font-size: 0.86rem;
+    font-weight: 700;
+  }
+
+  .save-bar--dirty {
+    border-color: rgba(245, 158, 11, 0.45);
+    color: var(--text-main);
+  }
+
+  .save-bar-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .save-bar button {
+    min-height: 34px;
+    padding: 0 11px;
+    border: 1px solid var(--surface-border);
+    border-radius: 7px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .save-bar button:disabled {
+    cursor: default;
+    opacity: 0.45;
+  }
+
+  .save-bar-discard {
+    background: transparent;
+    color: var(--text-muted);
+  }
+
+  .save-bar-save {
+    background: var(--button-active-bg);
+    color: var(--button-active-text);
+  }
+
   .field-row {
     display: grid;
     grid-template-columns: minmax(150px, 200px) 1fr;

@@ -425,6 +425,14 @@ node scripts/test-ota-release.mjs
 
 Der Regressionstest prueft die exakte Build-Nutzlast, den Signatur-Trailer, die ECDSA-Signatur und den vollstaendigen Stream-Fortschritt des OTA-Empfaengers. Ein Release mit abweichenden oder unvollstaendigen Assets wird dadurch vor der Veroeffentlichung abgebrochen.
 
+Wenn ein ESP32 per USB verbunden ist, fuehrt der Release-Workflow zusaetzlich einen echten OTA-Test gegen das Geraet aus. Der Host wird ueber `OTA_TEST_HOST` gesetzt; standardmaessig wird `http://stand.local` verwendet:
+
+```powershell
+$env:OTA_TEST_HOST = 'http://192.168.1.123'
+```
+
+Ist kein PlatformIO-USB-Geraet verbunden, wird der Hardware-Test protokolliert uebersprungen. Wird ein Geraet erkannt, ist ein nicht erreichbarer OTA-Host dagegen ein Release-Fehler.
+
 Wichtiger Workflow-Hinweis:
 - `scripts/run-release.ps1` baut Firmware und Web-UI nicht neu, sondern verpackt die vorhandenen Artefakte aus `.pio/build`.
 - Nach `scripts/run-push.ps1` sollte deshalb immer `scripts/run-deploy.ps1` oder mindestens ein frischer Build des gepushten Stands erfolgt sein, bevor das GitHub-Release erstellt wird.

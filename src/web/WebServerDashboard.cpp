@@ -44,6 +44,11 @@ constexpr size_t kUploadBufferSize = 4096;
 constexpr unsigned long kManifestCacheTtlMs = 300000;
 constexpr unsigned long kUploadStallTimeoutMs = 300000;
 constexpr unsigned long kAdminSessionTtlMs = 8UL * 60UL * 60UL * 1000UL;
+constexpr size_t kMaxConfigBodyBytes = 2048;
+constexpr size_t kMaxWifiBodyBytes = 4096;
+constexpr size_t kMaxMqttBodyBytes = 2048;
+constexpr size_t kMaxImportBodyBytes = 48 * 1024;
+constexpr size_t kMaxUpdateRequestBytes = 512;
 constexpr size_t kEmbeddedSigBytes = 72;
 constexpr size_t kEmbeddedSigTrailerSize = 8 + 1 + kEmbeddedSigBytes;
 const uint8_t kEmbeddedSigMagic[8] = { 'L', 'C', 'S', 'I', 'G', 'V', '1', '!' };
@@ -642,6 +647,10 @@ void WebServerDashboard::setupRoutes() {
     server_.on("/api/config", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL,
         [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
         if (index == 0 && !requireAdmin(request)) return;
+        if (index == 0 && total > kMaxConfigBodyBytes) {
+            request->send(413, "application/json", "{\"error\":\"config_payload_too_large\"}");
+            return;
+        }
         auto *body = static_cast<std::string*>(request->_tempObject);
         if (index == 0) {
             delete body;
@@ -769,6 +778,10 @@ void WebServerDashboard::setupRoutes() {
     server_.on("/api/wifi", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL,
         [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
         if (index == 0 && !requireAdmin(request)) return;
+        if (index == 0 && total > kMaxWifiBodyBytes) {
+            request->send(413, "application/json", "{\"error\":\"wifi_payload_too_large\"}");
+            return;
+        }
         auto *body = static_cast<std::string*>(request->_tempObject);
         if (index == 0) {
             delete body;
@@ -854,6 +867,10 @@ void WebServerDashboard::setupRoutes() {
     server_.on("/api/mqtt", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL,
         [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
         if (index == 0 && !requireAdmin(request)) return;
+        if (index == 0 && total > kMaxMqttBodyBytes) {
+            request->send(413, "application/json", "{\"error\":\"mqtt_payload_too_large\"}");
+            return;
+        }
         auto *body = static_cast<std::string*>(request->_tempObject);
         if (index == 0) {
             delete body;
@@ -1228,6 +1245,10 @@ void WebServerDashboard::setupRoutes() {
     server_.on("/api/import", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL,
         [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
         if (index == 0 && !requireAdmin(request)) return;
+        if (index == 0 && total > kMaxImportBodyBytes) {
+            request->send(413, "application/json", "{\"error\":\"import_payload_too_large\"}");
+            return;
+        }
         auto *body = static_cast<std::string*>(request->_tempObject);
         if (index == 0) {
             delete body;
@@ -1538,6 +1559,10 @@ void WebServerDashboard::setupUpdateRoutes() {
     server_.on("/api/update/repo", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL,
         [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
         if (index == 0 && !requireAdmin(request)) return;
+        if (index == 0 && total > kMaxUpdateRequestBytes) {
+            request->send(413, "application/json", "{\"error\":\"update_request_too_large\"}");
+            return;
+        }
         auto *body = static_cast<std::string*>(request->_tempObject);
         if (index == 0) {
             delete body;

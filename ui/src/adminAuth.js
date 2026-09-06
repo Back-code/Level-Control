@@ -17,7 +17,9 @@ function storeToken(token) {
 }
 
 async function getAuthStatus() {
-  const response = await fetch('/api/auth/status', { cache: 'no-store' });
+  const token = getStoredToken();
+  const headers = token ? { 'X-Admin-Token': token } : {};
+  const response = await fetch('/api/auth/status', { cache: 'no-store', headers });
   if (!response.ok) {
     throw new Error('Authentifizierungsstatus konnte nicht geladen werden');
   }

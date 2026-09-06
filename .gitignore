@@ -13,3 +13,5 @@ clean.md
 signing/release_private.pem
 signing/release_public.pem
 _ERL/
+next.md
+next-plan.md

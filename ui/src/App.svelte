@@ -31,7 +31,8 @@
     offset: 0,
     sampleIntervalSeconds: 5,
     sensorType: 'rcwl1670',
-    mqttState: 'unknown'
+    mqttState: 'unknown',
+    sensorValid: false
   };
 
   let ws;
@@ -111,10 +112,13 @@
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
       if (msg.type === 'sensor') {
-        data.rohdistanz = msg.rohdistanz;
-        data.salzstandCm = msg.salzstandCm;
-        data.salzstandPercent = msg.salzstandPercent;
-        lastSensorUpdate = Date.now();
+        data.sensorValid = msg.valid !== false;
+        if (data.sensorValid) {
+          data.rohdistanz = msg.rohdistanz;
+          data.salzstandCm = msg.salzstandCm;
+          data.salzstandPercent = msg.salzstandPercent;
+          lastSensorUpdate = Date.now();
+        }
       } else if (msg.type === 'wifi') {
         data.wifiSignal = msg.signal;
         data.ip = msg.ip;

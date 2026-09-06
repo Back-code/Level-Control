@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { createTranslator } from './i18n.js';
+  import { showNotice } from './dialogStore.js';
 
   export let data;
   export let wsConnected = true;
@@ -75,9 +76,14 @@
   async function resetHistory() {
     showResetConfirm = false;
     try {
-      await fetch('/api/history', { method: 'DELETE' });
-    } catch (_) {}
-    history = [];
+      const response = await fetch('/api/history', { method: 'DELETE' });
+      if (!response.ok) {
+        throw new Error('Verlauf konnte nicht gelöscht werden');
+      }
+      history = [];
+    } catch (error) {
+      showNotice('error', error?.message || 'Verlauf konnte nicht gelöscht werden');
+    }
   }
 
   function buildPath(points, minValue, maxValue) {
@@ -126,11 +132,22 @@
 
   $: periodStart = getPeriodStart(activePeriod);
   $: filteredHistory = history.filter((entry) => entry.ts >= periodStart);
-  $: chartPoints = filteredHistory.length > 0 ? filteredHistory : history.slice(-1);
+  $: chartPoints = filteredHistory;
   $: currentPercent = Number.isFinite(data?.salzstandPercent) ? data.salzstandPercent : 0;
+  $: sensorState = !wsConnected
+    ? 'disconnected'
+    : data.sensorValid === false
+      ? 'error'
+      : isStale
+        ? 'stale'
+        : currentPercent <= 20
+          ? 'refill'
+          : 'ok';
+  $: sensorStateLabel = t(`dashboard.sensorState${sensorState.charAt(0).toUpperCase()}${sensorState.slice(1)}`);
   $: chartValues = chartPoints.map((entry) => entry.value);
-  $: valueFloor = chartValues.length > 0 ? Math.min(...chartValues, currentPercent) : currentPercent;
-  $: valueCeil = chartValues.length > 0 ? Math.max(...chartValues, currentPercent) : currentPercent;
+  $: chartReferenceValues = data.sensorValid !== false ? [...chartValues, currentPercent] : chartValues;
+  $: valueFloor = chartReferenceValues.length > 0 ? Math.min(...chartReferenceValues) : 0;
+  $: valueCeil = chartReferenceValues.length > 0 ? Math.max(...chartReferenceValues) : 100;
   $: chartMin = Math.max(0, Math.floor((valueFloor - 5) / 5) * 5);
   $: chartMax = Math.min(100, Math.ceil((valueCeil + 5) / 5) * 5 || 100);
   $: linePath = buildPath(chartPoints, chartMin, chartMax);
@@ -172,6 +189,10 @@
         <p class="value">{data.salzstandCm.toFixed(1)} cm <span class="value-equiv">≙</span> {data.salzstandPercent.toFixed(1)} %</p>
       </div>
     </div>
+    <div class="sensor-state" class:warning={sensorState === 'refill' || sensorState === 'stale'} class:error={sensorState === 'error' || sensorState === 'disconnected'}>
+      <span>{t('dashboard.sensorStateLabel')}</span>
+      <strong>{sensorStateLabel}</strong>
+    </div>
 
     {#if !wsConnected}
       <div class="ws-alert ws-alert--error" role="alert">
@@ -181,6 +202,10 @@
       <div class="ws-alert ws-alert--warn" role="alert">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
         {t('dashboard.stale')} ({lang === 'en' ? `${lastUpdateAgeSec}s ago` : `vor ${lastUpdateAgeSec} s`} - {lang === 'en' ? 'no new update received' : 'kein neues Update empfangen'})</div>
+    {:else if sensorState === 'error'}
+      <div class="ws-alert ws-alert--error" role="alert">{t('dashboard.sensorError')}</div>
+    {:else if sensorState === 'refill'}
+      <div class="ws-alert ws-alert--warn" role="status">{t('dashboard.refill')}</div>
     {/if}
 
     <div class="chart-meta">
@@ -197,7 +222,7 @@
         <strong>{oldestPoint ? formatDateLabel(oldestPoint.ts) : t('dashboard.noHistory')}</strong>
       </div>
       <div>
-        <span>{t('dashboard.lastMeasurement')}</span>
+        <span>{t('dashboard.lastHistoryPoint')}</span>
         <strong>{latestPoint ? formatDateTimeLabel(latestPoint.ts) : t('dashboard.noHistory')}</strong>
       </div>
     </div>
@@ -393,6 +418,37 @@
     font-weight: 800;
     letter-spacing: 0.02em;
     line-height: 1.1;
+  }
+
+  .sensor-state {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    border: 1px solid rgba(74, 222, 128, 0.28);
+    border-radius: 10px;
+    background: rgba(74, 222, 128, 0.08);
+    color: var(--text-main);
+  }
+
+  .sensor-state span {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .sensor-state.warning {
+    border-color: rgba(245, 158, 11, 0.36);
+    background: rgba(245, 158, 11, 0.1);
+  }
+
+  .sensor-state.error {
+    border-color: rgba(248, 113, 113, 0.4);
+    background: rgba(248, 113, 113, 0.1);
   }
 
   .btn-reset {

@@ -14,7 +14,7 @@ try {
 
     $stagedFiles = @(git diff --cached --name-only | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     if ($stagedFiles.Count -eq 0) {
-        Write-Host "Keine Änderungen zum Committen." -ForegroundColor Yellow
+        Write-Host 'Keine Aenderungen zum Committen.' -ForegroundColor Yellow
         return
     }
 
@@ -25,21 +25,22 @@ try {
             Select-Object -Unique)
 
         $areaSummary = if ($areas.Count -gt 0) {
-            ($areas | Select-Object -First 3) -join ", "
+            ($areas | Select-Object -First 3) -join ', '
         }
         else {
-            "project"
+            'project'
         }
 
         if ($areas.Count -gt 3) {
-            $areaSummary = "$areaSummary +$($areas.Count - 3)"
+            $areaSummary = '{0} +{1}' -f $areaSummary, ($areas.Count - 3)
         }
 
-        $CommitMessage = "chore: update $areaSummary ($($stagedFiles.Count) files)"
+        $stagedFileCount = $stagedFiles.Count
+        $CommitMessage = 'chore: update {0} - {1} files' -f $areaSummary, $stagedFileCount
     }
 
     git commit --no-verify -m $CommitMessage
-    Write-Host "Commit erstellt: $CommitMessage" -ForegroundColor Green
+    Write-Host ('Commit erstellt: {0}' -f $CommitMessage) -ForegroundColor Green
 }
 finally {
     Pop-Location

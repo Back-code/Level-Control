@@ -62,6 +62,9 @@ try {
     }
 
     node scripts/test-ota-hardware.mjs
+    if ($LASTEXITCODE -ne 0) {
+        throw "Hardware-OTA-Test fehlgeschlagen (Exitcode $LASTEXITCODE)."
+    }
 
     # Behalte nur die letzten 5 Versionen lokal, lösche älter Versionen
     if (Test-Path $releaseRoot) {

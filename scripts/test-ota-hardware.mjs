@@ -11,7 +11,7 @@ const version = JSON.parse(readFileSync(join(root, 'version.json'), 'utf8'));
 const versionStr = `${Number(version.major) || 0}.${Number(version.minor) || 0}.${Number(version.commit) || 0}`;
 const pythonPath = join(root, '.venv', 'Scripts', 'python.exe');
 const defaultHost = 'http://stand.local';
-const host = (process.env.OTA_TEST_HOST || defaultHost).replace(/\/$/, '');
+let host = '';
 
 function detectSerialDevices() {
   if (!existsSync(pythonPath)) {
@@ -28,6 +28,31 @@ function detectSerialDevices() {
 
   const parsed = JSON.parse(result.stdout || '[]');
   return Array.isArray(parsed) ? parsed : parsed.devices || [];
+}
+
+function normalizeMac(value) {
+  return String(value || '').replace(/[^0-9a-f]/gi, '').toLowerCase();
+}
+
+function discoverHostFromArp(device) {
+  const macMatch = String(device.hwid || '').match(/SER=([0-9a-f:]{17})/i);
+  if (!macMatch) {
+    return '';
+  }
+
+  const targetMac = normalizeMac(macMatch[1]);
+  const result = spawnSync('arp', ['-a'], { encoding: 'utf8' });
+  if (result.status !== 0) {
+    return '';
+  }
+
+  for (const line of String(result.stdout || '').split(/\r?\n/)) {
+    const match = line.match(/^\s*(\d+(?:\.\d+){3})\s+([0-9a-f-]{17})\s+/i);
+    if (match && normalizeMac(match[2]) === targetMac) {
+      return `http://${match[1]}`;
+    }
+  }
+  return '';
 }
 
 async function request(path, options = {}) {
@@ -76,6 +101,8 @@ if (devices.length === 0) {
   console.log('Hardware OTA-Test uebersprungen: kein PlatformIO-USB-Geraet verbunden.');
   process.exit(0);
 }
+
+host = (process.env.OTA_TEST_HOST || discoverHostFromArp(devices[0]) || defaultHost).replace(/\/$/, '');
 
 let initialStatus;
 try {

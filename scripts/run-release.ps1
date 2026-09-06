@@ -25,6 +25,7 @@ try {
 
     node scripts/prepare-release.js
     node scripts/test-ota-release.mjs
+    node scripts/test-phase6-contracts.mjs
 
     $ghCommand = Get-Command gh -ErrorAction SilentlyContinue
     if (-not $ghCommand) {

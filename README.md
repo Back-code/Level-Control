@@ -425,6 +425,8 @@ node scripts/test-ota-release.mjs
 
 Der Regressionstest prueft die exakte Build-Nutzlast, Detached- und Legacy-Signaturen sowie den vollstaendigen Stream-Fortschritt beider OTA-Empfaenger. Ein Release mit abweichenden oder unvollstaendigen Assets wird dadurch vor der Veroeffentlichung abgebrochen.
 
+Zusätzlich läuft vor dem Upload `scripts/test-phase6-contracts.mjs`. Der Test prüft die Verträge für Sensorfehler, Persistenz, Backup, Historie, Dirty-State, Admin-Schutz und Request-Grenzen.
+
 Wenn ein ESP32 per USB verbunden ist, fuehrt der Release-Workflow nach dem GitHub-Upload zusaetzlich einen echten Repo-OTA-Test gegen das Geraet aus. Der Host wird ueber `OTA_TEST_HOST` gesetzt; standardmaessig wird `http://stand.local` verwendet:
 
 ```powershell

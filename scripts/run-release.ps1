@@ -25,6 +25,21 @@ try {
 
     node scripts/prepare-release.js
 
+    $ghCommand = Get-Command gh -ErrorAction SilentlyContinue
+    if (-not $ghCommand) {
+        $ghCandidates = Get-ChildItem -Path (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages\GitHub.cli_*\bin\gh.exe') -File -ErrorAction SilentlyContinue
+        $ghCommand = $ghCandidates | Select-Object -First 1
+    }
+    if (-not $ghCommand) {
+        throw "GitHub CLI 'gh' nicht gefunden. Bitte gh installieren und authentifizieren."
+    }
+    $ghExecutable = if ($ghCommand -is [System.Management.Automation.CommandInfo]) {
+        $ghCommand.Source
+    }
+    else {
+        $ghCommand.FullName
+    }
+
     $releaseArgs = @(
         'release', 'create', "v$versionStr",
         "release/v$versionStr/level-control-v$versionStr-app.bin",
@@ -36,7 +51,10 @@ try {
         '--title', "Level-Control v$versionStr",
         '--notes-file', "release/v$versionStr/release-notes.txt"
     )
-    & gh @releaseArgs
+    & $ghExecutable @releaseArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "GitHub-Release konnte nicht veröffentlicht werden (Exitcode $LASTEXITCODE)."
+    }
 
     # Behalte nur die letzten 5 Versionen lokal, lösche älter Versionen
     if (Test-Path $releaseRoot) {

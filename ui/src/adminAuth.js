@@ -1,4 +1,8 @@
 const ADMIN_TOKEN_KEY = 'level-control-admin-token';
+import { writable } from 'svelte/store';
+
+export const activeAdminLogin = writable(null);
+export const adminSessionActive = writable(false);
 
 function getStoredToken() {
   return localStorage.getItem(ADMIN_TOKEN_KEY) || '';
@@ -24,29 +28,19 @@ async function authenticate() {
   const status = await getAuthStatus();
   const storedToken = getStoredToken();
   if (storedToken && status.authenticated) {
+    adminSessionActive.set(true);
     return storedToken;
   }
 
-  const password = window.prompt(status.configured
-    ? 'Admin-Passwort eingeben'
-    : 'Admin-Passwort für dieses Gerät festlegen (mindestens 8 Zeichen)');
-  if (!password) {
-    throw new Error('Admin-Anmeldung abgebrochen');
-  }
-
-  let passwordToConfirm = password;
-  if (!status.configured) {
-    passwordToConfirm = window.prompt('Admin-Passwort wiederholen');
-    if (passwordToConfirm !== password) {
-      throw new Error('Die Admin-Passwörter stimmen nicht überein');
-    }
-  }
+  const credentials = await new Promise((resolve, reject) => {
+    activeAdminLogin.set({ configured: status.configured, resolve, reject });
+  });
 
   const endpoint = status.configured ? '/api/auth/login' : '/api/auth/setup';
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password })
+    body: JSON.stringify({ password: credentials.password })
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || !payload.token) {
@@ -54,7 +48,16 @@ async function authenticate() {
   }
 
   storeToken(payload.token);
+  adminSessionActive.set(true);
   return payload.token;
+}
+
+export async function ensureAdminSession() {
+  return authenticate();
+}
+
+export async function getAdminToken() {
+  return authenticate();
 }
 
 export async function adminFetch(url, options = {}) {
@@ -71,4 +74,24 @@ export async function adminFetch(url, options = {}) {
 
 export function clearAdminSession() {
   storeToken('');
+  adminSessionActive.set(false);
+}
+
+export async function logoutAdmin() {
+  await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+  clearAdminSession();
+}
+
+export async function changeAdminPassword(password) {
+  const response = await adminFetch('/api/auth/change', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.token) {
+    throw new Error(payload.error || 'Admin-Passwort konnte nicht geändert werden');
+  }
+  storeToken(payload.token);
+  adminSessionActive.set(true);
 }

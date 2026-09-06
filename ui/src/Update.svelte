@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { confirmAction, showNotice } from './dialogStore.js';
+  import { adminFetch, getAdminToken } from './adminAuth.js';
 
   export let currentVersion = '0.0.0';
 
@@ -104,6 +105,9 @@
       const xhr = new XMLHttpRequest();
       const deferReboot = options.deferReboot ? '?deferReboot=1' : '';
       xhr.open('POST', `/api/update/upload/${target}${deferReboot}`);
+      if (options.adminToken) {
+        xhr.setRequestHeader('X-Admin-Token', options.adminToken);
+      }
       xhr.responseType = 'text';
       xhr.timeout = 0;
 
@@ -219,7 +223,7 @@
           && (status.activityAgeMs || 0) > 15000
         ) {
           rebootFallbackTriggered = true;
-          fetch('/api/restart', { method: 'POST' }).catch(() => {});
+          adminFetch('/api/restart', { method: 'POST' }).catch(() => {});
         }
 
         return status;
@@ -285,7 +289,7 @@
   }
 
   async function resetDeviceUpdateState() {
-    const response = await fetch('/api/update/reset', { method: 'POST' });
+    const response = await adminFetch('/api/update/reset', { method: 'POST' });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       showNotice('error', payload.error || 'Update-Status konnte nicht zurückgesetzt werden');
@@ -332,7 +336,7 @@
       statusCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
-    const response = await fetch('/api/update/repo', {
+    const response = await adminFetch('/api/update/repo', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ target })
@@ -423,6 +427,7 @@
 
     let payload;
     try {
+      options.adminToken = await getAdminToken();
       payload = await uploadFileWithProgress(target, formData, options);
     } catch (errorReason) {
       const isTransportFailure = errorReason?.message === 'Netzwerkfehler beim Upload'

@@ -530,7 +530,7 @@
     wifiScanLoading = true;
     wifiScanError = '';
     try {
-      const response = await fetch('/api/wifi/scan', { method: 'POST', cache: 'no-store' });
+      const response = await adminFetch('/api/wifi/scan', { method: 'POST', cache: 'no-store' });
       if (!response.ok) {
         wifiScanError = 'WiFi-Scan fehlgeschlagen.';
         return;
@@ -696,7 +696,7 @@
     }
 
     try {
-      const response = await fetch('/api/config', {
+      const response = await adminFetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -741,7 +741,7 @@
     }
 
     try {
-      const response = await fetch('/api/wifi', {
+      const response = await adminFetch('/api/wifi', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -777,7 +777,7 @@
 
   async function saveMqttConfig() {
     try {
-      const response = await fetch('/api/mqtt', {
+      const response = await adminFetch('/api/mqtt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(mqttConfig)
@@ -817,7 +817,7 @@
     }
 
     try {
-      const response = await fetch('/api/push', {
+      const response = await adminFetch('/api/push', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -866,7 +866,7 @@
       if (!saved) {
         return;
       }
-      const response = await fetch('/api/push/test', { method: 'POST' });
+      const response = await adminFetch('/api/push/test', { method: 'POST' });
       if (!response.ok) {
         const raw = await response.text().catch(() => '');
         let detailedError = '';
@@ -919,7 +919,7 @@
     }
 
     try {
-      const response = await fetch('/api/push/smtp-check', { method: 'POST' });
+      const response = await adminFetch('/api/push/smtp-check', { method: 'POST' });
       const data = await response.json().catch(() => null);
       smtpDiagResult = data || { success: false, steps: [{ name: 'HTTP', ok: false, detail: `HTTP ${response.status}` }] };
     } catch (_) {
@@ -942,7 +942,7 @@
 
   async function reconnectMqtt() {
     try {
-      await fetch('/api/mqtt/reconnect', { method: 'POST' });
+      await adminFetch('/api/mqtt/reconnect', { method: 'POST' });
     } catch (_) { }
   }
 

@@ -3,6 +3,7 @@
   import Dashboard from './Dashboard.svelte';
   import Config from './Config.svelte';
   import GlobalDialogs from './GlobalDialogs.svelte';
+  import AdminLogin from './AdminLogin.svelte';
   import Update from './Update.svelte';
   import { confirmAction, showNotice } from './dialogStore.js';
   import { adminFetch } from './adminAuth.js';
@@ -254,6 +255,7 @@
 
 <main>
   <GlobalDialogs />
+  <AdminLogin />
 
   {#if showMobileMoreMenu}
     <div class="mobile-more-backdrop" role="presentation" on:click={handleMobileMoreBackdropClick}>

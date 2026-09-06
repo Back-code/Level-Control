@@ -515,6 +515,48 @@ void WebServerDashboard::setupRoutes() {
         request->send(200, "application/json", "{\"status\":\"ok\"}");
     });
 
+    server_.on("/api/auth/change", HTTP_POST, [](AsyncWebServerRequest *request) {}, nullptr,
+        [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+            if (index == 0 && !requireAdmin(request)) return;
+            auto *body = static_cast<std::string*>(request->_tempObject);
+            if (index == 0) {
+                delete body;
+                body = new std::string();
+                body->reserve(std::min(total, static_cast<size_t>(512)));
+                request->_tempObject = body;
+            }
+            if (body == nullptr || total > 512) {
+                request->send(413, "application/json", "{\"error\":\"auth_payload_too_large\"}");
+                delete body;
+                request->_tempObject = nullptr;
+                return;
+            }
+            body->append(reinterpret_cast<const char*>(data), len);
+            if (index + len != total) return;
+
+            DynamicJsonDocument doc(256);
+            const bool validJson = deserializeJson(doc, *body) == DeserializationError::Ok;
+            const std::string password = validJson ? std::string(doc["password"] | "") : "";
+            Config config;
+            if (!validJson || password.size() < 8 || !ConfigStore::getInstance().load(config)) {
+                request->send(400, "application/json", "{\"error\":\"admin_password_invalid\"}");
+            } else {
+                config.adminPasswordHash = sha256Hex(password);
+                if (!ConfigStore::getInstance().save(config)) {
+                    request->send(500, "application/json", "{\"error\":\"admin_password_save_failed\"}");
+                } else {
+                    DynamicJsonDocument response(256);
+                    response["status"] = "ok";
+                    response["token"] = issueAdminSession();
+                    std::string json;
+                    serializeJson(response, json);
+                    request->send(200, "application/json", json.c_str());
+                }
+            }
+            delete body;
+            request->_tempObject = nullptr;
+        });
+
     for (const char* route : {"/api/auth/setup", "/api/auth/login"}) {
         server_.on(route, HTTP_POST, [](AsyncWebServerRequest *request) {}, nullptr,
             [this, route](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
@@ -598,7 +640,8 @@ void WebServerDashboard::setupRoutes() {
     });
 
     server_.on("/api/config", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL,
-        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+        [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+        if (index == 0 && !requireAdmin(request)) return;
         auto *body = static_cast<std::string*>(request->_tempObject);
         if (index == 0) {
             delete body;
@@ -688,7 +731,8 @@ void WebServerDashboard::setupRoutes() {
         request->send(200, "application/json", json.c_str());
     });
 
-    server_.on("/api/wifi/scan", HTTP_POST, [](AsyncWebServerRequest *request) {
+    server_.on("/api/wifi/scan", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        if (!requireAdmin(request)) return;
         std::vector<WifiNetwork> networks = WifiManager::getInstance().scanNetworks();
         std::sort(networks.begin(), networks.end(), [](const WifiNetwork& left, const WifiNetwork& right) {
             return left.rssi > right.rssi;
@@ -723,7 +767,8 @@ void WebServerDashboard::setupRoutes() {
     });
 
     server_.on("/api/wifi", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL,
-        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+        [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+        if (index == 0 && !requireAdmin(request)) return;
         auto *body = static_cast<std::string*>(request->_tempObject);
         if (index == 0) {
             delete body;
@@ -807,7 +852,8 @@ void WebServerDashboard::setupRoutes() {
     });
 
     server_.on("/api/mqtt", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL,
-        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+        [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+        if (index == 0 && !requireAdmin(request)) return;
         auto *body = static_cast<std::string*>(request->_tempObject);
         if (index == 0) {
             delete body;
@@ -882,7 +928,8 @@ void WebServerDashboard::setupRoutes() {
         request->send(200, "application/json", json.c_str());
     });
 
-    server_.on("/api/mqtt/reconnect", HTTP_POST, [](AsyncWebServerRequest *request) {
+    server_.on("/api/mqtt/reconnect", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        if (!requireAdmin(request)) return;
         Config config;
         if (ConfigStore::getInstance().load(config) && !config.mqtt.server.empty()) {
             MqttManager::getInstance().init(config.mqtt.server.c_str(), config.mqtt.port);
@@ -924,7 +971,8 @@ void WebServerDashboard::setupRoutes() {
         }
     });
 
-    auto* pushPostHandler = new AsyncCallbackJsonWebHandler("/api/push", [](AsyncWebServerRequest *request, JsonVariant &json) {
+    auto* pushPostHandler = new AsyncCallbackJsonWebHandler("/api/push", [this](AsyncWebServerRequest *request, JsonVariant &json) {
+        if (!requireAdmin(request)) return;
         JsonObject doc = json.as<JsonObject>();
         if (doc.isNull()) {
             request->send(400, "application/json", "{\"error\":\"invalid_push_payload\"}");
@@ -1020,7 +1068,8 @@ void WebServerDashboard::setupRoutes() {
         request->send(405, "application/json", "{\"error\":\"method_not_allowed_use_post\"}");
     });
 
-    server_.on("/api/push/test", HTTP_POST, [](AsyncWebServerRequest *request) {
+    server_.on("/api/push/test", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        if (!requireAdmin(request)) return;
         std::string error;
         if (PushNotificationManager::getInstance().sendTestEmail(error)) {
             request->send(200, "application/json", "{\"status\":\"ok\"}");
@@ -1048,7 +1097,8 @@ void WebServerDashboard::setupRoutes() {
         request->send(405, "application/json", "{\"error\":\"method_not_allowed_use_post\"}");
     });
 
-    server_.on("/api/push/smtp-check", HTTP_POST, [](AsyncWebServerRequest *request) {
+    server_.on("/api/push/smtp-check", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        if (!requireAdmin(request)) return;
         SmtpDiagResult diagResult = PushNotificationManager::getInstance().smtpDiagnostic();
 
         DynamicJsonDocument doc(3072);
@@ -1085,7 +1135,8 @@ void WebServerDashboard::setupRoutes() {
     });
 
     // DELETE /api/history – löscht alle gespeicherten Verlaufsdaten
-    server_.on("/api/history", HTTP_DELETE, [](AsyncWebServerRequest *request) {
+    server_.on("/api/history", HTTP_DELETE, [this](AsyncWebServerRequest *request) {
+        if (!requireAdmin(request)) return;
         HistoryManager::getInstance().clear();
         request->send(204);
     });
@@ -1432,6 +1483,7 @@ void WebServerDashboard::setupUpdateRoutes() {
     });
 
     server_.on("/api/update/reset", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        if (!requireAdmin(request)) return;
         recoverStuckUploadIfNeeded();
 
         if (updateState_.inProgress && updateState_.source != "upload") {
@@ -1460,6 +1512,7 @@ void WebServerDashboard::setupUpdateRoutes() {
         const String route = String("/api/update/signature/") + target;
         server_.on(route.c_str(), HTTP_POST, [](AsyncWebServerRequest *request) {}, nullptr,
             [this, target](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+                if (index == 0 && !requireAdmin(request)) return;
                 auto& signature = std::strcmp(target, "app") == 0
                     ? uploadAppSignature_
                     : uploadWebUiSignature_;
@@ -1482,6 +1535,7 @@ void WebServerDashboard::setupUpdateRoutes() {
 
     server_.on("/api/update/repo", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL,
         [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+        if (index == 0 && !requireAdmin(request)) return;
         auto *body = static_cast<std::string*>(request->_tempObject);
         if (index == 0) {
             delete body;
@@ -1545,6 +1599,7 @@ void WebServerDashboard::setupUpdateRoutes() {
     server_.on("/api/update/upload/app", HTTP_POST,
         [](AsyncWebServerRequest *request) {},
         [this](AsyncWebServerRequest *request, const String& filename, size_t index, uint8_t *data, size_t len, bool final) {
+            if (index == 0 && !requireAdmin(request)) return;
             handleUpload(request, "app", filename, index, data, len, final);
         });
 
@@ -1552,12 +1607,14 @@ void WebServerDashboard::setupUpdateRoutes() {
     server_.on("/api/update/upload/firmware", HTTP_POST,
         [](AsyncWebServerRequest *request) {},
         [this](AsyncWebServerRequest *request, const String& filename, size_t index, uint8_t *data, size_t len, bool final) {
+            if (index == 0 && !requireAdmin(request)) return;
             handleUpload(request, "app", filename, index, data, len, final);
         });
 
     server_.on("/api/update/upload/webui", HTTP_POST,
         [](AsyncWebServerRequest *request) {},
         [this](AsyncWebServerRequest *request, const String& filename, size_t index, uint8_t *data, size_t len, bool final) {
+            if (index == 0 && !requireAdmin(request)) return;
             handleUpload(request, "webui", filename, index, data, len, final);
         });
 }

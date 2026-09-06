@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { createTranslator } from './i18n.js';
   import { showNotice } from './dialogStore.js';
+  import { adminFetch } from './adminAuth.js';
 
   export let data;
   export let wsConnected = true;
@@ -76,7 +77,7 @@
   async function resetHistory() {
     showResetConfirm = false;
     try {
-      const response = await fetch('/api/history', { method: 'DELETE' });
+      const response = await adminFetch('/api/history', { method: 'DELETE' });
       if (!response.ok) {
         throw new Error('Verlauf konnte nicht gelöscht werden');
       }

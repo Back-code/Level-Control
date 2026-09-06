@@ -57,6 +57,7 @@ struct Config {
     float offset = 0.0;
     unsigned long sampleIntervalSeconds = 5;
     std::string sensorType = "rcwl1670";
+    std::string adminPasswordHash;
 };
 
 class ConfigStore {

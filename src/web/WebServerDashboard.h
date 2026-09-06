@@ -112,6 +112,12 @@ private:
     size_t getFilesystemPartitionSize() const;
 
     unsigned long uploadLastChunkMs_ = 0;
+    std::string adminSessionToken_;
+    unsigned long adminSessionIssuedMs_ = 0;
+
+    bool requireAdmin(AsyncWebServerRequest *request);
+    bool isAdminAuthenticated(AsyncWebServerRequest *request) const;
+    std::string issueAdminSession();
 };
 
 #endif // WEB_SERVER_DASHBOARD_H

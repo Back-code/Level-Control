@@ -6,6 +6,7 @@
   import PasswordInput from './PasswordInput.svelte';
   import SensorSchema from './SensorSchema.svelte';
   import { createTranslator } from './i18n.js';
+  import { adminFetch } from './adminAuth.js';
 
   export let data;
   export let loadConfig;
@@ -110,13 +111,31 @@
   let importResult = null;
   let factoryResetLoading = false;
 
+  async function doExport() {
+    try {
+      const response = await adminFetch('/api/export', { cache: 'no-store' });
+      if (!response.ok) {
+        throw new Error('Backup konnte nicht erstellt werden');
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'level-control-backup.json';
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      showNotice('error', error?.message || 'Backup konnte nicht erstellt werden');
+    }
+  }
+
   async function doImport() {
     if (!importFile) return;
     importLoading = true;
     importResult = null;
     try {
       const body = await importFile.arrayBuffer();
-      const res = await fetch('/api/import', {
+      const res = await adminFetch('/api/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body
@@ -153,7 +172,7 @@
 
     factoryResetLoading = true;
     try {
-      const res = await fetch('/api/factory-reset', { method: 'POST' });
+      const res = await adminFetch('/api/factory-reset', { method: 'POST' });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok || payload.status !== 'ok') {
         throw new Error(payload.error || 'Werksreset fehlgeschlagen.');
@@ -1294,7 +1313,7 @@
 
     <h3 class="backup-group-title">Exportieren</h3>
     <p class="backup-hint">Lädt alle Einstellungen und den Messverlauf als JSON-Datei herunter. Die Datei enthält auch Passwörter im Klartext – sicher aufbewahren.</p>
-    <a class="primary backup-download-btn" href="/api/export" download>Backup herunterladen</a>
+    <button class="primary backup-download-btn" on:click={doExport}>Backup herunterladen</button>
 
     <h3 class="backup-group-title">Importieren</h3>
     <p class="backup-hint">Stellt Einstellungen und Messverlauf aus einer exportierten Backup-Datei wieder her.</p>

@@ -14,6 +14,7 @@
 #include <climits>
 #include <cstdio>
 #include <cstring>
+#include <sstream>
 #include <vector>
 #include <esp_ota_ops.h>
 #include <esp_partition.h>
@@ -42,6 +43,7 @@ constexpr uint32_t kRestartDelayMs = 2500;
 constexpr size_t kUploadBufferSize = 4096;
 constexpr unsigned long kManifestCacheTtlMs = 300000;
 constexpr unsigned long kUploadStallTimeoutMs = 300000;
+constexpr unsigned long kAdminSessionTtlMs = 8UL * 60UL * 60UL * 1000UL;
 constexpr size_t kEmbeddedSigBytes = 72;
 constexpr size_t kEmbeddedSigTrailerSize = 8 + 1 + kEmbeddedSigBytes;
 const uint8_t kEmbeddedSigMagic[8] = { 'L', 'C', 'S', 'I', 'G', 'V', '1', '!' };
@@ -68,6 +70,23 @@ std::string toLowerCopy(std::string value) {
 
 bool isMaskedPassword(const std::string& value) {
     return value == "***" || value == kPasswordMask;
+}
+
+std::string bytesToHex(const unsigned char *data, size_t length);
+
+std::string sha256Hex(const std::string& value) {
+    unsigned char digest[32];
+    mbedtls_sha256_context context;
+    mbedtls_sha256_init(&context);
+    if (mbedtls_sha256_starts_ret(&context, 0) != 0
+        || mbedtls_sha256_update_ret(&context,
+            reinterpret_cast<const unsigned char*>(value.data()), value.size()) != 0
+        || mbedtls_sha256_finish_ret(&context, digest) != 0) {
+        mbedtls_sha256_free(&context);
+        return "";
+    }
+    mbedtls_sha256_free(&context);
+    return bytesToHex(digest, sizeof(digest));
 }
 
 bool parseVersionNumberPart(const std::string& text, size_t& pos, int& value) {
@@ -294,6 +313,39 @@ WebServerDashboard& WebServerDashboard::getInstance() {
     return instance;
 }
 
+bool WebServerDashboard::isAdminAuthenticated(AsyncWebServerRequest *request) const {
+    Config config;
+    if (!ConfigStore::getInstance().load(config) || config.adminPasswordHash.empty()
+        || adminSessionToken_.empty() || (millis() - adminSessionIssuedMs_) > kAdminSessionTtlMs
+        || !request->hasHeader("X-Admin-Token")) {
+        return false;
+    }
+
+    const AsyncWebHeader* header = request->getHeader("X-Admin-Token");
+    return header != nullptr && header->value().equals(adminSessionToken_.c_str());
+}
+
+bool WebServerDashboard::requireAdmin(AsyncWebServerRequest *request) {
+    if (isAdminAuthenticated(request)) {
+        return true;
+    }
+
+    request->send(401, "application/json", "{\"error\":\"admin_auth_required\"}");
+    return false;
+}
+
+std::string WebServerDashboard::issueAdminSession() {
+    char token[65];
+    snprintf(token, sizeof(token), "%08lx%08lx%08lx%08lx",
+        static_cast<unsigned long>(esp_random()),
+        static_cast<unsigned long>(esp_random()),
+        static_cast<unsigned long>(esp_random()),
+        static_cast<unsigned long>(esp_random()));
+    adminSessionToken_ = token;
+    adminSessionIssuedMs_ = millis();
+    return adminSessionToken_;
+}
+
 WebServerDashboard::WebServerDashboard() : server_(80), ws_("/ws") {
     littleFsMounted_ = mountLittleFsWithKnownLabels();
     if (!littleFsMounted_) {
@@ -445,6 +497,80 @@ bool WebServerDashboard::requestRepoUpdate(const std::string& target, std::strin
 }
 
 void WebServerDashboard::setupRoutes() {
+    server_.on("/api/auth/status", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        Config config;
+        const bool configured = ConfigStore::getInstance().load(config) && !config.adminPasswordHash.empty();
+        DynamicJsonDocument doc(192);
+        doc["configured"] = configured;
+        doc["authenticated"] = configured && isAdminAuthenticated(request);
+        doc["sessionTtlMs"] = kAdminSessionTtlMs;
+        std::string json;
+        serializeJson(doc, json);
+        request->send(200, "application/json", json.c_str());
+    });
+
+    server_.on("/api/auth/logout", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        adminSessionToken_.clear();
+        adminSessionIssuedMs_ = 0;
+        request->send(200, "application/json", "{\"status\":\"ok\"}");
+    });
+
+    for (const char* route : {"/api/auth/setup", "/api/auth/login"}) {
+        server_.on(route, HTTP_POST, [](AsyncWebServerRequest *request) {}, nullptr,
+            [this, route](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+                auto *body = static_cast<std::string*>(request->_tempObject);
+                if (index == 0) {
+                    delete body;
+                    body = new std::string();
+                    body->reserve(std::min(total, static_cast<size_t>(512)));
+                    request->_tempObject = body;
+                }
+                if (body == nullptr || total > 512) {
+                    request->send(413, "application/json", "{\"error\":\"auth_payload_too_large\"}");
+                    delete body;
+                    request->_tempObject = nullptr;
+                    return;
+                }
+                body->append(reinterpret_cast<const char*>(data), len);
+                if (index + len != total) {
+                    return;
+                }
+
+                DynamicJsonDocument doc(256);
+                const bool validJson = deserializeJson(doc, *body) == DeserializationError::Ok;
+                const std::string password = validJson ? std::string(doc["password"] | "") : "";
+                Config config;
+                const bool configLoaded = ConfigStore::getInstance().load(config);
+                const bool isSetup = std::strcmp(route, "/api/auth/setup") == 0;
+                if (!validJson || !configLoaded || password.size() < 8) {
+                    request->send(400, "application/json", "{\"error\":\"admin_password_invalid\"}");
+                } else if (isSetup && !config.adminPasswordHash.empty()) {
+                    request->send(409, "application/json", "{\"error\":\"admin_already_configured\"}");
+                } else if (!isSetup && (config.adminPasswordHash.empty()
+                    || sha256Hex(password) != config.adminPasswordHash)) {
+                    request->send(401, "application/json", "{\"error\":\"admin_login_failed\"}");
+                } else {
+                    if (isSetup) {
+                        config.adminPasswordHash = sha256Hex(password);
+                        if (!ConfigStore::getInstance().save(config)) {
+                            request->send(500, "application/json", "{\"error\":\"admin_password_save_failed\"}");
+                            delete body;
+                            request->_tempObject = nullptr;
+                            return;
+                        }
+                    }
+                    DynamicJsonDocument response(256);
+                    response["status"] = "ok";
+                    response["token"] = issueAdminSession();
+                    std::string json;
+                    serializeJson(response, json);
+                    request->send(200, "application/json", json.c_str());
+                }
+                delete body;
+                request->_tempObject = nullptr;
+            });
+    }
+
         // API-Endpunkt: Laser-Version
         server_.on("/api/laser-version", HTTP_GET, [](AsyncWebServerRequest *request) {
             std::string version = SensorManager::getInstance().getLaserVersion();
@@ -965,7 +1091,8 @@ void WebServerDashboard::setupRoutes() {
     });
 
     // GET /api/export – Konfiguration und Verlaufsdaten als JSON-Backup herunterladen
-    server_.on("/api/export", HTTP_GET, [](AsyncWebServerRequest *request) {
+    server_.on("/api/export", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        if (!requireAdmin(request)) return;
         Config config;
         if (!ConfigStore::getInstance().load(config)) {
             request->send(500, "application/json", "{\"error\":\"config_load_failed\"}");
@@ -1046,7 +1173,8 @@ void WebServerDashboard::setupRoutes() {
 
     // POST /api/import – Konfiguration und Verlaufsdaten aus JSON-Backup wiederherstellen
     server_.on("/api/import", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL,
-        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+        [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+        if (index == 0 && !requireAdmin(request)) return;
         auto *body = static_cast<std::string*>(request->_tempObject);
         if (index == 0) {
             delete body;
@@ -1175,7 +1303,8 @@ void WebServerDashboard::setupRoutes() {
     });
 
     // POST /api/factory-reset – setzt Konfiguration und Historie auf Werkseinstellungen zurueck
-    server_.on("/api/factory-reset", HTTP_POST, [](AsyncWebServerRequest *request) {
+    server_.on("/api/factory-reset", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        if (!requireAdmin(request)) return;
         Preferences configPrefs;
         if (configPrefs.begin("config", false)) {
             configPrefs.clear();
@@ -1198,7 +1327,8 @@ void WebServerDashboard::setupRoutes() {
         ESP.restart();
     });
 
-    server_.on("/api/restart", HTTP_POST, [](AsyncWebServerRequest *request) {
+    server_.on("/api/restart", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        if (!requireAdmin(request)) return;
         request->send(200, "application/json", "{\"status\":\"restarting\"}");
         delay(1000);
         ESP.restart();

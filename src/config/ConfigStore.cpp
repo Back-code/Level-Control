@@ -200,6 +200,7 @@ bool ConfigStore::load(Config& config) {
         fallbackReasons.emplace_back("sampleIntervalSeconds < 5 auf 5 gesetzt");
     }
     config.sensorType = normalizeSensorType(doc["sensorType"] | "rcwl1670");
+    config.adminPasswordHash = doc["adminPasswordHash"] | "";
 
     const bool hasAnyStaticIp = !config.staticIp.ip.empty()
         || !config.staticIp.gateway.empty()
@@ -306,6 +307,7 @@ bool ConfigStore::save(const Config& config) {
     doc["offset"] = config.offset;
     doc["sampleIntervalSeconds"] = config.sampleIntervalSeconds < 5UL ? 5UL : config.sampleIntervalSeconds;
     doc["sensorType"] = normalizeSensorType(config.sensorType);
+    doc["adminPasswordHash"] = config.adminPasswordHash;
 
     std::string jsonStr;
     serializeJson(doc, jsonStr);

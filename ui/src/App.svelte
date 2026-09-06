@@ -5,6 +5,7 @@
   import GlobalDialogs from './GlobalDialogs.svelte';
   import Update from './Update.svelte';
   import { confirmAction, showNotice } from './dialogStore.js';
+  import { adminFetch } from './adminAuth.js';
   import { createTranslator, SUPPORTED_LANGS } from './i18n.js';
   import versionData from '../../version.json';
 
@@ -220,7 +221,7 @@
     }
 
     try {
-      const response = await fetch('/api/restart', { method: 'POST' });
+      const response = await adminFetch('/api/restart', { method: 'POST' });
       if (!response.ok) {
         showNotice('error', t('restartFailed'));
         return;

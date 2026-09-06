@@ -44,6 +44,12 @@
     <text x="200" y="137" text-anchor="middle" fill="var(--text-muted)" font-size="11">Behälterboden</text>
   </svg>
   <p class="sketch-note">{note}</p>
+  <ol class="calibration-steps" aria-label="Kalibrierungsablauf">
+    <li>Sensortyp auswählen</li>
+    <li>Behälterhöhe vom Sensor bis zum Boden eintragen</li>
+    <li>Montageabstand als Offset einstellen</li>
+    <li>Messwert prüfen und Konfiguration speichern</li>
+  </ol>
 </div>
 
 <style>
@@ -70,5 +76,16 @@
     font-size: 0.85rem;
     color: var(--text-muted);
     text-align: center;
+  }
+
+  .calibration-steps {
+    display: grid;
+    gap: 4px;
+    max-width: 500px;
+    margin: 10px auto 2px;
+    padding-left: 24px;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    line-height: 1.45;
   }
 </style>

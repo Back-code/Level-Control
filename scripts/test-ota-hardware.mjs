@@ -12,7 +12,8 @@ const versionStr = `${Number(version.major) || 0}.${Number(version.minor) || 0}.
 const pythonPath = join(root, '.venv', 'Scripts', 'python.exe');
 const defaultHost = 'http://stand.local';
 let host = '';
-const adminToken = process.env.OTA_TEST_ADMIN_TOKEN || '';
+let adminToken = process.env.OTA_TEST_ADMIN_TOKEN || '';
+const adminPassword = process.env.OTA_TEST_ADMIN_PASSWORD || '';
 
 function detectSerialDevices() {
   if (!existsSync(pythonPath)) {
@@ -76,6 +77,22 @@ async function request(path, options = {}) {
   return { response, payload };
 }
 
+async function authenticateAdmin() {
+  if (adminToken || !adminPassword) return;
+
+  const status = await request('/api/auth/status');
+  const endpoint = status.payload.configured ? '/api/auth/login' : '/api/auth/setup';
+  const result = await request(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: adminPassword })
+  });
+  if (!result.response.ok || !result.payload.token) {
+    throw new Error(`Admin-Authentifizierung für HIL fehlgeschlagen: ${result.payload.error || result.response.status}`);
+  }
+  adminToken = result.payload.token;
+}
+
 async function startRepoUpdate() {
   const { response, payload } = await request('/api/update/repo', {
     method: 'POST',
@@ -108,12 +125,14 @@ if (devices.length === 0) {
   process.exit(0);
 }
 
-if (!adminToken) {
-  console.log('Hardware OTA-Test uebersprungen: USB-Geraet verbunden, aber OTA_TEST_ADMIN_TOKEN fehlt.');
+if (!adminToken && !adminPassword) {
+  console.log('Hardware OTA-Test uebersprungen: USB-Geraet verbunden, aber keine HIL-Authentifizierung gesetzt.');
   process.exit(0);
 }
 
 host = (process.env.OTA_TEST_HOST || discoverHostFromArp(devices[0]) || defaultHost).replace(/\/$/, '');
+
+await authenticateAdmin();
 
 let initialStatus;
 try {

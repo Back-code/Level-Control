@@ -33,9 +33,16 @@ try {
         if ($hasDeviceChanges) { break }
     }
 
+    $versionFileChanged = $pendingFiles -contains 'version.json'
+
     if ($hasDeviceChanges) {
-        Write-Host "Firmware/UI-Aenderungen erkannt: Version wird erhoeht..." -ForegroundColor Cyan
-        node scripts/bump-version.js
+        if ($versionFileChanged) {
+            Write-Host "Firmware/UI-Aenderungen erkannt: explizite Version bleibt erhalten..." -ForegroundColor Cyan
+        }
+        else {
+            Write-Host "Firmware/UI-Aenderungen erkannt: Version wird erhoeht..." -ForegroundColor Cyan
+            node scripts/bump-version.js
+        }
 
         $version = Get-Content version.json | ConvertFrom-Json
         $versionStr = "$($version.major).$($version.minor).$($version.commit)"

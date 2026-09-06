@@ -42,13 +42,25 @@
   let lastSensorUpdate = 0;
   let wsDestroyed = false;
   let showMobileMoreMenu = false;
+  let adminHasUnsavedChanges = false;
 
   const MOBILE_PRIMARY_TAB_IDS = ['dashboard', 'admin'];
 
-  function requestTabChange(nextTab) {
+  async function requestTabChange(nextTab) {
     if (nextTab === activeTab) {
       showMobileMoreMenu = false;
       return;
+    }
+    if (activeTab === 'admin' && adminHasUnsavedChanges) {
+      const confirmed = await confirmAction({
+        title: t('admin.unsavedTitle'),
+        message: t('admin.unsavedConfirm'),
+        confirmLabel: t('admin.discardChanges'),
+        cancelLabel: t('cancel'),
+        tone: 'danger'
+      });
+      if (!confirmed) return;
+      adminHasUnsavedChanges = false;
     }
     activeTab = nextTab;
     showMobileMoreMenu = false;
@@ -323,7 +335,7 @@
       {#if activeTab === 'dashboard'}
         <Dashboard bind:data {wsConnected} {lastSensorUpdate} {lang} />
       {:else if activeTab === 'admin'}
-        <Admin bind:data {loadConfig} currentVersion={versionStr} {lang} />
+        <Admin bind:data {loadConfig} currentVersion={versionStr} {lang} onDirtyStateChange={(dirty) => (adminHasUnsavedChanges = dirty)} />
       {/if}
     </section>
   </div>

@@ -11,11 +11,13 @@
   export let loadConfig;
   export let currentVersion = '0.0.0';
   export let lang = 'de';
+  export let onDirtyStateChange = () => {};
 
   let activeModule = 'sensor';
   let authenticated = false;
   let loginPending = true;
   let loginError = '';
+  let activeModuleDirty = false;
   $: t = createTranslator(lang);
 
   const modules = [
@@ -43,6 +45,17 @@
     }
   }
 
+  async function requestModuleChange(nextModule) {
+    if (nextModule === activeModule) return;
+    if (activeModuleDirty) {
+      const confirmed = window.confirm(t('admin.unsavedConfirm'));
+      if (!confirmed) return;
+    }
+    activeModuleDirty = false;
+    onDirtyStateChange(false);
+    activeModule = nextModule;
+  }
+
   onMount(authenticate);
 </script>
 
@@ -65,7 +78,7 @@
   {:else}
     <nav class="admin-module-nav" aria-label={t('admin.navigationLabel')}>
       {#each modules as module}
-        <button class:active={activeModule === module.id} aria-current={activeModule === module.id ? 'page' : undefined} on:click={() => (activeModule = module.id)}>
+        <button class:active={activeModule === module.id} aria-current={activeModule === module.id ? 'page' : undefined} on:click={() => requestModuleChange(module.id)}>
           {t(`admin.modules.${module.key}`)}
         </button>
       {/each}
@@ -77,7 +90,7 @@
       {:else if activeModule === 'password'}
         <AdminPassword {lang} />
       {:else}
-        <Config bind:data {loadConfig} module={activeModule} {lang} />
+        <Config bind:data {loadConfig} module={activeModule} {lang} onDirtyStateChange={(dirty) => { activeModuleDirty = dirty; onDirtyStateChange(dirty); }} />
       {/if}
     </div>
   {/if}

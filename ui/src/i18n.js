@@ -27,6 +27,9 @@ export const TRANSLATIONS = {
       checking: 'Admin-Sitzung wird geprüft …',
       loginRequired: 'Bitte anmelden, um die Administration zu öffnen.',
       loginFailed: 'Admin-Anmeldung fehlgeschlagen.',
+      unsavedConfirm: 'Ungespeicherte Änderungen verwerfen?',
+      unsavedTitle: 'Ungespeicherte Änderungen',
+      discardChanges: 'Verwerfen',
       navigationLabel: 'Admin-Module',
       modules: {
         sensor: 'Konfiguration',
@@ -126,6 +129,9 @@ export const TRANSLATIONS = {
       checking: 'Checking admin session …',
       loginRequired: 'Please log in to open administration.',
       loginFailed: 'Admin login failed.',
+      unsavedConfirm: 'Discard unsaved changes?',
+      unsavedTitle: 'Unsaved changes',
+      discardChanges: 'Discard',
       navigationLabel: 'Admin modules',
       modules: {
         sensor: 'Configuration',

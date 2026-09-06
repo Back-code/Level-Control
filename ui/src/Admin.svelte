@@ -4,6 +4,10 @@
   import Update from './Update.svelte';
   import AdminPassword from './AdminPassword.svelte';
   import Backup from './Backup.svelte';
+  import SensorConfig from './SensorConfig.svelte';
+  import WifiConfig from './WifiConfig.svelte';
+  import MqttConfig from './MqttConfig.svelte';
+  import PushConfig from './PushConfig.svelte';
   import { ensureAdminSession } from './adminAuth.js';
   import { showNotice } from './dialogStore.js';
   import { createTranslator } from './i18n.js';
@@ -92,8 +96,16 @@
         <AdminPassword {lang} />
       {:else if activeModule === 'backup'}
         <Backup {loadConfig} {lang} />
+      {:else if activeModule === 'sensor'}
+        <SensorConfig bind:data {loadConfig} {lang} onDirtyStateChange={(dirty) => { activeModuleDirty = dirty; onDirtyStateChange(dirty); }} />
+      {:else if activeModule === 'wifi'}
+        <WifiConfig bind:data {loadConfig} {lang} onDirtyStateChange={(dirty) => { activeModuleDirty = dirty; onDirtyStateChange(dirty); }} />
+      {:else if activeModule === 'mqtt_ha'}
+        <MqttConfig bind:data {loadConfig} {lang} onDirtyStateChange={(dirty) => { activeModuleDirty = dirty; onDirtyStateChange(dirty); }} />
+      {:else if activeModule === 'push'}
+        <PushConfig bind:data {loadConfig} {lang} onDirtyStateChange={(dirty) => { activeModuleDirty = dirty; onDirtyStateChange(dirty); }} />
       {:else}
-        <Config bind:data {loadConfig} module={activeModule} {lang} onDirtyStateChange={(dirty) => { activeModuleDirty = dirty; onDirtyStateChange(dirty); }} />
+        <SensorConfig bind:data {loadConfig} {lang} onDirtyStateChange={(dirty) => { activeModuleDirty = dirty; onDirtyStateChange(dirty); }} />
       {/if}
     </div>
   {/if}

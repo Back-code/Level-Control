@@ -427,6 +427,8 @@ Der Regressionstest prueft die exakte Build-Nutzlast, Detached- und Legacy-Signa
 
 Zusätzlich läuft vor dem Upload `scripts/test-phase6-contracts.mjs`. Der Test prüft die Verträge für Sensorfehler, Persistenz, Backup, Historie, Dirty-State, Admin-Schutz und Request-Grenzen.
 
+Die Admin-Konfiguration ist in eigenständige Sensor-, WiFi-, MQTT-, Push- und Backup-Komponenten aufgeteilt. `ui/src/apiClient.js` dient als zentrale Fassade für die schrittweise Vereinheitlichung von Authentifizierung und HTTP-Fehlern.
+
 Wenn ein ESP32 per USB verbunden ist, fuehrt der Release-Workflow nach dem GitHub-Upload zusaetzlich einen echten Repo-OTA-Test gegen das Geraet aus. Der Host wird ueber `OTA_TEST_HOST` gesetzt; standardmaessig wird `http://stand.local` verwendet:
 
 ```powershell

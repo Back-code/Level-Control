@@ -11,12 +11,31 @@ export const TRANSLATIONS = {
     language: 'Sprache',
     modules: {
       dashboard: { label: 'Dashboard', subtitle: 'Live-Messwerte und Netzwerkstatus in einer kompakten Übersicht.' },
+      admin: { label: 'Admin', subtitle: 'Geschützte Geräteverwaltung und Systemeinstellungen.' },
       sensor: { label: 'Konfiguration', subtitle: 'Behälterparameter und Sensor-Abtastrate zentral konfigurieren.' },
       wifi: { label: 'WiFi', subtitle: 'WLAN-Zugang und optionale statische Netzwerkdaten verwalten.' },
       mqtt_ha: { label: 'MQTT & HA', subtitle: 'Broker, Discovery und Home-Assistant-Anbindung zentral steuern.' },
       push: { label: 'Push Nachricht', subtitle: 'E-Mail Benachrichtigungen bei Schwellwert, Zeit und Zyklus konfigurieren.' },
       update: { label: 'Update', subtitle: 'OTA aus Releases oder lokales BIN-Upload mit Dateikontrolle durchführen.' },
       backup: { label: 'Sicherung', subtitle: 'Konfiguration und Messverlauf exportieren und importieren.' }
+    },
+    admin: {
+      eyebrow: 'Administration',
+      title: 'Admin-Bereich',
+      subtitle: 'Geschützte Einstellungen, Wartung und Updates.',
+      login: 'Admin anmelden',
+      checking: 'Admin-Sitzung wird geprüft …',
+      loginRequired: 'Bitte anmelden, um die Administration zu öffnen.',
+      loginFailed: 'Admin-Anmeldung fehlgeschlagen.',
+      navigationLabel: 'Admin-Module',
+      modules: {
+        sensor: 'Konfiguration',
+        wifi: 'WiFi',
+        mqtt_ha: 'MQTT & HA',
+        push: 'Push Nachrichten',
+        backup: 'Sicherung',
+        update: 'Update'
+      }
     },
     restartDialogTitle: 'ESP neu starten?',
     restartDialogMessage: 'Das Gerät wird sofort neu gestartet. Die Weboberfläche ist für kurze Zeit nicht erreichbar.',
@@ -79,12 +98,31 @@ export const TRANSLATIONS = {
     language: 'Language',
     modules: {
       dashboard: { label: 'Dashboard', subtitle: 'Live telemetry and network status in one compact overview.' },
+      admin: { label: 'Admin', subtitle: 'Protected device administration and system settings.' },
       sensor: { label: 'Configuration', subtitle: 'Configure container parameters and sensor interval in one place.' },
       wifi: { label: 'WiFi', subtitle: 'Manage WiFi access and optional static network settings.' },
       mqtt_ha: { label: 'MQTT & HA', subtitle: 'Control broker, discovery and Home Assistant integration.' },
       push: { label: 'Push Message', subtitle: 'Configure email notifications by threshold, schedule and cycle.' },
       update: { label: 'Update', subtitle: 'Run OTA from releases or local BIN uploads with validation.' },
       backup: { label: 'Backup', subtitle: 'Export and import configuration and measurement history.' }
+    },
+    admin: {
+      eyebrow: 'Administration',
+      title: 'Admin area',
+      subtitle: 'Protected settings, maintenance and updates.',
+      login: 'Admin login',
+      checking: 'Checking admin session …',
+      loginRequired: 'Please log in to open administration.',
+      loginFailed: 'Admin login failed.',
+      navigationLabel: 'Admin modules',
+      modules: {
+        sensor: 'Configuration',
+        wifi: 'WiFi',
+        mqtt_ha: 'MQTT & HA',
+        push: 'Push messages',
+        backup: 'Backup',
+        update: 'Update'
+      }
     },
     restartDialogTitle: 'Restart ESP?',
     restartDialogMessage: 'The device restarts immediately. The web UI will be unavailable for a short moment.',

@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import Dashboard from './Dashboard.svelte';
-  import Config from './Config.svelte';
+  import Admin from './Admin.svelte';
   import GlobalDialogs from './GlobalDialogs.svelte';
   import AdminLogin from './AdminLogin.svelte';
   import Update from './Update.svelte';
@@ -43,7 +43,7 @@
   let wsDestroyed = false;
   let showMobileMoreMenu = false;
 
-  const MOBILE_PRIMARY_TAB_IDS = ['dashboard', 'sensor', 'wifi'];
+  const MOBILE_PRIMARY_TAB_IDS = ['dashboard', 'admin'];
 
   function requestTabChange(nextTab) {
     if (nextTab === activeTab) {
@@ -240,12 +240,7 @@
   $: t = createTranslator(lang);
   $: tabs = [
     { id: 'dashboard', label: t('modules.dashboard.label'), subtitle: t('modules.dashboard.subtitle') },
-    { id: 'sensor', label: t('modules.sensor.label'), subtitle: t('modules.sensor.subtitle') },
-    { id: 'wifi', label: t('modules.wifi.label'), subtitle: t('modules.wifi.subtitle') },
-    { id: 'mqtt_ha', label: t('modules.mqtt_ha.label'), subtitle: t('modules.mqtt_ha.subtitle') },
-    { id: 'push', label: t('modules.push.label'), subtitle: t('modules.push.subtitle') },
-    { id: 'update', label: t('modules.update.label'), subtitle: t('modules.update.subtitle') },
-    { id: 'backup', label: t('modules.backup.label'), subtitle: t('modules.backup.subtitle') }
+    { id: 'admin', label: t('modules.admin.label'), subtitle: t('modules.admin.subtitle') }
   ];
 
   $: mobilePrimaryTabs = tabs.filter((tab) => MOBILE_PRIMARY_TAB_IDS.includes(tab.id));
@@ -327,18 +322,8 @@
     <section class="module-shell">
       {#if activeTab === 'dashboard'}
         <Dashboard bind:data {wsConnected} {lastSensorUpdate} {lang} />
-      {:else if activeTab === 'sensor'}
-        <Config bind:data {loadConfig} module="sensor" {lang} />
-      {:else if activeTab === 'wifi'}
-        <Config bind:data {loadConfig} module="wifi" {lang} />
-      {:else if activeTab === 'mqtt_ha'}
-        <Config bind:data {loadConfig} module="mqtt_ha" {lang} />
-      {:else if activeTab === 'push'}
-        <Config bind:data {loadConfig} module="push" {lang} />
-      {:else if activeTab === 'update'}
-        <Update currentVersion={versionStr} />
-      {:else if activeTab === 'backup'}
-        <Config bind:data {loadConfig} module="backup" {lang} />
+      {:else if activeTab === 'admin'}
+        <Admin bind:data {loadConfig} currentVersion={versionStr} {lang} />
       {/if}
     </section>
   </div>

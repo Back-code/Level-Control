@@ -108,6 +108,11 @@ if (devices.length === 0) {
   process.exit(0);
 }
 
+if (!adminToken) {
+  console.log('Hardware OTA-Test uebersprungen: USB-Geraet verbunden, aber OTA_TEST_ADMIN_TOKEN fehlt.');
+  process.exit(0);
+}
+
 host = (process.env.OTA_TEST_HOST || discoverHostFromArp(devices[0]) || defaultHost).replace(/\/$/, '');
 
 let initialStatus;

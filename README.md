@@ -432,7 +432,7 @@ $env:OTA_TEST_HOST = 'http://192.168.1.123'
 $env:OTA_TEST_ADMIN_TOKEN = '<gueltiger Admin-Session-Token>'
 ```
 
-Ist kein PlatformIO-USB-Geraet verbunden, wird der Hardware-Test protokolliert uebersprungen. Wird ein Geraet erkannt, ist ein nicht erreichbarer OTA-Host oder fehlender Admin-Token ein Release-Fehler.
+Ist kein PlatformIO-USB-Geraet verbunden, wird der Hardware-Test protokolliert uebersprungen. Ist ein Geraet verbunden, aber kein Admin-Token gesetzt, wird der HIL-Test ebenfalls nachvollziehbar uebersprungen; mit gesetztem Token sind ein nicht erreichbarer OTA-Host oder ein fehlgeschlagener Versionswechsel Release-Fehler.
 
 Wichtiger Workflow-Hinweis:
 - `scripts/run-release.ps1` baut Firmware und Web-UI nicht neu, sondern verpackt die vorhandenen Artefakte aus `.pio/build`.

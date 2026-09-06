@@ -256,7 +256,7 @@
         <h3>{t('moreModules')}</h3>
         <div class="mobile-more-list">
           {#each mobileMoreTabs as tab}
-            <button class="mobile-more-item" class:active={activeTab === tab.id} on:click={() => requestTabChange(tab.id)}>
+            <button class="mobile-more-item" class:active={activeTab === tab.id} aria-current={activeTab === tab.id ? 'page' : undefined} on:click={() => requestTabChange(tab.id)}>
               {tab.label}
             </button>
           {/each}
@@ -307,7 +307,7 @@
   <div class="app-layout">
     <aside class="sidebar-nav" aria-label="Hauptnavigation">
       {#each tabs as tab}
-        <button class="sidebar-item" class:active={activeTab === tab.id} on:click={() => requestTabChange(tab.id)}>
+        <button class="sidebar-item" class:active={activeTab === tab.id} aria-current={activeTab === tab.id ? 'page' : undefined} on:click={() => requestTabChange(tab.id)}>
           {tab.label}
         </button>
       {/each}
@@ -338,11 +338,11 @@
 
   <nav class="mobile-nav" aria-label="Mobile Navigation">
     {#each mobilePrimaryTabs as tab}
-      <button class="mobile-nav-item" class:active={activeTab === tab.id} on:click={() => requestTabChange(tab.id)}>
+      <button class="mobile-nav-item" class:active={activeTab === tab.id} aria-current={activeTab === tab.id ? 'page' : undefined} on:click={() => requestTabChange(tab.id)}>
         {tab.label}
       </button>
     {/each}
-    <button class="mobile-nav-item mobile-more-trigger" class:active={isMoreTabActive || showMobileMoreMenu} on:click={toggleMobileMoreMenu}>
+    <button class="mobile-nav-item mobile-more-trigger" class:active={isMoreTabActive || showMobileMoreMenu} aria-expanded={showMobileMoreMenu} on:click={toggleMobileMoreMenu}>
       {t('more')}
     </button>
   </nav>
@@ -385,6 +385,14 @@
     --shadow: 0 12px 26px rgba(53, 104, 73, 0.14);
   }
 
+  :global(html) {
+    color-scheme: dark;
+  }
+
+  :global(html[data-theme='day']) {
+    color-scheme: light;
+  }
+
   :global(body) {
     margin: 0;
     background: var(--bg-main);
@@ -392,8 +400,15 @@
     transition: background 0.25s ease, color 0.25s ease;
   }
 
+  :global(button:focus-visible),
+  :global(a:focus-visible),
+  :global(select:focus-visible) {
+    outline: 3px solid var(--accent);
+    outline-offset: 3px;
+  }
+
   main {
-    font-family: 'Trebuchet MS', 'Segoe UI', sans-serif;
+    font-family: 'Aptos', 'Segoe UI Variable', 'Segoe UI', sans-serif;
     max-width: 1300px;
     margin: 0 auto;
     padding: 16px;
@@ -771,7 +786,7 @@
       position: fixed;
       left: 10px;
       right: 10px;
-      bottom: 10px;
+      bottom: max(10px, env(safe-area-inset-bottom));
       z-index: 95;
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -782,6 +797,10 @@
       backdrop-filter: blur(10px);
       box-shadow: var(--shadow);
       padding: 6px;
+    }
+
+    .mobile-nav {
+      padding-bottom: max(6px, env(safe-area-inset-bottom));
     }
 
     .topbar-row {
@@ -828,6 +847,17 @@
     .mobile-nav-item {
       font-size: 0.72rem;
       padding: 9px 4px;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :global(*),
+    :global(*::before),
+    :global(*::after) {
+      scroll-behavior: auto !important;
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
     }
   }
 </style>

@@ -11,8 +11,6 @@
   let statusCard = null;
   let appFileInput = null;
   let webUiFileInput = null;
-  let appSignatureInput = null;
-  let webUiSignatureInput = null;
 
   let manifest = null;
   let manifestError = '';
@@ -42,8 +40,6 @@
 
   let appFile = null;
   let webUiFile = null;
-  let appSignatureFile = null;
-  let webUiSignatureFile = null;
   const embeddedSignatureTrailerSize = 81;
   let localUpload = {
     active: false,
@@ -427,17 +423,6 @@
 
     let payload;
     try {
-      if (options.signatureFile) {
-        const signatureResponse = await fetch(`/api/update/signature/${target}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/octet-stream' },
-          body: options.signatureFile
-        });
-        const signaturePayload = await signatureResponse.json().catch(() => ({}));
-        if (!signatureResponse.ok) {
-          throw new Error(signaturePayload.error || 'Signaturdatei konnte nicht übertragen werden');
-        }
-      }
       payload = await uploadFileWithProgress(target, formData, options);
     } catch (errorReason) {
       const isTransportFailure = errorReason?.message === 'Netzwerkfehler beim Upload'
@@ -477,12 +462,6 @@
         showNotice('error', error);
         return;
       }
-      const lowerName = step.file.name.toLowerCase();
-      const signatureFile = step.target === 'app' ? appSignatureFile : webUiSignatureFile;
-      if ((lowerName.includes('-image.bin') || lowerName.includes('-filesystem.bin')) && !signatureFile) {
-        showNotice('error', `Für ${step.target === 'app' ? 'die App' : 'die Web-UI'} bitte zusätzlich die passende .sig-Datei auswählen.`);
-        return;
-      }
     }
 
     const scope = plan.length === 2
@@ -507,10 +486,7 @@
       for (let index = 0; index < plan.length; index += 1) {
         const step = plan[index];
         const isLast = index === plan.length - 1;
-        await uploadLocalStep(step.target, step.file, {
-          deferReboot: !isLast,
-          signatureFile: step.target === 'app' ? appSignatureFile : webUiSignatureFile
-        });
+        await uploadLocalStep(step.target, step.file, { deferReboot: !isLast });
         await loadStatus();
       }
 
@@ -518,8 +494,6 @@
       showNotice('success', `${endLabel} wurden erfolgreich geprüft und installiert. Gerät startet neu.`);
       appFile = null;
       webUiFile = null;
-      appSignatureFile = null;
-      webUiSignatureFile = null;
     } catch (error) {
       showNotice('error', error?.message || 'Lokales Update fehlgeschlagen');
     }
@@ -528,10 +502,6 @@
   function triggerFileSelect(target) {
     if (target === 'app') {
       appFileInput?.click();
-    } else if (target === 'appSignature') {
-      appSignatureInput?.click();
-    } else if (target === 'webuiSignature') {
-      webUiSignatureInput?.click();
     } else {
       webUiFileInput?.click();
     }
@@ -548,17 +518,9 @@
       if (target === 'app') {
         appFile = file;
         showNotice('success', `App-Datei ausgewählt: ${file.name}`);
-      } else if (target === 'appSignature') {
-        appSignatureFile = file;
-        showNotice('success', `App-Signatur ausgewählt: ${file.name}`);
       } else {
-        if (target === 'webuiSignature') {
-          webUiSignatureFile = file;
-          showNotice('success', `Web-UI-Signatur ausgewählt: ${file.name}`);
-        } else {
-          webUiFile = file;
-          showNotice('success', `Web-UI-Datei ausgewählt: ${file.name}`);
-        }
+        webUiFile = file;
+        showNotice('success', `Web-UI-Datei ausgewählt: ${file.name}`);
       }
 
       // Zur Status-Card scrollen
@@ -583,7 +545,7 @@
     : `https://github.com/Back-code/Level-Control/releases/tag/v${displayedVersion}`;
   $: anyBusy = status.inProgress || localUpload.active;
   $: localStartDisabled = anyBusy || (!appFile && !webUiFile);
-  $: localSelectionLabel = [appFile ? `App: ${appFile.name}` : '', appSignatureFile ? `App-Sig: ${appSignatureFile.name}` : '', webUiFile ? `Web-UI: ${webUiFile.name}` : '', webUiSignatureFile ? `Web-UI-Sig: ${webUiSignatureFile.name}` : '']
+  $: localSelectionLabel = [appFile ? `App: ${appFile.name}` : '', webUiFile ? `Web-UI: ${webUiFile.name}` : '']
     .filter(Boolean)
     .join(' | ');
   $: showResetAction = status.canReset && !localUpload.active;
@@ -705,7 +667,7 @@
   <article class="action-card upload-card">
     <span class="eyebrow">2. Lokal</span>
     <h3>Updates hochladen</h3>
-    <p>Wählen Sie App.bin und/oder Web-UI.bin aus und starten Sie das lokale Update einmalig. Beide Artefakte werden geprüft und danach in einem Durchlauf installiert.</p>
+    <p>Wählen Sie die signierte App.bin und/oder Web-UI.bin aus und starten Sie das lokale Update. Der Signaturblock ist bereits in jeder Datei enthalten.</p>
 
     {#if localSelectionLabel}
       <div class="status-badge local-selection-badge success">✓ Auswahl: {localSelectionLabel}</div>
@@ -728,8 +690,6 @@
       style="display:none"
       on:change={handleFileSelected('webui')}
     />
-    <input type="file" accept=".sig" bind:this={appSignatureInput} style="display:none" on:change={handleFileSelected('appSignature')} />
-    <input type="file" accept=".sig" bind:this={webUiSignatureInput} style="display:none" on:change={handleFileSelected('webuiSignature')} />
     
     <!-- Action buttons -->
     <div class="button-group">
@@ -738,12 +698,6 @@
       </button>
       <button on:click={() => triggerFileSelect('webui')} disabled={anyBusy}>
         Web-UI.bin wählen
-      </button>
-      <button on:click={() => triggerFileSelect('appSignature')} disabled={anyBusy}>
-        App.sig wählen
-      </button>
-      <button on:click={() => triggerFileSelect('webuiSignature')} disabled={anyBusy}>
-        Web-UI.sig wählen
       </button>
       <button on:click={startLocalUpdate} disabled={localStartDisabled}>
         Lokales Update starten

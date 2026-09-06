@@ -43,12 +43,6 @@ try {
 
     $releaseArgs = @(
         'release', 'create', "v$versionStr",
-        "release/v$versionStr/level-control-v$versionStr-image.bin",
-        "release/v$versionStr/level-control-v$versionStr-image.sig",
-        "release/v$versionStr/level-control-v$versionStr-filesystem.bin",
-        "release/v$versionStr/level-control-v$versionStr-filesystem.sig",
-        "release/v$versionStr/level-control-v$versionStr-bootloader.bin",
-        "release/v$versionStr/level-control-v$versionStr-partitions.bin",
         "release/v$versionStr/level-control-v$versionStr-app.bin",
         "release/v$versionStr/level-control-v$versionStr-web-ui.bin",
         "release/v$versionStr/SHA256SUMS.txt",

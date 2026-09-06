@@ -24,6 +24,7 @@ try {
     & $venvPython -m platformio run -t buildfs
 
     node scripts/prepare-release.js
+    node scripts/test-ota-release.mjs
 
     $ghCommand = Get-Command gh -ErrorAction SilentlyContinue
     if (-not $ghCommand) {

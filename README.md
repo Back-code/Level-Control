@@ -417,6 +417,14 @@ node scripts/prepare-release.js
 
 `prepare-release.js` bricht ab, wenn kein privater Signatur-Schluessel vorhanden ist.
 
+Vor dem GitHub-Upload prueft `scripts/run-release.ps1` automatisch beide Release-Assets:
+
+```bash
+node scripts/test-ota-release.mjs
+```
+
+Der Regressionstest prueft die exakte Build-Nutzlast, den Signatur-Trailer, die ECDSA-Signatur und den vollstaendigen Stream-Fortschritt des OTA-Empfaengers. Ein Release mit abweichenden oder unvollstaendigen Assets wird dadurch vor der Veroeffentlichung abgebrochen.
+
 Wichtiger Workflow-Hinweis:
 - `scripts/run-release.ps1` baut Firmware und Web-UI nicht neu, sondern verpackt die vorhandenen Artefakte aus `.pio/build`.
 - Nach `scripts/run-push.ps1` sollte deshalb immer `scripts/run-deploy.ps1` oder mindestens ein frischer Build des gepushten Stands erfolgt sein, bevor das GitHub-Release erstellt wird.

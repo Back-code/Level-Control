@@ -1296,6 +1296,30 @@ void WebServerDashboard::setupUpdateRoutes() {
         sendUpdateManifest(request);
     });
 
+    for (const char* target : {"app", "webui"}) {
+        const String route = String("/api/update/signature/") + target;
+        server_.on(route.c_str(), HTTP_POST, [](AsyncWebServerRequest *request) {}, nullptr,
+            [this, target](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+                auto& signature = std::strcmp(target, "app") == 0
+                    ? uploadAppSignature_
+                    : uploadWebUiSignature_;
+                if (index == 0) {
+                    signature.clear();
+                    signature.reserve(total);
+                }
+                signature.insert(signature.end(), data, data + len);
+                if (index + len != total) {
+                    return;
+                }
+                if (signature.empty() || signature.size() > kEmbeddedSigBytes) {
+                    signature.clear();
+                    request->send(400, "application/json", "{\"error\":\"Ungueltige Signaturdatei\"}");
+                    return;
+                }
+                request->send(200, "application/json", "{\"status\":\"ok\"}");
+            });
+    }
+
     server_.on("/api/update/repo", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL,
         [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
         auto *body = static_cast<std::string*>(request->_tempObject);
@@ -1410,6 +1434,9 @@ void WebServerDashboard::clearUploadSession(bool abortUpdate) {
     uploadFailed_ = false;
     uploadTarget_ = "";
     uploadFilename_ = "";
+    uploadDetachedMode_ = false;
+    uploadAppSignature_.clear();
+    uploadWebUiSignature_.clear();
     uploadTailBuffer_.clear();
     uploadTargetPartition_ = nullptr;
     uploadLastChunkMs_ = 0;
@@ -2382,6 +2409,15 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
         uploadFailed_ = false;
         uploadTarget_ = target;
         uploadFilename_ = filename;
+        const std::string lowerFilename = toLowerCopy(filename.c_str());
+        uploadDetachedMode_ = lowerFilename.find("-image.bin") != std::string::npos
+            || lowerFilename.find("-filesystem.bin") != std::string::npos;
+        const auto& detachedSignature = target == "app" ? uploadAppSignature_ : uploadWebUiSignature_;
+        if (uploadDetachedMode_ && detachedSignature.empty()) {
+            request->send(400, "application/json", "{\"error\":\"Fuer dieses Detached-Asset zuerst die .sig-Datei waehlen\"}");
+            uploadActive_ = false;
+            return;
+        }
         uploadTailBuffer_.clear();
         uploadTailBuffer_.reserve(kEmbeddedSigTrailerSize + kUploadBufferSize);
         uploadLastChunkMs_ = millis();
@@ -2443,6 +2479,22 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
     if (!uploadFailed_ && len > 0) {
         uploadLastChunkMs_ = millis();
         const size_t limit = target == "app" ? getAppPartitionSize() : getFilesystemPartitionSize();
+        if (uploadDetachedMode_) {
+            const size_t nextPayloadSize = updateState_.received + len;
+            if ((limit > 0 && nextPayloadSize > limit)
+                || (uploadShaActive_ && mbedtls_sha256_update_ret(&uploadShaContext_, data, len) != 0)
+                || Update.write(data, len) != len) {
+                uploadFailed_ = true;
+                Update.abort();
+                uploadTargetPartition_ = nullptr;
+                if (target == "webui") {
+                    LittleFS.begin();
+                }
+                markUpdateFailed(Update.errorString());
+            } else {
+                setUpdatePhase("uploading", "Upload läuft", nextPayloadSize, 0);
+            }
+        } else {
         uploadTailBuffer_.insert(uploadTailBuffer_.end(), data, data + len);
         while (!uploadFailed_ && uploadTailBuffer_.size() > kEmbeddedSigTrailerSize) {
             const size_t processLen = uploadTailBuffer_.size() - kEmbeddedSigTrailerSize;
@@ -2487,6 +2539,7 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
 
             setUpdatePhase("uploading", "Upload läuft", nextPayloadSize, 0);
         }
+        }
     }
 
     if (!final) {
@@ -2512,8 +2565,8 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
         return;
     }
 
-    if (uploadTailBuffer_.size() != kEmbeddedSigTrailerSize
-        || memcmp(uploadTailBuffer_.data(), kEmbeddedSigMagic, sizeof(kEmbeddedSigMagic)) != 0) {
+    if (!uploadDetachedMode_ && (uploadTailBuffer_.size() != kEmbeddedSigTrailerSize
+        || memcmp(uploadTailBuffer_.data(), kEmbeddedSigMagic, sizeof(kEmbeddedSigMagic)) != 0)) {
         Update.abort();
         uploadTargetPartition_ = nullptr;
         if (target == "webui") {
@@ -2523,7 +2576,10 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
         request->send(400, "application/json", (std::string("{\"error\":\"") + updateState_.message + "\"}").c_str());
         return;
     }
-    const size_t sigLen = uploadTailBuffer_[sizeof(kEmbeddedSigMagic)];
+    const auto& detachedSignature = target == "app" ? uploadAppSignature_ : uploadWebUiSignature_;
+    const size_t sigLen = uploadDetachedMode_
+        ? detachedSignature.size()
+        : uploadTailBuffer_[sizeof(kEmbeddedSigMagic)];
     if (sigLen == 0 || sigLen > kEmbeddedSigBytes) {
         Update.abort();
         uploadTargetPartition_ = nullptr;
@@ -2558,7 +2614,9 @@ void WebServerDashboard::handleUpload(AsyncWebServerRequest *request, const Stri
     if (!verifyDetachedFileSignature(
             uploadSha,
             sizeof(uploadSha),
-            uploadTailBuffer_.data() + sizeof(kEmbeddedSigMagic) + 1,
+            uploadDetachedMode_
+                ? detachedSignature.data()
+                : uploadTailBuffer_.data() + sizeof(kEmbeddedSigMagic) + 1,
             sigLen,
             signatureError)) {
         Update.abort();

@@ -70,6 +70,9 @@ private:
     bool restartScheduled_ = false;
     bool littleFsMounted_ = false;
     bool uploadShaActive_ = false;
+    bool uploadDetachedMode_ = false;
+    std::vector<uint8_t> uploadAppSignature_;
+    std::vector<uint8_t> uploadWebUiSignature_;
     String uploadTarget_;
     String uploadFilename_;
     mbedtls_sha256_context uploadShaContext_;

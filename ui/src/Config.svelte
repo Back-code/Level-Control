@@ -111,10 +111,22 @@
   let importLoading = false;
   let importResult = null;
   let factoryResetLoading = false;
+  let includeBackupSecrets = false;
 
   async function doExport() {
     try {
-      const response = await adminFetch('/api/export', { cache: 'no-store' });
+      if (includeBackupSecrets) {
+        const confirmed = await confirmAction({
+          title: 'Geheimnisse exportieren?',
+          message: 'Das Backup enthält WLAN-, MQTT- und SMTP-Zugangsdaten im Klartext.',
+          confirmLabel: 'Trotzdem exportieren',
+          cancelLabel: 'Abbrechen',
+          tone: 'danger'
+        });
+        if (!confirmed) return;
+      }
+      const query = includeBackupSecrets ? '?includeSecrets=1' : '';
+      const response = await adminFetch(`/api/export${query}`, { cache: 'no-store' });
       if (!response.ok) {
         throw new Error('Backup konnte nicht erstellt werden');
       }
@@ -1335,7 +1347,8 @@
     <h2>Datensicherung</h2>
 
     <h3 class="backup-group-title">Exportieren</h3>
-    <p class="backup-hint">Lädt alle Einstellungen und den Messverlauf als JSON-Datei herunter. Die Datei enthält auch Passwörter im Klartext – sicher aufbewahren.</p>
+    <p class="backup-hint">Lädt Einstellungen und Messverlauf herunter. Zugangsdaten werden standardmäßig maskiert.</p>
+    <label class="checkbox-row checkbox-row--warning"><input type="checkbox" bind:checked={includeBackupSecrets} /> Zugangsdaten bewusst einschließen</label>
     <button class="primary backup-download-btn" on:click={doExport}>Backup herunterladen</button>
 
     <h3 class="backup-group-title">Importieren</h3>

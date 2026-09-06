@@ -1155,6 +1155,8 @@ void WebServerDashboard::setupRoutes() {
         struct tm* tmInfo = localtime(&t);
         char filename[64];
         strftime(filename, sizeof(filename), "level-control-backup-%Y-%m-%d.json", tmInfo);
+        const bool includeSecrets = request->hasParam("includeSecrets")
+            && request->getParam("includeSecrets")->value() == "1";
 
         DynamicJsonDocument cfgDoc(3072);
         cfgDoc["behaelterhoehe"] = config.behaelterhoehe;
@@ -1163,7 +1165,7 @@ void WebServerDashboard::setupRoutes() {
         cfgDoc["sensorType"] = config.sensorType;
         JsonObject wifiJ = cfgDoc.createNestedObject("wifi");
         wifiJ["ssid"] = config.wifi.ssid;
-        wifiJ["password"] = config.wifi.password;
+        wifiJ["password"] = includeSecrets ? config.wifi.password : kPasswordMask;
         wifiJ["deviceName"] = config.wifi.deviceName;
         wifiJ["ntpServerPrimary"] = config.wifi.ntpServerPrimary;
         wifiJ["ntpServerSecondary"] = config.wifi.ntpServerSecondary;
@@ -1176,7 +1178,7 @@ void WebServerDashboard::setupRoutes() {
         mqttJ["server"] = config.mqtt.server;
         mqttJ["port"] = config.mqtt.port;
         mqttJ["user"] = config.mqtt.user;
-        mqttJ["password"] = config.mqtt.password;
+        mqttJ["password"] = includeSecrets ? config.mqtt.password : kPasswordMask;
         mqttJ["discovery"] = config.mqtt.discovery;
         JsonObject pushJ = cfgDoc.createNestedObject("push");
         pushJ["enabled"] = config.push.enabled;
@@ -1188,7 +1190,7 @@ void WebServerDashboard::setupRoutes() {
         pushJ["security"] = derivePushEncryptionMode(config.push.useSsl, config.push.startTls);
         pushJ["smtpSkipCertVerify"] = config.push.smtpSkipCertVerify;
         pushJ["authUser"] = config.push.authUser;
-        pushJ["authPassword"] = config.push.authPassword;
+        pushJ["authPassword"] = includeSecrets ? config.push.authPassword : kPasswordMask;
         pushJ["senderName"] = config.push.senderName;
         pushJ["senderEmail"] = config.push.senderEmail;
         pushJ["recipientEmail"] = config.push.recipientEmail;

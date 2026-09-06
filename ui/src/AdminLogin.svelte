@@ -21,6 +21,7 @@
   function submit() {
     const request = $activeAdminLogin;
     if (!request) return;
+    const submittedPassword = password;
     if (password.length < 8) {
       error = 'Das Passwort muss mindestens 8 Zeichen enthalten.';
       return;

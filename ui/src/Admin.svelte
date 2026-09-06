@@ -3,6 +3,7 @@
   import Config from './Config.svelte';
   import Update from './Update.svelte';
   import AdminPassword from './AdminPassword.svelte';
+  import Backup from './Backup.svelte';
   import { ensureAdminSession } from './adminAuth.js';
   import { showNotice } from './dialogStore.js';
   import { createTranslator } from './i18n.js';
@@ -89,6 +90,8 @@
         <Update currentVersion={currentVersion} />
       {:else if activeModule === 'password'}
         <AdminPassword {lang} />
+      {:else if activeModule === 'backup'}
+        <Backup {loadConfig} {lang} />
       {:else}
         <Config bind:data {loadConfig} module={activeModule} {lang} onDirtyStateChange={(dirty) => { activeModuleDirty = dirty; onDirtyStateChange(dirty); }} />
       {/if}

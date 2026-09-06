@@ -1,0 +1,16 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Geraet laeuft bereits mit v1.3.20; fuer einen HIL-Upgrade-Test muss die Zielversion neu sein
+    at file:///C:/Users/marc/Documents/Projekte/Level-Control/scripts/test-ota-hardware.mjs:145:8
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5) {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: '1.3.20',
+  expected: '1.3.20',
+  operator: 'notStrictEqual',
+  diff: 'simple'
+}
+
+Node.js v26.8.1

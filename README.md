@@ -429,9 +429,10 @@ Wenn ein ESP32 per USB verbunden ist, fuehrt der Release-Workflow nach dem GitHu
 
 ```powershell
 $env:OTA_TEST_HOST = 'http://192.168.1.123'
+$env:OTA_TEST_ADMIN_TOKEN = '<gueltiger Admin-Session-Token>'
 ```
 
-Ist kein PlatformIO-USB-Geraet verbunden, wird der Hardware-Test protokolliert uebersprungen. Wird ein Geraet erkannt, ist ein nicht erreichbarer OTA-Host dagegen ein Release-Fehler.
+Ist kein PlatformIO-USB-Geraet verbunden, wird der Hardware-Test protokolliert uebersprungen. Wird ein Geraet erkannt, ist ein nicht erreichbarer OTA-Host oder fehlender Admin-Token ein Release-Fehler.
 
 Wichtiger Workflow-Hinweis:
 - `scripts/run-release.ps1` baut Firmware und Web-UI nicht neu, sondern verpackt die vorhandenen Artefakte aus `.pio/build`.

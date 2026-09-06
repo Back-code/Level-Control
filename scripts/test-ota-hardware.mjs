@@ -12,6 +12,7 @@ const versionStr = `${Number(version.major) || 0}.${Number(version.minor) || 0}.
 const pythonPath = join(root, '.venv', 'Scripts', 'python.exe');
 const defaultHost = 'http://stand.local';
 let host = '';
+const adminToken = process.env.OTA_TEST_ADMIN_TOKEN || '';
 
 function detectSerialDevices() {
   if (!existsSync(pythonPath)) {
@@ -56,8 +57,13 @@ function discoverHostFromArp(device) {
 }
 
 async function request(path, options = {}) {
+  const headers = new Headers(options.headers || {});
+  if (adminToken) {
+    headers.set('X-Admin-Token', adminToken);
+  }
   const response = await fetch(`${host}${path}`, {
     ...options,
+    headers,
     signal: AbortSignal.timeout(options.timeoutMs || 10000)
   });
   const text = await response.text();
